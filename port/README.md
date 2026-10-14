@@ -37,8 +37,8 @@ against the port's count, then resyncs the seed so each later window is judged o
 `--trace FROM TO` prints, for the frames FROM..TO, the inputs, the hero's state and position and
 how many Random() calls each frame made.
 
-Current state ([re/rng.md](../re/rng.md)): the hero draws Random exactly where the original
-does. GRINDER, which has no enemies, matches window 1 and windows 3, 5, 6 and 7, but window 2 is
+Current state ([re/rng.md](../re/rng.md)): in the ported states the hero draws Random where the decompiled code
+does (checked only against GRINDER). GRINDER, which has no enemies, matches window 1 and windows 3, 5, 6 and 7, but window 2 is
 one call short (source unknown) and window 4 lands at the map bottom because the grinder
 platform is missing. The other demos spend 60–400 calls in window 1 on level setup (the enemy
 factory and objects), which isn't ported.
