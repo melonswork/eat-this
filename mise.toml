@@ -43,3 +43,11 @@ run = """
 [tasks.render]
 description = "Render a tile group, sprite group or map to PNG: mise run render -- map work/cd/BIN/MAPS/CITY01.MAP out.png"
 run = "uv run python tools/render.py"
+
+[tasks.names]
+description = "Apply re/names.csv to ETLAUNCH.EXE in the Ghidra project, then re-export the C"
+run = """
+"$(mise where github:NationalSecurityAgency/ghidra)/support/analyzeHeadless" work/ghidra EatThis \
+  -process ETLAUNCH.EXE -noanalysis -scriptPath tools/ghidra_scripts -postScript ApplyNames.java
+mise run decomp
+"""

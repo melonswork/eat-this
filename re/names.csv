@@ -1,0 +1,41 @@
+address,name,comment
+1100:07cf,ArchiveWriteEntry,Writes or replaces one entry in an Image Line archive (seg 33 = archive unit)
+1100:0720,ArchiveCompressEntry,Compressed path of ArchiveWriteEntry: u32 unpacked size + LZW stream
+1100:0679,ArchiveStoreEntry,Uncompressed path of ArchiveWriteEntry
+1108:0005,LzwReadCode,Nested in LzwDecompress: code = (u32 at bitpos>>3 >> (bitpos&7)) & mask; bitpos += width
+1108:002c,LzwRefillInput,Nested in LzwDecompress: slides the 8 KB input window
+1108:00d6,LzwDecompress,GIF-style LZW 9..12 bit LSB-first; 0x100 clear 0x101 end (tools/lzw.py)
+1108:03ca,LzwResetDictionary,Encoder: width 9; hash table of 5003 (0x138b) entries
+1108:04e0,LzwWriteCode,Encoder bit packer
+1108:05f0,LzwCompress,Encoder; open-addressing hash with quadratic probe
+1008:0082,VideoInit,Window/screen metrics, palette setup, allocates the BITMAPINFO for WinG
+1008:0363,VideoPresent,Frame limiter (TimerCount) + optional VGA retrace wait + WinGBitBlt/WinGStretchBlt of the 320x200 frame; mode >=2 goes to DispDib fullscreen
+1008:06b9,VideoCreateWinGSurface,WinGCreateDC + WinGRecommendDIBFormat + WinGCreateBitmap (8bpp)
+1008:09e5,VideoSetPalette,WinGSetDIBColorTable + identity palette
+1008:0914,VideoCreatePalette,
+1008:170a,VideoDispDibShow,DISPDIB ordinal 1 (DisplayDib) fullscreen 320x200
+1010:0002,TimerMillis,TOOLHELP TimerCount minus start offset
+1010:005c,TimerClampFrameDeadline,
+10f0:0077,VgaInRetrace,in al 0x3DA bit 3; privileged on NT
+10f0:0081,VgaWaitRetraceEnd,busy-waits on port 0x3DA
+10b8:0030,JoystickPoll,joyGetPos into DAT_1170_5402
+10c8:02e0,CdPlayTrack,Builds an MCI 'play cdaudio from N to N+1' string
+10c8:0002,MixerOpenVolume,mixer* API: finds a CD/wave volume control
+10c8:0419,MixerSetVolume,
+1130:0002,MciSend,mciSendString wrapper; Pascal string in/out
+10e8:0002,SoundInit,DWS_Init
+10e8:0068,SoundDetectHardware,DWS_DetectHardware
+10e8:008b,SoundKill,DWS_Kill
+10e8:01a8,SoundLoadWav,DWS_WAV2DWD: converts a WAV to DiamondWare's format in memory
+10e8:04d1,SoundPlay,DWS_DPlay of sample #param; loads it on first use
+10e8:0575,SoundSetInfo,DWS_DSetInfo (volume/pan of a playing sound)
+10e8:0601,SoundUpdate,DWS_Update; called every frame
+1160:0002,KeyPoll,GetKeyState(vk) -> per-key counter at DAT_1170_9c28[vk]: >0 held for N polls, <=0 released
+1038:0002,IniWrite,WritePrivateProfileString
+1038:024f,IniReadInt,GetPrivateProfileInt
+1038:02ac,IniReadString,GetPrivateProfileString
+1120:0002,FarAlloc,GlobalAlloc+GlobalLock
+1120:0022,FarFree,
+1008:05cc,MainWindowIdle,OWL idle hook: while the window is active and has capture: GameFrame() then VideoPresent(). This is the main loop.
+1080:309a,GameFrame,One game tick: update (or demo playback when DAT_1170_0f28==1), SoundUpdate, frame counter DAT_1170_0f2c, deferred state changes via DAT_1170_4e60
+1080:0453,ReadPlayerKeys,Arrows (VK 0x25-0x28) and space into DAT_1170_493c..4940
