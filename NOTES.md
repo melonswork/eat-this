@@ -66,7 +66,8 @@ CD audio over MCI, and direct VGA port I/O.
 2. Platform layer ✔ mapped. It is narrow: framebuffer present, palette, key state, timer, sound
    play/update, CD track play.
 3. Decompile the game proper (`1088` is the 64 KB core segment, `1080` the frame/menu logic),
-   naming as we go, using `ET_DBG.EXE` as a cross-check.
+   naming as we go, using `ET_DBG.EXE` as a cross-check. In progress: hero movement is
+   documented in [re/hero.md](re/hero.md).
 4. Port: game logic in a modern language over SDL (texture for the framebuffer, SDL audio for
    samples, ripped CD tracks as files). Ship only our code; players bring their own CD.
    Verification: the `.DMO` recorded demos are deterministic input recordings, so a correct port
@@ -81,6 +82,8 @@ CD audio over MCI, and direct VGA port I/O.
 - `mise run names` — apply `re/names.csv` and re-export decompiled C into `work/decomp`
 - `mise run decomp` — re-export only
 - `mise run render -- {tiles|sprites|map} <file> <out.png>`
+- `uv run python tools/frames.py SPRITES/PPHERO.SPR out.png 0x81-0x94`: a strip of numbered frames
+- `python tools/fn.py {show|tree|callers} NAME`: browse the exported decompilation
 - `mise run ghidra` — Ghidra GUI (open project `work/ghidra/EatThis`)
 - `mise run ghidra-natives` — one-off after installing Ghidra: builds the macOS arm64 decompiler,
   which the release zip doesn't ship

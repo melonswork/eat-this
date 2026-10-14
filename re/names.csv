@@ -39,3 +39,101 @@ address,name,comment
 1008:05cc,MainWindowIdle,OWL idle hook: while the window is active and has capture: GameFrame() then VideoPresent(). This is the main loop.
 1080:309a,GameFrame,One game tick: update (or demo playback when DAT_1170_0f28==1), SoundUpdate, frame counter DAT_1170_0f2c, deferred state changes via DAT_1170_4e60
 1080:0453,ReadPlayerKeys,Arrows (VK 0x25-0x28) and space into DAT_1170_493c..4940
+1088:53a5,ReadGameInput,Fills gInput[0..8] from the key map gKeyMap (numpad as fallback); 1-0/PgUp/PgDn select weapons; mouse via GetCursorPos; demo playback replaces all of it
+1088:7592,HeroUpdate,The hero: reads gInput and moves/animates Leon (1591 lines)
+1088:b5ff,GameFrameInGame,Update everything then draw when gDrawThisFrame; also the zoom-in viewport (gZoom > 0x40)
+1080:2c70,GameFrameMenu,
+1088:71ef,SelectWeapon,
+1170:1640,gKeyMap,9 VKs: Up Down Left Right LeftShoot RightShoot (x2) SwitchWeapon; defaults arrows/Insert/Space/Tab
+1170:162c,gWeaponForDigitKey,Weapon id for keys 1..9 0
+1170:4ef8,gInputUp,gInput[0]: KeyPoll counter (>0 held for N frames)
+1170:4ef9,gInputDown,
+1170:4efa,gInputLeft,
+1170:4efb,gInputRight,
+1170:4efc,gInputLeftShoot,
+1170:4efd,gInputRightShoot,
+1170:4efe,gInput6,
+1170:4eff,gInput7,
+1170:4f00,gInputSwitchWeapon,
+1170:5128,gDrawThisFrame,Set by VideoPresent's frame skipper
+1170:4b84,gZoom,>0x40 zooms the viewport in around the hero
+1170:9c28,gKeyCounters,Per-VK hold counters maintained by KeyPoll
+1170:0f28,gInGame,1 = gameplay frame, else menu
+1170:0f2c,gFrameCounter,u32
+1170:1953,gDemoPlaying,
+1170:1952,gDemoRecording,
+1088:3322,HeroMoveAndCollide,Applies (dx,dy) to (x,y) against tile solidity bit 2 (walls) and moving platforms (gPlatforms); floors and slopes via HeroFindFloor
+1088:304c,HeroFindFloor,Floor/slope search under the feet; returns new y or 0x7fff (no floor); slope tiles have solidity bit 0x20
+1088:2a78,HeroPushOutOfWalls,Nudges x by 1 px out of a wall overlap
+1088:39a1,HeroAccelerate,"gHeroVX += accel, clamped to |limit|  (args: limit, accel)"
+1088:39d4,HeroStartJump,"State <- kind (>0 = airborne kind), gHeroVY <- vy (1/10 px/frame; -50 = jump), resets fall distance unless already falling"
+1088:32d1,HeroCrouch,State <- -40 (crouch), progress 0
+1088:0432,HeroStand,State <- 0 (on ground)
+1088:757f,HeroGrabLadder,State <- -5 (ladder)
+1088:3a10,HeroResetFallSpeed,
+1088:3d85,TouchCrumblingTile,Tile function 7140 (0x1be4)
+1088:5847,HeroTouchTiles,Tile functions at body height: 10000 = end level; 7030 = sensitive lever
+1088:420b,HeroAimAtMouse,gHeroAimAngle = atan2(mouse - gun muzzle)
+1088:4242,HeroAimFixed,
+1088:6437,HeroFireWeapon,
+1088:5b62,HeroUpdateVehicle,Used when DAT_1170_5127 == 2
+1088:1109,HeroDamage,
+1088:3a1b,HeroUseObject,
+10f0:58ec,TileSolidityAt,"(y,x) px -> TILE INFOS +8 of the cell in plane gTilePlane; 0xa75f outside the map"
+10f0:587c,TileFunctionAt,"(y,x) px -> TILE INFOS +6 (function 0, e.g. 10 ladder, 60600 pipe, 60800 hang pipe)"
+10f0:5a8c,TileParamOfLastCell,"(n, cell) -> TILE INFOS function n of the cell TileXxxAt just looked up"
+10f0:5a3a,TileParamOfLastCellAlt,
+10f0:2151,SpriteQueue,"Queue a sprite for drawing: (layer, facing, y, x, frame, slot)"
+10f8:0036,Atan2,
+1050:5fe2,SoundPlayAt,"(sound id, y, x): positional sound effect"
+1050:5c4a,ScreenShake,"(strength, duration)"
+1040:1e04,SpawnDust,
+1170:4dc4,gHeroX,px; feet centre
+1170:4dc6,gHeroY,px; feet
+1170:4dc8,gHeroPrevX,
+1170:4dca,gHeroPrevY,
+1170:4dcc,gHeroFacing,-1 left / 1 right
+1170:4dce,gHeroState,"0 ground; >0 airborne (1 jump, 5 wall jump, 6/7 flips, 0x10 hit); -1 hang pipe; -2 climb up; -3 ?; -4 ledge; -5 ladder; -30 action; -40 crouch; -80 face camera; -100 door; -200 knocked down; 100 dead"
+1170:4dd0,gHeroPrevState,
+1170:4dd2,gHeroStateBeforeJump,
+1170:4dd4,gHeroVX,horizontal speed; moved by |vx|/4+1 px per frame when walking
+1170:4de2,gHeroFrame,"sprite index: PPHERO.SPR + 256*PPHERO2 + 512*PPHERO3; 0x7fff = none"
+1170:4de4,gHeroFrame2,second sprite (arm/weapon overlay)
+1170:4de8,gHeroMuzzleX,
+1170:4dea,gHeroMuzzleY,
+1170:4df0,gHeroAnimTimer,
+1170:4df2,gHeroCrouch,crouch progress 0..8; also generic state timer
+1170:4df8,gHeroTurn,turnaround animation counter; 0xff = not turning
+1170:4dfc,gHeroVY,1/10 px per frame; gravity +10 (+3 while Up is held), cap 50
+1170:4dfe,gHeroJumpVY,vy the jump started with
+1170:4e00,gHeroFallDistance,accumulated px fallen; >=0x20 dust, >=0x60 shake, >=0x120 fatal
+1170:4e02,gHeroDX,this frame's horizontal move (px)
+1170:4e04,gHeroDY,this frame's vertical move (px)
+1170:4e0a,gHeroHeight,collision height: 42 standing, 24 crouched
+1170:4e0c,gHeroHalfWidth,6 normally
+1170:4e22,gHeroPlatform,moving platform stood on (index | 0x80 if facing right), -1 none; table at 1170:1292 stride 0x16
+1170:4e2c,gHeroGround,ground contact kind this frame (0 none, 5, 9 ladder top, 0x15, 0x17 ...)
+1170:4e3e,gMouseX,
+1170:4e40,gMouseY,
+1170:4e46,gHeroAimAngle,
+1170:1606,gCheatFly,ETFLY: >0 free 8 px movement through walls
+1170:1af0,gCameraX,
+1170:1af2,gCameraY,
+1170:1af8,gTilePlane,plane TileXxxAt reads (1 = main)
+1170:1afa,gLastTileCell,
+1170:658a,gMapWidth,in tiles; array per plane
+1170:65ea,gMapHeight,
+1170:0ebc,gPlatformCount,
+1170:4662,gPlatforms,far pointers
+1170:5121,gHeroShooting,
+1168:1513,Random,Borland Pascal System.Random(n)
+1170:4e1a,gHeroIdleTimer,drives the idle look-around animation (frames 0x26d-0x271)
+1170:4e1c,gHeroIdleNext,
+1170:4f02,gInputReleased,gInputReleased[0..8]: action was released since it last fired (no auto-repeat jumps)
+1170:4e52,gHeroHangX,
+1170:4e54,gHeroHangY,
+1170:4ddc,gHeroLadderKind,-1 none; TILE INFOS function 2 of the ladder tile (0 rope, 1/9 ladder)
+1170:4dde,gHeroLadderFlags,function 3: bit 1 top, bit 2 no sideways
+1170:4e68,gHeroHeadBlocked,ceiling right above: forces crouch
+1170:511e,gHeroVXFriction,apply gHeroVX this frame
+1170:4e12,gHeroShootWalkTimer,
