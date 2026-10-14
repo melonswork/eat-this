@@ -149,3 +149,12 @@ address,name,comment
 1088:cf5c,LevelLoad,
 1170:2398,RandSeed,Borland Pascal System.RandSeed (u32)
 1170:5374,gDemo,Demo state: 9 key run streams, mouse runs at +0x48, CHECK at +0x50, frame counter +0x54, version +0x5a
+1088:0442,HeroReset,Level start: hero defaults; 4 Random calls before DemoLoad zeroes RandSeed
+1088:b4db,LevelFirstFrame,Update-and-draw without the hero; facing from the sector
+1088:1797,SpawnFromIconTiles,Plane scan in LevelInit: function >= 61000 spawners
+1070:d6be,EnemyFactory,Creates the enemy for an OBJECTS record type 0x13xx..0x14xx; constructors draw Random
+10f0:5dc1,MapLoad,Loads MAP HEADER into 1170:664a and the planes into 1170:64ca[0..2]
+10f0:5d1e,MapNextObject,Iterates OBJECTS: {u8 n; words[n+1]}; count at MAP HEADER +10
+1090:1a91,GrinderUpdate,Object 0x2724: the rising grinder (moving extra map); crushes function-15000 tiles
+1118:02ac,RangesOverlap,"(a, b, c, d): [min(a,b), max(a,b)] overlaps [min(c,d), max(c,d)]"
+1040:1e04,SpawnDust,Leaf particles on function-13100 tiles: 5 Random calls each

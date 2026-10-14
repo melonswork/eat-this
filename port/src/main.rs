@@ -34,6 +34,7 @@ struct Options {
     headless: bool,
     scale: u32,
     shot: Option<(u32, PathBuf)>,
+    trace: Option<(u32, u32)>,
 }
 
 fn options() -> Result<Options, String> {
@@ -44,6 +45,7 @@ fn options() -> Result<Options, String> {
         headless: false,
         scale: 3,
         shot: None,
+        trace: None,
     };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -54,6 +56,10 @@ fn options() -> Result<Options, String> {
             "--demo" => o.demo = Some(value()?.into()),
             "--scale" => o.scale = value()?.parse().map_err(|e| format!("--scale: {e}"))?,
             "--headless" => o.headless = true,
+            "--trace" => {
+                let from = value()?.parse().map_err(|e| format!("--trace FROM TO: {e}"))?;
+                o.trace = Some((from, value()?.parse().map_err(|e| format!("--trace FROM TO: {e}"))?));
+            }
             "--shot" => {
                 let frame = value()?.parse().map_err(|e| format!("--shot FRAME FILE.ppm: {e}"))?;
                 o.shot = Some((frame, value()?.into()));
@@ -98,12 +104,16 @@ struct Game {
 struct CheckReport {
     windows: u32,
     matched: u32,
+    /// Windows 1..=leading all matched: the demo replays exactly up to frame 35 * leading.
+    leading: u32,
     first_mismatch: Option<(u32, String)>,
+    /// (Random() calls in the original, in the port) per window.
+    rows: Vec<(Option<u32>, u32)>,
 }
 
 impl Game {
     fn new(world: World, demo: Option<Demo>) -> Game {
-        let hero = Hero::new(world.map.start);
+        let hero = Hero::new(world.map.start, 1);
         // LevelInit calls Randomize unless a demo plays; DemoLoad zeroes RandSeed.
         let seed = if demo.is_some() {
             0
@@ -151,11 +161,15 @@ impl Game {
         let ours = self.rng.take_calls();
         let prev = if k == 1 { 0 } else { d.checks[k as usize - 1] };
         self.report.windows += 1;
+        let original = steps_between(prev, want, 1_000_000);
+        self.report.rows.push((original, ours));
         if self.rng.seed == want {
             self.report.matched += 1;
+            if self.report.first_mismatch.is_none() {
+                self.report.leading = k;
+            }
         } else if self.report.first_mismatch.is_none() {
-            let expected =
-                steps_between(prev, want, 1_000_000).map_or("?".into(), |n| n.to_string());
+            let expected = original.map_or("?".into(), |n| n.to_string());
             self.report.first_mismatch = Some((
                 k,
                 format!(
@@ -289,12 +303,37 @@ fn blit(fb: &mut [u8], pal: &Palette, px: &[u8], w: i32, h: i32, x0: i32, y0: i3
     }
 }
 
-fn run_headless(mut game: Game) {
+fn run_headless(mut game: Game, trace: Option<(u32, u32)>) {
     let t = Instant::now();
     while !game.demo_done() {
+        let count = game.frame + 1;
+        let traced = trace.is_some_and(|(a, b)| (a..=b).contains(&count));
+        let before = game.rng.calls();
         game.step([0; 9]);
+        if traced {
+            let (keys, _) = game.demo.as_ref().unwrap().input(count - 1);
+            println!(
+                "frame {count:5}  keys {keys:?}  state {:4} frame {:#05x} ({:5},{:5})  random {}",
+                game.hero.state,
+                game.hero.frame,
+                game.hero.x,
+                game.hero.y,
+                game.rng.calls().wrapping_sub(before)
+            );
+        }
     }
     let r = &game.report;
+    println!("window  original  port");
+    for (k, (orig, ours)) in r.rows.iter().enumerate().take(12) {
+        let o = orig.map_or("?".into(), |n| n.to_string());
+        let mark = if orig == &Some(*ours) { "" } else { "  <--" };
+        println!("{:>6}  {o:>8}  {ours:>4}{mark}", k + 1);
+    }
+    println!(
+        "exact for the first {} windows ({} frames)",
+        r.leading,
+        r.leading * CHECK_PERIOD
+    );
     println!(
         "{} frames in {:.2?}; RandSeed matched in {}/{} windows",
         game.frame,
@@ -413,7 +452,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if game.demo.is_none() {
             return Err("--headless needs --demo".into());
         }
-        run_headless(game);
+        run_headless(game, o.trace);
         return Ok(());
     }
     let gfx = Graphics::load(&o.data, &game.world)?;

@@ -61,7 +61,6 @@ impl World {
     }
 
     /// TileFunctionAt (10f0:587c): function 0 (10 ladder, 60600 pipe, ...).
-    #[allow(dead_code)]
     pub fn tile_function_at(&self, y: i32, x: i32) -> u16 {
         self.function_at(y, x, 0)
     }

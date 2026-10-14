@@ -47,6 +47,17 @@ class Map:
     groups: list[str | None]  # 16 tile group slots (.TIL)
     objects: bytes
 
+    def object_records(self) -> list[list[int]]:
+        """OBJECTS: MAP HEADER u16 @10 records of {u8 n; i16 words[n + 1]}, words[0] = type
+        (iterated by FUN_10f0_5d1e, interpreted by LevelInit and the factory FUN_1070_d6be)."""
+        count = struct.unpack_from("<H", self.header, 10)[0]
+        out, at = [], 0
+        for _ in range(count):
+            n = self.objects[at] + 1
+            out.append(list(struct.unpack_from(f"<{n}h", self.objects, at + 1)))
+            at += 1 + 2 * n
+        return out
+
     @classmethod
     def load(cls, path: Path) -> "Map":
         a = Archive.open(str(path))

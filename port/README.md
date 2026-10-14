@@ -34,9 +34,14 @@ input is read (where the original recorder samples it), it compares `RandSeed` w
 CHECK entry. On a mismatch it reports how many `Random()` calls the original made in that window
 against the port's count, then resyncs the seed so each later window is judged on its own.
 
-Current state: every demo diverges in its first window that has calls in it. The original seeds
-the level with 60–400 `Random()` calls (enemies, objects, effects) and the port has none of those
-yet. In GRINDER the first window has no calls and matches.
+`--trace FROM TO` prints, for the frames FROM..TO, the inputs, the hero's state and position and
+how many Random() calls each frame made.
+
+Current state ([re/rng.md](../re/rng.md)): the hero draws Random exactly where the original
+does. GRINDER, which has no enemies, matches window 1 and windows 3, 5, 6 and 7, but window 2 is
+one call short (source unknown) and window 4 lands at the map bottom because the grinder
+platform is missing. The other demos spend 60–400 calls in window 1 on level setup (the enemy
+factory and objects), which isn't ported.
 
 ## Not yet
 

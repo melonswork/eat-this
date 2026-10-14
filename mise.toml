@@ -71,3 +71,7 @@ run = "cargo run --release -- --headless --demo"
 [env]
 # SDL2 (built from source by the sdl2 crate) still declares cmake_minimum_required < 3.5
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+
+[tasks.disasm]
+description = "Disassemble functions: mise run disasm -- NAME... -> work/decomp/NAME.asm"
+run = '"$(mise where github:NationalSecurityAgency/ghidra)/support/analyzeHeadless" work/ghidra EatThis -process ETLAUNCH.EXE -noanalysis -readOnly -scriptPath tools/ghidra_scripts -postScript Disasm.java'

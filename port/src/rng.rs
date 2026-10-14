@@ -23,6 +23,10 @@ impl PascalRandom {
         ((self.next() as u64 * n as u64) >> 32) as i32
     }
 
+    pub fn calls(&self) -> u32 {
+        self.calls
+    }
+
     pub fn take_calls(&mut self) -> u32 {
         std::mem::take(&mut self.calls)
     }
