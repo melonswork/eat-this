@@ -1,0 +1,34 @@
+[tools]
+java = "temurin-21"
+"github:NationalSecurityAgency/ghidra" = { version = "Ghidra_12.1.4_build", version_prefix = "" }
+"7zip" = "latest"
+python = "3.13"
+uv = "latest"
+
+[tasks.extract]
+description = "Unpack the data track of the original CD image into work/cd"
+sources = ["iso/Eat This.img", "tools/extract_track1.py"]
+outputs = ["work/track1.iso"]
+run = """
+mkdir -p work/cd
+python -I tools/extract_track1.py "iso/Eat This.img" work/track1.iso 221285  # track 2 starts at 49:10:35
+7zz x -y -owork/cd work/track1.iso > /dev/null
+chmod -R u+rwX work/cd
+"""
+
+[tasks.ghidra]
+description = "Open the Ghidra GUI"
+run = '"$(mise where github:NationalSecurityAgency/ghidra)/ghidraRun"'
+
+[tasks.analyze]
+description = "Import and auto-analyze the game binaries into the Ghidra project in work/ghidra"
+depends = ["extract"]
+run = """
+mkdir -p work/ghidra
+"$(mise where github:NationalSecurityAgency/ghidra)/support/analyzeHeadless" work/ghidra EatThis \
+  -import work/cd/ETLAUNCH.EXE work/cd/ET_DBG.EXE work/cd/MENU.EXE -overwrite
+"""
+
+[tasks.ghidra-natives]
+description = "Build Ghidra's native decompiler/sleigh for this Mac (the release zip ships none for macOS)"
+run = 'cd "$(mise where github:NationalSecurityAgency/ghidra)/support/gradle" && ./gradlew buildNatives'
