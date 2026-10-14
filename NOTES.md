@@ -30,7 +30,7 @@ All 3987 entries on the disc decode.
 | `.SPR` "VGA SPRITE GROUP" | `SPR-HEADER`, `SPRITE n` (or `EMPTY`), `PALETTE`, `USED CLRS` | yes: u16 w, h; i16 hotspot x, y; u16 n + n bytes of hitboxes; then per row u16 span|0x8000, u16 first x, w pixels |
 | `.MAP` "TILE MAP FILE" | `MAP HEADER` (u16 @2 width, @4 height), `PLANE 0..2` u16 cells (hi = tile group slot, lo = tile), `OBJECTS`, `FILENAMES` (background `.LBM` + 16 `.TIL` slots, string[12]) | planes yes, objects no |
 | `.LIT` `.MIX` `.SEA` "VGA PALETTE … MIXAGE" | `PALMIX`: lookup tables for light, translucency and water | not yet |
-| `.REC` / `.DMO` "EAT THIS DEMO" | recorded input: `REC HEADER`, `KEY #0..8`, `MOUSE`, `CHECK` | not yet |
+| `.REC` "EAT THIS DEMO" (in `USERMAPS/*.DMO/`) | recorded input: `REC HEADER`, `MOUSE`, `KEY #0..8`, `CHECK` | yes: [re/demo.md](re/demo.md); `CHECK` holds RandSeed every 35 frames |
 
 Palettes are 6-bit VGA. Colour index 0 is transparent in tiles and sprites.
 `mise run render -- map work/cd/BIN/MAPS/CITY01.MAP out.png` renders a level.
@@ -62,7 +62,7 @@ CD audio over MCI, and direct VGA port I/O.
 
 ## Plan: source port
 
-1. Formats ✔ — palettes, tiles, sprites, map planes. Next: map objects, light/mix tables, demos.
+1. Formats ✔ — palettes, tiles, sprites, map planes. Demos ✔. Next: map objects, light/mix tables.
 2. Platform layer ✔ mapped. It is narrow: framebuffer present, palette, key state, timer, sound
    play/update, CD track play.
 3. Decompile the game proper (`1088` is the 64 KB core segment, `1080` the frame/menu logic),
@@ -70,8 +70,9 @@ CD audio over MCI, and direct VGA port I/O.
    documented in [re/hero.md](re/hero.md).
 4. Port: game logic in a modern language over SDL (texture for the framebuffer, SDL audio for
    samples, ripped CD tracks as files). Ship only our code; players bring their own CD.
-   Verification: the `.DMO` recorded demos are deterministic input recordings, so a correct port
-   plays them back identically.
+   Verification: the 7 recorded demos (124 345 frames) carry the RNG seed every 35 frames, which
+   gives the exact `Random()` call count per window. A port that matches it is deterministic
+   (see [re/demo.md](re/demo.md)).
 
 ## Tooling
 

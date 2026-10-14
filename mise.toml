@@ -51,3 +51,7 @@ run = """
   -process ETLAUNCH.EXE -noanalysis -scriptPath tools/ghidra_scripts -postScript ApplyNames.java
 mise run decomp
 """
+
+[tasks.demos]
+description = "Decode and validate every recorded demo on the CD, including the RandSeed oracle"
+run = "uv run python tools/demo.py work/cd/BIN/USERMAPS/*.DMO/*.REC"

@@ -137,3 +137,15 @@ address,name,comment
 1170:4e68,gHeroHeadBlocked,ceiling right above: forces crouch
 1170:511e,gHeroVXFriction,apply gHeroVX this frame
 1170:4e12,gHeroShootWalkTimer,
+1098:0002,DemoStartRecording,Allocates run buffers; RandSeed := 0
+1098:033a,DemoRecordFrame,Extends the key/mouse runs; every 35th frame stores RandSeed into CHECK
+1098:00ff,DemoSave,Writes the .REC archive (entries 0..11)
+1098:0537,DemoLoad,Reads entries 0..10 (not CHECK); RandSeed := 0; version must be 3
+1098:0668,DemoStop,
+1098:06c2,DemoPlayFrame,Replaces ReadGameInput polling with recorded gInput and mouse; stops at frame 0
+1168:1570,RandomNext,RandSeed := RandSeed * 0x08088405 + 1
+1168:15a8,Randomize,RandSeed from the DOS clock (INT 21h)
+1088:1952,LevelInit,Randomize unless a demo is playing or recording; then spawns the level
+1088:cf5c,LevelLoad,
+1170:2398,RandSeed,Borland Pascal System.RandSeed (u32)
+1170:5374,gDemo,Demo state: 9 key run streams, mouse runs at +0x48, CHECK at +0x50, frame counter +0x54, version +0x5a
