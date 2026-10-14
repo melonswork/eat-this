@@ -68,7 +68,9 @@ CD audio over MCI, and direct VGA port I/O.
 3. Decompile the game proper (`1088` is the 64 KB core segment, `1080` the frame/menu logic),
    naming as we go, using `ET_DBG.EXE` as a cross-check. In progress: hero movement is
    documented in [re/hero.md](re/hero.md).
-4. Port: game logic in a modern language over SDL (texture for the framebuffer, SDL audio for
+4. Port ([port/](port/README.md), Rust + SDL2, started): data loading, the main-plane tile
+   queries, Leon's core movement, a 70 Hz loop, demo playback and the headless RandSeed check
+   work. Original plan: game logic in a modern language over SDL (texture for the framebuffer, SDL audio for
    samples, ripped CD tracks as files). Ship only our code; players bring their own CD.
    Verification: the 7 recorded demos (124 345 frames) carry the RNG seed every 35 frames, which
    gives the exact `Random()` call count per window. A port that matches it is deterministic

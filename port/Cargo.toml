@@ -1,0 +1,11 @@
+[package]
+name = "eatthis"
+version = "0.1.0"
+edition = "2024"
+description = "A source port of Eat This (Image-Line, 1998). Needs the original CD's data."
+
+[dependencies]
+sdl2 = { version = "0.37", features = ["bundled", "static-link"] }
+
+[profile.release]
+debug = 1

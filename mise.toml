@@ -4,6 +4,8 @@ java = "temurin-21"
 "7zip" = "latest"
 python = "3.13"
 uv = "latest"
+rust = "1.94"
+cmake = "latest"
 
 [tasks.extract]
 description = "Unpack the data track of the original CD image into work/cd"
@@ -55,3 +57,17 @@ mise run decomp
 [tasks.demos]
 description = "Decode and validate every recorded demo on the CD, including the RandSeed oracle"
 run = "uv run python tools/demo.py work/cd/BIN/USERMAPS/*.DMO/*.REC"
+
+[tasks.port]
+description = "Build and run the port: mise run port -- [--demo work/cd/BIN/USERMAPS/LEVEL1_2.DMO] [--map work/cd/BIN/MAPS/CITY01.MAP]"
+dir = "port"
+run = "cargo run --release --"
+
+[tasks.check-demo]
+description = "Play a recorded demo headless in the port and compare RandSeed with its CHECK entries"
+dir = "port"
+run = "cargo run --release -- --headless --demo"
+
+[env]
+# SDL2 (built from source by the sdl2 crate) still declares cmake_minimum_required < 3.5
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"
