@@ -1,2 +1,4 @@
 iso
 work
+.venv
+__pycache__

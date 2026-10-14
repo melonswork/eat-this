@@ -1,0 +1,9 @@
+[project]
+name = "eatthis-tools"
+version = "0.1.0"
+description = "Reverse-engineering tools for Eat This (Image-Line, 1998)"
+requires-python = ">=3.13"
+dependencies = ["pillow>=11"]
+
+[tool.uv]
+package = false

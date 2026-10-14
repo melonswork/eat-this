@@ -32,3 +32,14 @@ mkdir -p work/ghidra
 [tasks.ghidra-natives]
 description = "Build Ghidra's native decompiler/sleigh for this Mac (the release zip ships none for macOS)"
 run = 'cd "$(mise where github:NationalSecurityAgency/ghidra)/support/gradle" && ./gradlew buildNatives'
+
+[tasks.decomp]
+description = "Dump the decompiled C of every analyzed binary into work/decomp"
+run = """
+"$(mise where github:NationalSecurityAgency/ghidra)/support/analyzeHeadless" work/ghidra EatThis \
+  -process -noanalysis -readOnly -scriptPath tools/ghidra_scripts -postScript ExportC.java
+"""
+
+[tasks.render]
+description = "Render a tile group, sprite group or map to PNG: mise run render -- map work/cd/BIN/MAPS/CITY01.MAP out.png"
+run = "uv run python tools/render.py"
