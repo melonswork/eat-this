@@ -114,3 +114,77 @@ class SpriteGroup:
         except KeyError:
             pal = None
         return cls(sprites, pal)
+
+
+@dataclass
+class Picture:
+    """An IFF picture (the level backgrounds in BIN/PICTURES): FORM PBM (chunky) or ILBM (planar)."""
+
+    width: int
+    height: int
+    pixels: bytes  # width*height indexed
+    palette: list[int]  # flat 8-bit RGB, from CMAP
+    masking: int  # BMHD masking: 0 none, 1 mask plane, 2 transparent colour
+    transparent: int  # BMHD transparent colour index
+
+    @classmethod
+    def load(cls, path: Path) -> "Picture":
+        d = Path(path).read_bytes()
+        if d[:4] != b"FORM" or d[8:12] not in (b"PBM ", b"ILBM"):
+            raise ValueError("not an IFF PBM/ILBM")
+        planar = d[8:12] == b"ILBM"
+        at, end = 12, min(len(d), 8 + struct.unpack_from(">I", d, 4)[0])
+        w = h = nplanes = masking = comp = transp = 0
+        cmap, body = b"", b""
+        while at + 8 <= end:
+            tag, size = d[at : at + 4], struct.unpack_from(">I", d, at + 4)[0]
+            chunk = d[at + 8 : at + 8 + size]
+            if tag == b"BMHD":
+                w, h = struct.unpack_from(">HH", chunk, 0)
+                nplanes, masking, comp = chunk[8], chunk[9], chunk[10]
+                transp = struct.unpack_from(">H", chunk, 12)[0]
+            elif tag == b"CMAP":
+                cmap = chunk
+            elif tag == b"BODY":
+                body = chunk
+            at += 8 + size + (size & 1)  # chunks are padded to even length
+        # CMAP is 8 bits per channel; the game keeps the top 6 (FUN_10f0_0b6d shifts it right by 2)
+        pal = palette(bytes(v >> 2 for v in cmap.ljust(768, b"\0")[:768]))
+        rows = []
+        pos = 0
+        if planar:
+            stride = ((w + 15) // 16) * 2
+            planes = nplanes + (1 if masking == 1 else 0)
+            row_len = stride * planes
+        else:
+            row_len = w
+        for _ in range(h):
+            if comp == 1:
+                row, pos = byterun1(body, pos, row_len)
+            else:
+                row, pos = body[pos : pos + row_len], pos + row_len
+            if planar:
+                px = bytearray(w)
+                for p in range(nplanes):
+                    line = row[p * stride : (p + 1) * stride]
+                    for x in range(w):
+                        px[x] |= ((line[x >> 3] >> (7 - (x & 7))) & 1) << p
+                row = bytes(px)
+            rows.append(row[:w])
+        return cls(w, h, b"".join(rows), pal, masking, transp)
+
+
+def byterun1(buf: bytes, pos: int, n: int) -> tuple[bytes, int]:
+    """Unpack one scan line (n bytes) of IFF ByteRun1: control c >= 0 copies c + 1 bytes,
+    c in -127..-1 repeats the next byte 1 - c times, -128 does nothing."""
+    out = bytearray()
+    while len(out) < n and pos < len(buf):
+        c = buf[pos]
+        pos += 1
+        if c < 128:
+            out += buf[pos : pos + c + 1]
+            pos += c + 1
+        elif c > 128:
+            out += buf[pos : pos + 1] * (257 - c)
+            pos += 1
+    return bytes(out[:n]), pos

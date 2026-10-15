@@ -210,6 +210,13 @@ impl Map {
 pub struct Script {
     pub background: Option<String>,
     pub foreground_colors: Option<usize>,
+    /// `BackgroundProc=`: which of the original's background routines runs (see bg.rs).
+    pub background_proc: u32,
+    /// `LoadSpriteGroup=` lines in order, blank ones included (they still take a slot; the first
+    /// slot is group 0x32 in the original's numbering).
+    pub sprite_groups: Vec<String>,
+    /// `PalMix=`: the 256x256 translucency table in PALS/ (mix[src * 256 + dst]).
+    pub palmix: Option<String>,
 }
 
 impl Script {
@@ -217,6 +224,9 @@ impl Script {
         let mut s = Script {
             background: None,
             foreground_colors: None,
+            background_proc: 0,
+            sprite_groups: Vec::new(),
+            palmix: None,
         };
         for line in text.lines() {
             let Some((key, value)) = line.split_once('=') else {
@@ -225,6 +235,9 @@ impl Script {
             let value = value.trim();
             match key.trim().to_ascii_lowercase().as_str() {
                 "background" if !value.is_empty() => s.background = Some(value.to_string()),
+                "backgroundproc" => s.background_proc = value.parse().unwrap_or(0),
+                "palmix" if !value.is_empty() => s.palmix = Some(value.to_string()),
+                "loadspritegroup" => s.sprite_groups.push(value.to_string()),
                 "foregroundcolors" => s.foreground_colors = value.parse().ok().filter(|&n| n < 256),
                 _ => {}
             }
@@ -243,4 +256,13 @@ mod tests {
         assert_eq!(s.foreground_colors, Some(175));
         assert_eq!(s.background.as_deref(), Some("citybac.lbm"));
     }
+}
+
+/// `PALS/*.MIX`: result colour of drawing colour `src` over colour `dst`, as a 256x256 table.
+pub fn load_palmix(path: &Path) -> io::Result<Vec<u8>> {
+    let t = Archive::open(path)?.get("PALMIX").ok_or_else(|| missing("PALMIX"))?;
+    if t.len() != 256 * 256 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "PALMIX is not 256x256"));
+    }
+    Ok(t)
 }

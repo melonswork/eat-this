@@ -6,6 +6,8 @@
 //!                                                   RandSeed with the demo's CHECK entries
 
 mod archive;
+mod bg;
+mod camera;
 mod data;
 mod demo;
 mod hero;
@@ -14,6 +16,7 @@ mod picture;
 mod rng;
 mod world;
 
+use camera::Camera;
 use data::{Palette, Script, SpriteGroup, TILE};
 use demo::{CHECK_PERIOD, Demo};
 use hero::Hero;
@@ -40,6 +43,7 @@ struct Options {
     shot: Option<(u32, PathBuf)>,
     trace: Option<(u32, u32)>,
     camera: Option<(i32, i32)>,
+    bg_only: bool,
 }
 
 fn options() -> Result<Options, String> {
@@ -52,6 +56,7 @@ fn options() -> Result<Options, String> {
         shot: None,
         trace: None,
         camera: None,
+        bg_only: false,
     };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -66,6 +71,7 @@ fn options() -> Result<Options, String> {
                 let from = value()?.parse().map_err(|e| format!("--trace FROM TO: {e}"))?;
                 o.trace = Some((from, value()?.parse().map_err(|e| format!("--trace FROM TO: {e}"))?));
             }
+            "--bg-only" => o.bg_only = true,
             "--camera" => {
                 let x = value()?.parse().map_err(|e| format!("--camera X Y: {e}"))?;
                 o.camera = Some((x, value()?.parse().map_err(|e| format!("--camera X Y: {e}"))?));
@@ -104,6 +110,7 @@ fn key_poll(counter: &mut i8, down: bool) -> i8 {
 struct Game {
     world: World,
     hero: Hero,
+    camera: Camera,
     rng: PascalRandom,
     frame: u32,
     demo: Option<Demo>,
@@ -137,6 +144,7 @@ impl Game {
                 .map_or(1, |d| d.as_secs() as u32)
         };
         Game {
+            camera: Camera::new(&world, (hero.x, hero.y)),
             world,
             hero,
             rng: PascalRandom::new(seed),
@@ -165,6 +173,7 @@ impl Game {
             None => keys,
         };
         self.hero.update(&self.world, &input, &mut self.rng);
+        self.camera.update(&self.world, (self.hero.x, self.hero.y));
         self.frame += 1;
     }
 
@@ -227,8 +236,11 @@ fn find_ci(dir: &Path, name: &str) -> Option<PathBuf> {
 /// tiles and the background picture are drawn as they are, sprites are fitted into the palette
 /// when they load (palette.rs). `present` turns the indices into RGB.
 struct Graphics {
+    background: bg::Background,
     /// Debug: fixed camera position (--camera X Y) instead of following the hero.
     camera: Option<(i32, i32)>,
+    /// Debug (--bg-only): draw nothing but the background.
+    bg_only: bool,
     palette: Palette,
     hero: Vec<SpriteGroup>,
 }
@@ -262,9 +274,28 @@ impl Graphics {
         let level = LevelPalette {
             colors,
             foreground: script
+                .as_ref()
                 .and_then(|s| s.foreground_colors)
                 .unwrap_or(DEFAULT_FOREGROUND),
         };
+        let mix = script
+            .as_ref()
+            .and_then(|s| s.palmix.as_deref())
+            .and_then(|n| find_ci(&data.join("PALS"), n))
+            .and_then(|p| data::load_palmix(&p).ok());
+        let groups = script
+            .as_ref()
+            .map(|s| s.sprite_groups.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .map(|name| {
+                let mut g = find_ci(&data.join("SPRITES"), name).and_then(|p| SpriteGroup::load(&p).ok());
+                if let Some(g) = &mut g {
+                    g.fit_to(&level);
+                }
+                g
+            })
+            .collect();
         let mut hero: Vec<SpriteGroup> = ["PPHERO.SPR", "PPHERO2.SPR", "PPHERO3.SPR"]
             .iter()
             .map(|f| SpriteGroup::load(&data.join("SPRITES").join(f)))
@@ -273,7 +304,14 @@ impl Graphics {
             g.fit_to(&level);
         }
         Ok(Graphics {
+            background: bg::Background {
+                proc_: script.map_or(0, |s| s.background_proc),
+                picture,
+                groups,
+                mix,
+            },
             camera: None,
+            bg_only: false,
             palette: level.rgb(),
             hero,
         })
@@ -288,11 +326,13 @@ impl Graphics {
 
     fn draw(&self, g: &Game, fb: &mut [u8]) {
         fb.fill(0);
-        let (mw, mh) = g.world.pixel_size();
-        let (cam_x, cam_y) = self.camera.unwrap_or((
-            (g.hero.x - W / 2).clamp(0, (mw - W).max(0)),
-            (g.hero.y - H / 2 - 20).clamp(0, (mh - H).max(0)),
-        ));
+        let (cam_x, cam_y) = self.camera.unwrap_or((g.camera.x, g.camera.y));
+        // The level frame counter as the original's draw sees it: frames completed before this one.
+        let frame = g.frame.saturating_sub(1);
+        self.background.draw(fb, (cam_x, cam_y), frame);
+        if self.bg_only {
+            return;
+        }
         let map = &g.world.map;
         for plane in [0, MAIN_PLANE] {
             for ty in cam_y / TILE..=(cam_y + H) / TILE {
@@ -496,6 +536,9 @@ fn screenshot(mut game: Game, gfx: &Graphics, frames: u32, path: &Path) -> std::
     }
     let mut fb = vec![0u8; (W * H) as usize];
     gfx.draw(&game, &mut fb);
+    if path.extension().is_some_and(|e| e == "bin") {
+        return std::fs::write(path, &fb); // the raw indexed frame, for comparing with tools/dumpframe.py
+    }
     let mut rgb = vec![0u8; (W * H * 3) as usize];
     gfx.present(&fb, &mut rgb);
     let mut out = format!("P6\n{W} {H}\n255\n").into_bytes();
@@ -526,6 +569,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut gfx = Graphics::load(&o.data, &game.world, &map_path)?;
     gfx.camera = o.camera;
+    gfx.bg_only = o.bg_only;
     if let Some((frames, path)) = &o.shot {
         return Ok(screenshot(game, &gfx, *frames, path)?);
     }

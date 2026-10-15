@@ -22,6 +22,8 @@ at 70 frames per second, the VGA refresh rate it was designed for.
 | `archive.rs` | Image Line archives + LZW (1108:00d6) |
 | `data.rs` | `.TIL`, `.SPR`, `.MAP` (start position from the map header, as `LevelLoad` does), the few `.SCR` keys used |
 | `palette.rs` | the level palette and the sprite remap (`FUN_10f0_1970`) |
+| `camera.rs` | the scrolling camera (dead zone, 15 px/frame, stops at the map edge) |
+| `bg.rs` | what is behind the planes: BackgroundProc 0 (city) and 4 (forest, first layer) |
 | `picture.rs` | IFF `.LBM` pictures (PBM and ILBM, ByteRun1) |
 | `world.rs` | `TileSolidityAt` / `TileFunctionAt` on the main plane, `0xa75f` outside the map |
 | `rng.rs` | Borland Pascal `Random` (the LCG the demos' CHECK entries sample) |
@@ -48,6 +50,21 @@ Not verified: the remap against a frame with a sprite group other than Leon's, a
 tables (the `.MIX`/`.LIT` shading) which are not ported. `--camera X Y` fixes the camera for
 comparisons.
 
+### Background
+
+`Background=` is only the palette and the source of the picture; what is drawn behind the planes is
+chosen by `BackgroundProc=N`, one of the routines in segment 1090 (`bg.rs`). Proc 0, CITY01's
+(`FUN_1090_0797`): the sky is a 320×120 sprite (rows 0..119 of the picture) drifting left one pixel
+per 8 frames; two rows at the horizon scroll at camera/16; the water rows below scroll faster with
+every row (`acc/248`, fixed point); the skyline strip rides at the horizon's speed, its reflection
+(sprite 2) is drawn through the PalMix table. Against the original's background (tools/dumpframe.py
+saves it before the tiles are drawn) the port is identical in 99.84 % of the pixels on four frames
+of the CITY01 demo; the rest is a small animated sprite (a screen on a building) that isn't drawn.
+Proc 4 (forest) draws its first layer, a 320×200 sprite tiled at camera/16, but not the two parallax
+tile layers over it (65 % identical). The camera follows the original's (`camera.rs`); against the
+original's camera over 3000 CITY01 frames it differs on 7 %, all while Leon idles (the hero code
+nudges the screen offset).
+
 ## Determinism check
 
 `--headless --demo` replays a demo as fast as it can. `CHECK[k]` is `RandSeed` at the input read
@@ -70,5 +87,5 @@ factory and objects), which isn't ported.
 
 - Ladders, pipes, ledges, slopes and stairs, moving platforms. In the CITY01 demo Leon gets
   stuck at the first staircase.
-- Background picture (`.LBM`), animated tiles, map objects, enemies, weapons, sound, CD music,
+- Background routines other than 0 and 4 (a guess is drawn instead), the forest's parallax tile layers, the TV on CITY01's skyline, lights, map objects, enemies, weapons, sound, CD music,
   the level script (`.SCR`), menus.
