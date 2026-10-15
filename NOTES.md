@@ -35,8 +35,17 @@ All 3987 entries on the disc decode.
 Palettes are 6-bit VGA. Colour index 0 is transparent in tiles and sprites.
 `mise run render -- map work/cd/BIN/MAPS/CITY01.MAP out.png` renders a level.
 
-Open questions: which palette a map really uses (probably the background `.LBM`'s; tile group
-palettes look darker), plane order (0 looks like the back plane), the `OBJECTS` script format.
+The level palette is the CMAP of the picture the script names with `Background=` (8-bit in the
+file, the game keeps the top 6 bits); `ForegroundColors=N` splits it into background 1..=N and
+foreground N+1..=255. Tiles are authored in it and drawn raw; sprite groups are remapped into it
+at load (`USED CLRS` + SPR-HEADER word 5, see port/README.md). `.LBM` pictures are IFF PBM
+(`tools/formats.py` `Picture`, also ILBM). Which routine draws behind the planes is
+`BackgroundProc=` in the script. Plane 0 is drawn before plane 1. `tools/dumpframe.py` dumps
+the original's frame buffer, palette and camera from the emulator for comparison.
+TILE INFOS: byte 0 draw kind, 1 animation type, 2..5 = A (frames), B (ticks per frame), C (first
+tile), D (phase), then functions 0..4 as u16 (port/src/tileanim.rs).
+
+Open questions: the `OBJECTS` script format, the other background routines, light/mix shading.
 
 ## How the game runs
 
@@ -66,8 +75,8 @@ CD audio over MCI, and direct VGA port I/O.
 2. Platform layer ✔ mapped. It is narrow: framebuffer present, palette, key state, timer, sound
    play/update, CD track play.
 3. Decompile the game proper (`1088` is the 64 KB core segment, `1080` the frame/menu logic),
-   naming as we go, using `ET_DBG.EXE` as a cross-check. In progress: hero movement is
-   documented in [re/hero.md](re/hero.md).
+   naming as we go, using `ET_DBG.EXE` as a cross-check. Hero movement is in
+   [re/hero.md](re/hero.md); sectors, scripts, platforms and the grinder in [re/level.md](re/level.md).
 4. Port ([port/](port/README.md), Rust + SDL2, started): data loading, the main-plane tile
    queries, Leon's core movement, a 70 Hz loop, demo playback and the headless RandSeed check
    work. Original plan: game logic in a modern language over SDL (texture for the framebuffer, SDL audio for

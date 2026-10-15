@@ -3,6 +3,7 @@
     render.py tiles TILES/CITY01.TIL out.png
     render.py map MAPS/CITY01.MAP out.png [plane ...]
     render.py sprites SPRITES/GRANNY.SPR out.png
+    render.py picture PICTURES/CITYBAC.LBM out.png
 """
 
 import sys
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from formats import TILE, Map, SpriteGroup, TileGroup
+from formats import TILE, Map, Picture, SpriteGroup, TileGroup
 
 BIN = Path("work/cd/BIN")
 TRANSPARENT = 0
@@ -32,10 +33,26 @@ def render_tiles(path: Path, out: Path, columns: int = 16) -> None:
     sheet.save(out)
 
 
+def level_palette(m: Map) -> list[int] | None:
+    """The level's palette is its background picture's (tiles are authored in it)."""
+    for d in (BIN / "PICTURES", BIN / "pictures"):
+        for p in d.glob("*") if d.is_dir() else []:
+            if p.name.lower() == m.background.lower():
+                return Picture.load(p).palette
+    return None
+
+
+def render_picture(path: Path, out: Path) -> None:
+    pic = Picture.load(path)
+    img = Image.frombytes("P", (pic.width, pic.height), pic.pixels)
+    img.putpalette(pic.palette)
+    img.save(out)
+
+
 def render_map(path: Path, out: Path, planes: list[int] | None = None) -> None:
     m = Map.load(path)
     groups = {i: TileGroup.load(BIN / "TILES" / name) for i, name in enumerate(m.groups) if name}
-    pal = next(iter(groups.values())).palette
+    pal = level_palette(m) or next(iter(groups.values())).palette
     canvas = Image.new("P", (m.width * TILE, m.height * TILE))
     canvas.putpalette(pal)
     missing = set()
@@ -75,6 +92,8 @@ if __name__ == "__main__":
     kind, src, dst, *rest = sys.argv[1:]
     if kind == "sprites":
         render_sprites(Path(src), Path(dst))
+    elif kind == "picture":
+        render_picture(Path(src), Path(dst))
     elif kind == "tiles":
         render_tiles(Path(src), Path(dst))
     else:
