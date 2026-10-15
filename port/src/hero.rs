@@ -113,6 +113,8 @@ pub struct Hero {
     hurt_blink: i32,
     /// 1170:511f: HeroStartJump's first argument (set when thrown back): falls fast even holding Up.
     knocked: bool,
+    /// 1170:4de6: knocked down flat (after being thrown back) rather than crumpled (a fall).
+    flat: bool,
     /// 1170:511b: on a slope, set by FUN_1088_2f6b; walls are then looked for higher up.
     on_slope: bool,
 }
@@ -190,6 +192,7 @@ impl Hero {
             hurt: 0,
             hurt_blink: 0,
             knocked: false,
+            flat: false,
             on_slope: false,
         }
     }
@@ -376,8 +379,13 @@ impl Hero {
 
         if self.state == KNOCKED_DOWN {
             self.gun.shooting = false;
-            self.frame = (self.anim / 0x1e) % 2 + 0x208;
-            self.height = 0x1a;
+            if self.flat {
+                self.frame = 0x20b;
+                self.height = 0x14;
+            } else {
+                self.frame = (self.anim / 0x1e) % 2 + 0x208;
+                self.height = 0x1a;
+            }
             if self.anim < 1 {
                 self.crouch_down();
                 self.crouch = 8;
@@ -807,11 +815,17 @@ impl Hero {
             let n = rng.random((d / 16 + 1).min(8) as u16);
             spawn_dust(w, n, self.y, self.x, rng);
         }
-        if d >= FATAL_FALL {
+        if d >= FATAL_FALL || self.prev_state == KNOCKED_BACK {
             self.state = KNOCKED_DOWN;
-            self.anim = ((d - FATAL_FALL) >> 1) + 100;
-            self.anim = self.anim.min(0xaa);
-            self.shakes.push((0x18, 0xe));
+            if d < FATAL_FALL {
+                self.anim = 0x14;
+                self.flat = true;
+            } else {
+                self.anim = ((d - FATAL_FALL) >> 1) + 100;
+                self.anim = self.anim.min(0xaa);
+                self.shakes.push((0x18, 0xe));
+                self.flat = false;
+            }
             return;
         }
         let p = if w.solidity_at(self.y - 0x20, self.facing * self.half_width + self.x)

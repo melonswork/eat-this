@@ -804,15 +804,70 @@ impl Level {
     fn particle_effect(&mut self, id: i32, y: i32, x: i32, f: &mut Frame) {
         match id {
             62 => self.bullet_hit(y, x, f),
+            16 => {
+                self.bounce_off(f);
+            }
+            13 => {
+                // FUN_1040_0c4d: a shell casing tinkles; once it stops it lies on the floor (an
+                // object in the list +0x5a that only draws: not kept here).
+                let v = self.bounce_off(f);
+                if (v >> 16) > 1 {
+                    f.rng.random(8);
+                }
+                if self.particles.keep_dying {
+                    f.rng.random(2);
+                }
+            }
             15 => {
                 // FUN_1040_0a80: a metallic ping and sparks.
                 f.rng.random(0x1e);
                 self.sparks(0x191b, y, x);
             }
-            // FUN_1040_0ab0: debris bounces off the floor. No Random(); not ported, it just ends.
-            16 => {}
             _ => effects::effect(f.world, id as u16, y, x, f.rng, f.fx),
         }
+    }
+
+    /// Effect 16, FUN_1040_0ab0: bounce off the wall that was hit (FUN_1050_44da's throw):
+    /// sideways reverses, up or down loses speed by the bounce factor (/16) and stops when too
+    /// slow. Returns the new vertical speed (1170:25a6).
+    fn bounce_off(&mut self, f: &mut Frame) -> i32 {
+        let i = self.particles.current;
+        {
+            let m = &mut self.particles.list[i].m;
+            m.set(8, m.w(0x10));
+            m.set(0xa, m.w(0x12));
+        }
+        self.particle_callback(i, f); // FUN_1050_4acb
+        let side = self.particles.hit_side;
+        let p = &mut self.particles.list[i];
+        let (m, v) = (&mut p.m, &mut p.v);
+        if side <= 1 {
+            m.set(0x24, 0);
+            m.set(0x3e, 0);
+            m.set(4, m.w(0x10) - (m.w(4) - m.w(0x10)));
+            v.set_l(0, v.l(0).wrapping_neg());
+            self.particles.keep_dying = false;
+            return -0x7fff;
+        }
+        let t = v.w(8);
+        let t1 = t - 1;
+        let fall = (t.wrapping_mul(t) - t1.wrapping_mul(t1)) / v.w(0xa);
+        let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
+        v.set_l(4, vy);
+        if side == 2 || (vy >> 16) > 2 || ((vy >> 16) == 2 && (vy as u32 & 0xffff) > 0xaaaa) {
+            m.set(0x24, 0);
+            m.set(0x3e, 0);
+            v.set(8, 1);
+            if f.world.solidity_at(m.w(0xe), m.w(8)) & 0x40 == 0 {
+                m.set(0xc, m.w(8));
+            } else {
+                m.set(8, m.w(0xc));
+            }
+            m.set(4, m.w(0xc));
+            m.set(6, m.w(0xa));
+            self.particles.keep_dying = false;
+        }
+        vy
     }
 
     /// Effect 62, FUN_1040_06d4: a bullet hits.
