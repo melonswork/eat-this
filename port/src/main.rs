@@ -253,6 +253,9 @@ impl Game {
             noise = 2;
         }
         let mut fx = Effects::default();
+        for (idx, y, x, pull) in std::mem::take(&mut self.hero.levers) {
+            self.level.work_lever(&mut self.world, idx, y, x, pull, &mut self.rng, &mut fx);
+        }
         if let Some((dir, y, x)) = self.hero.push {
             let hy = self.hero.y;
             self.level.push_block(&mut self.world, hy, dir, y, x, &mut fx);

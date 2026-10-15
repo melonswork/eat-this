@@ -311,6 +311,43 @@ impl Level {
     }
 
     /// FUN_1078_02e5.
+    /// The hero working a lever (HeroUpdate): its sound (function 4), then FUN_1088_14a3 steps it to
+    /// its next state (from the last back to the first); letting go of a spring lever steps it
+    /// back (FUN_1088_1364(cell - 1)).
+    pub fn work_lever(&mut self, world: &mut World, idx: i32, y: i32, x: i32, pull: bool, rng: &mut crate::rng::PascalRandom, fx: &mut Effects) {
+        let width = world.main().width;
+        let tile = world.main().cells[idx as usize];
+        if pull {
+            let id = world.cell_function(tile, 4);
+            if id as i16 > 0 {
+                crate::effects::effect(world, id, y, x, rng, fx);
+            }
+            let f = world.cell_function(tile, 0) as i32;
+            if !(6000..=6009).contains(&f) {
+                return;
+            }
+            let next_f = |t: u16| world.cell_function(t, 0) as i32;
+            let mut t = tile;
+            if f == 6009 || next_f(t + 1) != f + 1 {
+                let mut ff = f;
+                while ff > 6000 && next_f(t - 1) == ff - 1 {
+                    t -= 1;
+                    ff -= 1;
+                }
+            } else {
+                t += 1;
+            }
+            self.set_cell(world, t, idx as u16, fx);
+        } else {
+            let (cy, cx) = ((idx / width) * 16 + 7, (idx % width) * 16 + 7);
+            let id = world.cell_function(tile, 4);
+            if id as i16 > 0 {
+                crate::effects::effect(world, id, cy, cx, rng, fx);
+            }
+            self.set_cell(world, tile - 1, idx as u16, fx);
+        }
+    }
+
     /// FUN_1088_72f9(dir, y, x): the hero pushes against the wall at (x, y): a pushable block
     /// (OBJECTS record 0x4b0 in the sector's list +0x66) with room behind it slides one tile as a
     /// platform; its cell (+0x16) is touched either way.

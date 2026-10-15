@@ -24,6 +24,8 @@ pub const FALL: i32 = 1;
 pub const JUMP: i32 = 5;
 pub const CROUCH: i32 = -40;
 pub const LEDGE: i32 = -4;
+/// Pulling a lever (HeroUseObject).
+pub const USE: i32 = -30;
 pub const KNOCKED_DOWN: i32 = -200;
 
 /// gHeroGround kind for an ordinary floor (HeroReset sets it; the heavy-landing test checks it).
@@ -88,6 +90,16 @@ pub struct Hero {
     prev: (i32, i32),
     /// FUN_1088_72f9's call this frame: (dir, y, x) of the wall pushed.
     pub push: Option<(i32, i32, i32)>,
+    /// 1170:5123: 3 while a lever is in reach this frame (then 1: Up jumps again).
+    lever_reach: i32,
+    /// 1170:4e5a: frames the use pose has been held (to 2); the lever moves at 1.
+    use_count: i32,
+    /// 1170:4dfa: the use pose's frame when the lever is high up.
+    use_frame: i32,
+    /// 1170:4e3c: a spring lever held down (its cell), -1 none.
+    held_lever: i32,
+    /// The lever operations this frame, for the level: (cell, y, x, pull).
+    pub levers: Vec<(i32, i32, i32, bool)>,
     /// 1170:511b: on a slope, set by FUN_1088_2f6b; walls are then looked for higher up.
     on_slope: bool,
 }
@@ -156,6 +168,11 @@ impl Hero {
             collide_flags: 3,
             prev: (x, y),
             push: None,
+            lever_reach: 0,
+            use_count: 0,
+            use_frame: 0x7fff,
+            held_lever: -1,
+            levers: Vec::new(),
             on_slope: false,
         }
     }
@@ -417,7 +434,49 @@ impl Hero {
             }
         }
 
-        if held(UP) && self.released[UP] && self.state == GROUND {
+        // Levers in reach (6000..6099 cells not marked 2), pulled on the use pose's first frame.
+        self.levers.clear();
+        let mut ly = (self.y & !15) - 0x28;
+        for k in (0..=2).rev() {
+            let f = w.tile_function_at(ly, self.x);
+            if (6000..0x17d4).contains(&f) {
+                let cell = w.cell_at(MAIN_PLANE, ly, self.x).unwrap_or(0);
+                let f2 = w.cell_function(cell, 2);
+                if f2 & 2 == 0 {
+                    self.lever_reach = 3;
+                    if self.use_count == 1 {
+                        if f2 & 4 != 0 {
+                            eprintln!("warning: levers needing a key (HeroUpdate, flag 4) not ported");
+                        }
+                        let idx = (ly >> 4) * w.main().width + (self.x >> 4);
+                        if f2 & 1 != 0 {
+                            self.held_lever = idx;
+                        }
+                        self.levers.push((idx, ly, (self.x & !15) + 7, true));
+                    }
+                    if k == 2 {
+                        self.use_frame = 0x122;
+                    }
+                }
+            }
+            ly += 0x10;
+        }
+        if self.held_lever != -1 && self.use_count < 1 {
+            self.levers.push((self.held_lever, 0, 0, false));
+            self.held_lever = -1;
+        }
+
+        if held(UP) && self.released[UP] && self.lever_reach >= 2 {
+            // HeroUseObject(0, 5123).
+            let kind = self.lever_reach & 0xfe;
+            if self.state == GROUND || (self.state == USE && kind != self.turn_kind) {
+                self.state = USE;
+                self.turn_kind = kind;
+                self.turn = if kind == 2 { -11 } else { 2 };
+                self.use_count = 0;
+                self.released[UP] = false;
+            }
+        } else if held(UP) && self.released[UP] && self.state == GROUND {
             // Reach for a ledge above first (FUN_1088_3e0d), else jump.
             let (ndx, ndy) = self.grab_ledge(w, lv, self.y - 0x30, dx, dy);
             (dx, dy) = (ndx, ndy);
@@ -477,7 +536,31 @@ impl Hero {
             self.start_jump(1, FALL);
         }
 
-        if self.state == GROUND && self.facing != prev_facing {
+        if self.state == USE {
+            if self.turn.abs() != 7 {
+                self.turn += 1;
+            }
+            if self.turn.abs() == 7 && self.use_count < 2 {
+                self.use_count += 1;
+            }
+            if self.frame == NONE {
+                if self.use_count < 1 || self.use_frame == 0x7fff {
+                    let t = self.turn.abs();
+                    self.frame = if self.turn_kind == 2 { 0x66 - t } else { (0x16 - t) % 0x14 + 0x5b };
+                    self.use_frame = 0x7fff;
+                } else {
+                    self.frame = self.use_frame;
+                }
+            }
+            if !held(UP) || self.lever_reach == 0 {
+                self.stand();
+            }
+            self.gun.shooting = false;
+        } else {
+            self.use_count = 0;
+        }
+
+        if self.state == GROUND && self.facing != prev_facing && !self.gun.shooting {
             if self.turn == NO_TURN {
                 self.turn = 2;
                 self.turn_kind = 4;
@@ -557,6 +640,7 @@ impl Hero {
 
         self.ground = 0;
         self.head_blocked = 0;
+        self.lever_reach &= 1;
         let (blocked, step_h) = self.move_and_collide(w, lv, dx, dy);
         self.prev_blocked = blocked;
         self.push_out_of_walls(w);
@@ -647,7 +731,7 @@ impl Hero {
     /// Returns false where the original skips the aiming pose (goto LAB_1088_9a0d).
     fn end_of_frame(&mut self, walking: bool, blocked: i32, step_h: i32, rng: &mut PascalRandom) -> bool {
         if self.state != GROUND {
-            if self.state != CROUCH {
+            if self.state != CROUCH && self.state != USE {
                 self.turn = NO_TURN;
             }
             self.idle_timer = -0x10 - rng.random(8);
