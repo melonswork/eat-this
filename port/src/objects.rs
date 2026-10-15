@@ -30,7 +30,10 @@ pub struct Obj {
 impl Obj {
     /// A fresh object of `size` bytes (the VMT's size word) with its VMT pointer at +0.
     pub fn new(kind: u16, vmt: u16, size: usize) -> Obj {
-        let mut o = Obj { kind, mem: vec![0; size.max(2)] };
+        let mut o = Obj {
+            kind,
+            mem: vec![0; size.max(2)],
+        };
         o.set(0, vmt as i32);
         o
     }

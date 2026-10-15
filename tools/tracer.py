@@ -93,6 +93,7 @@ def main():
     ap.add_argument("--watch", default="", help="comma-separated globals (names from re/names.csv or 1170:xxxx) to log as i16 at the start of every game frame into watch.tsv")
     ap.add_argument("--dump-mem", action="append", default=[], metavar="SEL:OFF:LEN", help="hex-dump memory into mem_SEL_OFF.bin when the demo starts (DemoLoad), e.g. 1170:07b2:400")
     ap.add_argument("--entry", action="append", default=[], metavar="NAME|SEL:OFF", help="log every entry into this function with the frame and its callers (BP chain) into entries.txt")
+    ap.add_argument("--dump-groups", action="store_true", help="at DemoLoad, write the sprite group slot table (1170:6188) with the first bytes of each group into groups.txt")
     ap.add_argument("--platforms", action="store_true", help="log the first 0x40 bytes (as i16) of every platform (gPlatforms, 1170:4662) at the start of every game frame into platforms.tsv")
     ap.add_argument("--writes", default="", help="comma-separated globals; log every write to them (frame, CS:IP, function, new value) into writes.tsv")
     ap.add_argument("-v", "--verbose", action="store_true", help="log file opens and Windows calls")
@@ -169,6 +170,13 @@ def main():
 
     def on_demo_load(e):
         st.update(started=True, frame=0, played=0, window=1, calls=[])
+        if o.dump_groups:
+            with open(out / "groups.txt", "w") as g:
+                for slot in range(0x100):
+                    off, sel = e.rw(DS, 0x6188 + 4 * slot), e.rw(DS, 0x618a + 4 * slot)
+                    if sel:
+                        head = bytes(e.rb(sel, off, 0x30))
+                        g.write(f"{slot:#04x} {sel:04x}:{off:04x} {head.hex(' ')} {head!r}\n")
         for spec in o.dump_mem:
             sel, off, ln = (int(v, 16) for v in spec.split(":"))
             data = bytes(e.rb(sel, off, ln))

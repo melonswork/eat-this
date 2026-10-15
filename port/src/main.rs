@@ -5,6 +5,7 @@
 //!   eatthis [--data DIR] --headless --demo X.DMO    replay it as fast as possible and compare
 //!                                                   RandSeed with the demo's CHECK entries
 
+mod actors;
 mod archive;
 mod bg;
 mod camera;
@@ -12,9 +13,9 @@ mod data;
 mod demo;
 mod effects;
 mod factory;
-mod objects;
 mod hero;
 mod level;
+mod objects;
 mod palette;
 mod picture;
 mod rng;
@@ -174,8 +175,17 @@ impl Game {
         };
         camera.first_frame(&world, (hero.x, hero.y), grinder);
         // The end of LevelFirstFrame: the hero may start inside a wall that blows up.
-                if world.solidity_at(hero.y - 0x10, hero.x) & 0x80 != 0 {
-            crate::effects::explode_tile(&mut level, &mut world, 0x60, 0x104, hero.y - 0x10, hero.x, &mut rng, &mut fx);
+        if world.solidity_at(hero.y - 0x10, hero.x) & 0x80 != 0 {
+            crate::effects::explode_tile(
+                &mut level,
+                &mut world,
+                0x60,
+                0x104,
+                hero.y - 0x10,
+                hero.x,
+                &mut rng,
+                &mut fx,
+            );
         }
         for &(a, b) in &fx.shakes {
             camera.shake(a, b);
@@ -239,6 +249,21 @@ impl Game {
         let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
         self.camera
             .update(&self.world, (self.hero.x, self.hero.y), true, grinder);
+        // FUN_1070_faec: the actors whose box meets the camera.
+        let window = (
+            self.camera.x,
+            self.camera.y,
+            self.camera.x + 0x13f,
+            self.camera.y + 199,
+        );
+        let mut env = actors::Env {
+            world: &mut self.world,
+            rng: &mut self.rng,
+            fx: &mut fx,
+            hero: (self.hero.x, self.hero.y, self.hero.height),
+            frame: self.frame,
+        };
+        self.level.update_actors(&mut env, window);
         // The level's foreground procedure ((*DAT_1170_4c36)()) runs last: the grinder in GRINDER.
         let h = &self.hero;
         let hero = (h.x, h.y, h.crouch_level(), false);
@@ -688,6 +713,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             None,
         ),
     };
+    world::load_game_ds(&o.data.join("../ETLAUNCH.EXE"))?;
     let world = World::load(&map_path, &o.data.join("TILES"))?;
     let game = Game::new(world, demo);
     if o.headless {

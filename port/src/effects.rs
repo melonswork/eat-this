@@ -41,6 +41,14 @@ fn falling_debris(_world: &World, _y: i32, _x: i32, rng: &mut PascalRandom) {
     }
 }
 
+/// FUN_1040_6577: a puff of smoke, six particles, two Random() calls each.
+pub fn smoke(_y: i32, _x: i32, rng: &mut PascalRandom) {
+    for _ in 0..6 {
+        rng.random(0xb);
+        rng.random(8);
+    }
+}
+
 /// FUN_1040_5833: six rubble particles, four Random() calls each.
 fn rubble(rng: &mut PascalRandom) {
     for _ in 0..6 {

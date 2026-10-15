@@ -54,6 +54,8 @@ pub struct Level {
     pub lists: Vec<[Vec<usize>; crate::objects::list::COUNT]>,
     /// OBJECTS records type 1000 (teleport destinations, the 1170:5130 collection).
     pub teleports: Vec<Vec<i16>>,
+    /// FUN_1058_008f's position in the collection being walked (1170:45d6).
+    pub walk_index: i32,
     // Script globals.
     platform_flags: i32,  // 1170:0ebe
     platform_sound: i32,  // 1170:0ec0
@@ -100,6 +102,7 @@ impl Level {
             objects: Vec::new(),
             lists: vec![Default::default(); world.sectors.len()],
             teleports: Vec::new(),
+            walk_index: 0,
             platform_flags: 0,
             platform_sound: 0,
             platform_volume: 0x100,
@@ -533,7 +536,14 @@ impl Level {
             return;
         }
         let step = world.cell_function(tile, 2) as i16 as i32;
-        crate::effects::effect(world, world.cell_function(tile, 4), ty << 4, tx << 4, rng, fx);
+        crate::effects::effect(
+            world,
+            world.cell_function(tile, 4),
+            ty << 4,
+            tx << 4,
+            rng,
+            fx,
+        );
         let mut left = tx;
         while left > 0 && at(world, ty, left - 1) == tile {
             left -= 1;

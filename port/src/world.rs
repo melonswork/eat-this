@@ -258,3 +258,32 @@ impl World {
         self.sectors.push(s);
     }
 }
+
+/// The original's initialised data segment (ETLAUNCH.EXE's autodata segment), read from the
+/// player's CD at start-up: a few tables live there (slopes at 1170:1280, ...).
+pub static GAME_DS: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+
+/// Slope heights: 0x16-byte rows indexed by a slope tile's function 2 (1170:1280).
+pub static SLOPES: std::sync::LazyLock<&'static [u8]> =
+    std::sync::LazyLock::new(|| &GAME_DS.get().expect("load_game_ds first")[0x1280..]);
+
+/// Find ETLAUNCH.EXE's autodata segment (NE header) and keep it.
+pub fn load_game_ds(exe: &Path) -> io::Result<()> {
+    let d = std::fs::read(exe)?;
+    let u16_at = |a: usize| u16::from_le_bytes([d[a], d[a + 1]]) as usize;
+    let ne = u16_at(0x3c);
+    let (count, auto) = (u16_at(ne + 0x1c), u16_at(ne + 0x0e));
+    let (table, shift) = (ne + u16_at(ne + 0x22), u16_at(ne + 0x32));
+    if auto == 0 || auto > count {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "no autodata segment",
+        ));
+    }
+    let e = table + (auto - 1) * 8;
+    let (off, len) = (u16_at(e) << shift, u16_at(e + 2));
+    let mut ds = d[off..off + len].to_vec();
+    ds.resize(0x10000, 0);
+    let _ = GAME_DS.set(ds);
+    Ok(())
+}

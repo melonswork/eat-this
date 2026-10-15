@@ -61,7 +61,11 @@ fn facing_hero(hero_x: i32, x: i32) -> i32 {
 impl Level {
     /// FUN_1058_0023: put an object into list +0x36 of the sector at (x, y) (0x7fff: the default).
     pub fn add_actor(&mut self, world: &World, o: Obj, y: i32, x: i32) -> usize {
-        let s = if x == 0x7fff { 0 } else { world.sector_at(y, x) };
+        let s = if x == 0x7fff {
+            0
+        } else {
+            world.sector_at(y, x)
+        };
         self.add_to(s, list::ACTORS, o)
     }
 
@@ -176,7 +180,8 @@ impl Level {
                 o.set(0x34, 0x5b01);
                 o.set(0x3c, 0);
                 o.set(0x32, 0);
-                let under = world.tile_function_in(MAIN_PLANE, o.w(0x10) - 0x10, o.w(0xe)) == 0x334a;
+                let under =
+                    world.tile_function_in(MAIN_PLANE, o.w(0x10) - 0x10, o.w(0xe)) == 0x334a;
                 o.set_b(0x44, under as u8);
                 o.set_b(0x45, 0);
                 o.set(0x26, rng.random(0x14) + 0xf6);
@@ -272,7 +277,11 @@ impl Level {
                 o.set(8, o.w(0x10) + 0x10);
             }
             0x13e2 | 0x13f6 => {
-                let (vmt, size) = if kind == 0x13e2 { (0xc98, 0x42) } else { (0xccc, 0x40) };
+                let (vmt, size) = if kind == 0x13e2 {
+                    (0xc98, 0x42)
+                } else {
+                    (0xccc, 0x40)
+                };
                 let mut o = base(kind, vmt, size);
                 o.set(10, r.byte2());
                 o.set_l(0xe, (r.at(4) as u16 as i32) * 16);
@@ -403,7 +412,10 @@ impl Level {
         }
         for rec in world.map.object_records() {
             let kind = rec[0] as u16;
-            let r = Rec { w: &rec, count: rec.len() as i32 };
+            let r = Rec {
+                w: &rec,
+                count: rec.len() as i32,
+            };
             if self.factory(world, cx, kind, &r) {
                 continue;
             }
@@ -417,7 +429,9 @@ impl Level {
                     let s = world.sector_at(o.w(4), o.w(2));
                     self.add_to(s, list::L66, o);
                 }
-                k if (100..=199).contains(&k) => eprintln!("warning: OBJECTS type {k} (FUN_1060_0166) not ported"),
+                k if (100..=199).contains(&k) => {
+                    eprintln!("warning: OBJECTS type {k} (FUN_1060_0166) not ported")
+                }
                 0x44c | 0x44d | 0x2724 => {}
                 k => eprintln!("warning: OBJECTS type {k:#x} not ported"),
             }
@@ -426,7 +440,9 @@ impl Level {
 
     /// SpawnFromIconTiles (1088:1797) for one plane.
     fn spawn_icons(&mut self, world: &mut World, cx: &mut Ctx, plane: usize) {
-        let Some(p) = world.planes[plane].as_ref() else { return };
+        let Some(p) = world.planes[plane].as_ref() else {
+            return;
+        };
         let (w, n) = (p.width, (p.width * p.height) as usize);
         for i in 0..n {
             let c = world.planes[plane].as_ref().unwrap().cells[i];
@@ -453,13 +469,30 @@ impl Level {
     }
 
     /// FUN_1088_0d5a: one enemy icon. Returns whether the icon is consumed.
-    fn icon(&mut self, world: &mut World, cx: &mut Ctx, c: u16, f: u16, row: i32, col: i32) -> bool {
+    fn icon(
+        &mut self,
+        world: &mut World,
+        cx: &mut Ctx,
+        c: u16,
+        f: u16,
+        row: i32,
+        col: i32,
+    ) -> bool {
         let x = col * 16;
         let (xc, y, yb) = (x + 7, row * 16, row * 16 + 0xf);
         let param = world.cell_function(c, 2) as i16;
         let main_func = world.cell_function(world.main().get(col, row), 0);
         // FUN_1068_182c / FUN_1068_17f8 build a record on the stack (w[0] unused).
-        let six = |p5: i16, p4: i32, p3: i32| [0, p5, p4 as i16, p3 as i16, (x - 0xb9) as i16, (x + 199) as i16];
+        let six = |p5: i16, p4: i32, p3: i32| {
+            [
+                0,
+                p5,
+                p4 as i16,
+                p3 as i16,
+                (x - 0xb9) as i16,
+                (x + 199) as i16,
+            ]
+        };
         let four = |p3: i16, p2: i32, p1: i32| [0, p3, p2 as i16, p1 as i16];
         match f {
             61400 | 61300 => {
