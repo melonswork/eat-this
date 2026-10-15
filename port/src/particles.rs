@@ -355,6 +355,65 @@ impl Particles {
         damage
     }
 
+    /// FUN_1050_51aa(sprite record, mask): like `hit_test` against every type-0 hit box of a
+    /// queued sprite (frame, x, y, h-flip, v-flip) (FUN_10f0_2240; a flip negates the particle's
+    /// box around the anchor without reordering it).
+    pub fn hit_test_sprite(&mut self, rec: (i32, i32, i32, i32, i32), mask: i32) -> i32 {
+        let (frame, sx, sy, hflip, vflip) = rec;
+        let boxes = crate::sprites::hitboxes(frame);
+        let mut damage = 0;
+        self.hit_mask = 0;
+        self.hit_index = -1;
+        for i in (0..self.list.len()).rev() {
+            let m = &mut self.list[i].m;
+            if m.w(0x34) & mask == 0 {
+                continue;
+            }
+            let (mut l, mut t, mut r, mut b) = (m.w(0x2c) - sx, m.w(0x2e) - sy, m.w(0x30) - sx, m.w(0x32) - sy);
+            if hflip != 0 {
+                l = -l;
+                r = -r;
+            }
+            if vflip != 0 {
+                t = -t;
+                b = -b;
+            }
+            let mut hit = false;
+            for hb in &boxes {
+                if hb.kind == 0 {
+                    let (x1, y1, x2, y2) = hb.rect;
+                    if l <= x2 && t <= y2 && x1 <= r && y1 <= b {
+                        hit = true;
+                        break;
+                    }
+                } else if hb.kind > 0 {
+                    break;
+                }
+            }
+            if hit {
+                if m.w(0x3a) & 0x20 != 0 {
+                    eprintln!("warning: particle damage FUN_1050_4b17 not ported");
+                } else {
+                    damage += m.w(0x38);
+                }
+                self.hit_mask |= m.w(0x34);
+                self.hit_index = i as i32;
+                if m.w(0x3e) >= 0 {
+                    m.set(0x3e, m.w(0x3e) + 1);
+                }
+                if m.w(0x3a) & 1 == 0 {
+                    m.set(0x24, m.w(0x22) - 1);
+                }
+                m.set(0x10, m.w(8));
+                m.set(0x12, m.w(0xa));
+            }
+            if m.w(0x36) & mask != 0 {
+                eprintln!("warning: homing particles (FUN_1050_51aa) not ported");
+            }
+        }
+        damage
+    }
+
     /// FUN_1070_0249: which way the last particle that hit was going (-1, 0, 1).
     pub fn hit_direction(&self) -> i32 {
         if self.hit_index < 0 {

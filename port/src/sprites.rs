@@ -11,6 +11,7 @@ pub static DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// Slot -> file, as FUN_1088_c98f loads them (seen with the tracer's --dump-groups).
 const SLOTS: &[(u16, &str)] = &[
+    (0x00, "PPHERO"), (0x01, "PPHERO2"), (0x02, "PPHERO3"),
     (0x06, "PI2ANIM"), (0x09, "FIREDRO2"), (0x18, "PPWEAPON"), (0x19, "PPWEAP02"),
     (0x1a, "PPFLAMER"), (0x1f, "ETSCORE"), (0x20, "PPFONT3"), (0x21, "BONUSANI"),
     (0x22, "ETBONUS"), (0x28, "STATSOBJ"), (0x47, "BOWL"), (0x48, "CRATE"), (0x4c, "MINE2"),
@@ -23,9 +24,22 @@ const SLOTS: &[(u16, &str)] = &[
     (0x70, "BOWLEXP"), (0x75, "SVN"), (0x78, "MPOINTER"), (0x7d, "MOVIE"),
 ];
 
-/// Per slot and frame: the image height (sprite +2), and its first hit box when that is a plain
-/// box (type 0).
-type Boxes = Vec<Option<(i32, Option<(i32, i32, i32, i32)>)>>;
+/// A hit box record (sprite +0xc + 0x10 * i): type, value, (left, top, right, bottom).
+#[derive(Clone, Copy, Debug)]
+pub struct HitBox {
+    pub kind: i32,
+    pub value: i32,
+    pub rect: (i32, i32, i32, i32),
+}
+
+#[derive(Clone, Debug)]
+struct Frame {
+    height: i32,
+    boxes: Vec<HitBox>,
+}
+
+/// Per slot and frame.
+type Boxes = Vec<Option<Frame>>;
 static GROUPS: OnceLock<Mutex<HashMap<u16, Boxes>>> = OnceLock::new();
 
 fn i16_at(b: &[u8], at: usize) -> i32 {
@@ -47,9 +61,19 @@ fn load(slot: u16) -> Boxes {
         .map(|s| {
             let s = s.as_ref()?;
             let e = &s.extra;
-            let hit = (e.len() >= 18 && i16_at(e, 0) != 0 && i16_at(e, 2) == 0)
-                .then(|| (i16_at(e, 10), i16_at(e, 12), i16_at(e, 14), i16_at(e, 16)));
-            Some((s.height, hit))
+            let n = if e.len() >= 2 { i16_at(e, 0).max(0) as usize } else { 0 };
+            let boxes = (0..n)
+                .filter(|i| 2 + i * 0x10 + 0x10 <= e.len())
+                .map(|i| {
+                    let b = 2 + i * 0x10;
+                    HitBox {
+                        kind: i16_at(e, b),
+                        value: i16_at(e, b + 2),
+                        rect: (i16_at(e, b + 8), i16_at(e, b + 10), i16_at(e, b + 12), i16_at(e, b + 14)),
+                    }
+                })
+                .collect();
+            Some(Frame { height: s.height, boxes })
         })
         .collect()
 }
@@ -57,19 +81,26 @@ fn load(slot: u16) -> Boxes {
 /// Sprite `id`'s hit box relative to its anchor: (left, top, right, bottom) = sprite
 /// +0x14, +0x16, +0x18, +0x1a, when its first box is a plain one (count +0xa != 0, type +0xc == 0).
 pub fn hitbox(id: i32) -> Option<(i32, i32, i32, i32)> {
-    frame(id).and_then(|f| f.1)
+    let f = frame(id)?;
+    let b = f.boxes.first()?;
+    (b.kind == 0).then_some(b.rect)
 }
 
-fn frame(id: i32) -> Option<(i32, Option<(i32, i32, i32, i32)>)> {
+/// All the sprite's hit boxes (sorted by type, as the files keep them).
+pub fn hitboxes(id: i32) -> Vec<HitBox> {
+    frame(id).map_or(Vec::new(), |f| f.boxes)
+}
+
+fn frame(id: i32) -> Option<Frame> {
     let slot = (id as u16) >> 8;
     let mut m = GROUPS.get_or_init(Default::default).lock().unwrap();
     let boxes = m.entry(slot).or_insert_with(|| load(slot));
-    boxes.get((id & 0xff) as usize).copied().flatten()
+    boxes.get((id & 0xff) as usize).cloned().flatten()
 }
 
 /// FUN_10f0_1f8e: the sprite's height.
 pub fn height(id: i32) -> i32 {
-    frame(id).map_or(0, |f| f.0)
+    frame(id).map_or(0, |f| f.height)
 }
 
 /// FUN_1050_5960's box for a sprite drawn at (x, y), mirrored when `flip` (1170:1ae5 = 1):

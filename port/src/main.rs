@@ -246,8 +246,10 @@ impl Game {
             None => keys,
         };
         let cam = (self.camera.x, self.camera.y);
+        let mut ps = std::mem::take(&mut self.level.particles);
         self.hero
-            .update(&self.world, &self.level, &input, mouse_now, cam, &mut self.rng);
+            .update(&self.world, &self.level, &input, mouse_now, cam, &mut ps, &mut self.rng);
+        self.level.particles = ps;
         if let Some((y, x, aim, parity)) = self.hero.gun.shot {
             self.level.particles.hero_fire(y, x, aim, parity);
             noise = 2;

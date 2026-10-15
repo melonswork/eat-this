@@ -26,6 +26,12 @@ pub const CROUCH: i32 = -40;
 pub const LEDGE: i32 = -4;
 /// Pulling a lever (HeroUseObject).
 pub const USE: i32 = -30;
+/// Thrown back by a hit (FUN_1088_3bee).
+pub const KNOCKED_BACK: i32 = 0x10;
+/// Dead (FUN_1088_3c32).
+pub const DEAD: i32 = 100;
+/// 1170:4e6c at the start of a level.
+const HEALTH: i32 = 0x2c6;
 pub const KNOCKED_DOWN: i32 = -200;
 
 /// gHeroGround kind for an ordinary floor (HeroReset sets it; the heavy-landing test checks it).
@@ -100,6 +106,13 @@ pub struct Hero {
     held_lever: i32,
     /// The lever operations this frame, for the level: (cell, y, x, pull).
     pub levers: Vec<(i32, i32, i32, bool)>,
+    /// 1170:4e6c.
+    pub health: i32,
+    /// 1170:4e2a: frames of invulnerability after a hit; 4e5e the same for the blinking.
+    hurt: i32,
+    hurt_blink: i32,
+    /// 1170:511f: HeroStartJump's first argument (set when thrown back): falls fast even holding Up.
+    knocked: bool,
     /// 1170:511b: on a slope, set by FUN_1088_2f6b; walls are then looked for higher up.
     on_slope: bool,
 }
@@ -173,6 +186,10 @@ impl Hero {
             use_frame: 0x7fff,
             held_lever: -1,
             levers: Vec::new(),
+            health: HEALTH,
+            hurt: 0,
+            hurt_blink: 0,
+            knocked: false,
             on_slope: false,
         }
     }
@@ -205,6 +222,7 @@ impl Hero {
 
     /// HeroStartJump (1088:39d4).
     fn start_jump(&mut self, vy: i32, kind: i32) {
+        self.knocked = false;
         self.state_before_jump = self.state;
         if vy < 1 || self.state < 1 {
             self.fall = 0;
@@ -281,6 +299,7 @@ impl Hero {
         input: &[i8; 9],
         mouse: (i32, i32),
         cam: (i32, i32),
+        ps: &mut crate::particles::Particles,
         rng: &mut PascalRandom,
     ) {
         // ReadGameInput: moving the mouse raises the gun.
@@ -319,6 +338,14 @@ impl Hero {
         self.input_cache = input;
         if self.push_timer > 0 {
             self.push_timer -= 1;
+        }
+        if self.hurt < 1 {
+            self.hurt_blink = 0;
+        } else {
+            self.hurt -= 1;
+            if self.hurt_blink > 0 {
+                self.hurt_blink -= 1;
+            }
         }
         let held = |k: usize| input[k] > 0;
 
@@ -578,7 +605,7 @@ impl Hero {
                 self.facing = 1;
             }
             let vy_before = self.vy;
-            self.vy += if held(UP) { 3 } else { 10 };
+            self.vy += if !held(UP) && !self.knocked { 10 } else { 3 };
             dy += self.vy / 10;
             if self.state_before_jump < 1 {
                 if self.state < 0x10 {
@@ -590,6 +617,16 @@ impl Hero {
             if self.state == FALL {
                 self.frame = 0x110;
                 self.height = if self.vy < 0x1f { 0x1f } else { 0x21 };
+                if self.gun.shooting {
+                    self.gun.muzzle = (if self.facing < 1 { 5 } else { 0 }, 6);
+                    self.frame = 0x1f2;
+                    self.aim_fixed();
+                }
+            } else if self.state == KNOCKED_BACK {
+                bleed(ps, rng, self.anim, self.y - 0x1e, self.x);
+                self.frame = (self.anim / 2 + 0x201).min(0x204);
+                self.anim += 1;
+                self.height = 0x27;
             } else {
                 self.frame = (self.vy - self.vy0 - 0x31) / 5 + 0x10e;
                 if !(0x105..=0x10e).contains(&self.frame) {
@@ -646,6 +683,79 @@ impl Hero {
         self.push_out_of_walls(w);
         let posed = self.end_of_frame(walking, blocked, step_h, rng);
         self.gun_end(posed, &input);
+        self.take_hits(ps, rng);
+    }
+
+    /// FUN_1088_55f0's end: shots against the body's and the arm's sprites (mask 0x3a2), the
+    /// worse one counts (FUN_1088_3c32).
+    fn take_hits(&mut self, ps: &mut crate::particles::Particles, rng: &mut PascalRandom) {
+        let flip = self.facing;
+        let d1 = if self.frame != NONE {
+            ps.hit_test_sprite((self.frame, self.x, self.y, flip, 0), 0x3a2)
+        } else {
+            0
+        };
+        let mask1 = ps.hit_mask;
+        let mut damage = d1;
+        if self.gun.frame2 != NONE {
+            let d2 = ps.hit_test_sprite((self.gun.frame2, self.x, self.y, flip, 0), 0x3a2);
+            if d2 < 0 || d2 <= d1 {
+                ps.hit_mask = mask1;
+            } else {
+                damage = d2;
+            }
+        }
+        if damage != 0 {
+            let kind = if ps.hit_mask & 0x20 != 0 { 4 } else { 1 };
+            self.hit(damage, kind, rng);
+        }
+    }
+
+    /// FUN_1088_3c32(damage) with 1170:162a = `kind` (1 shot, 4 burnt).
+    fn hit(&mut self, damage: i32, kind: i32, rng: &mut PascalRandom) {
+        if self.hurt >= 1 {
+            return;
+        }
+        self.health -= damage;
+        if self.health < 1 {
+            rng.random(0x20); // FUN_1088_3c05: the cry's pitch
+            eprintln!("warning: the hero's death (FUN_1068_186c, splats) not ported");
+            rng.random(5);
+            self.hurt = 0x7fff;
+            self.anim = 0x8c;
+            self.state = DEAD;
+            return;
+        }
+        self.hurt = 0x52;
+        match kind {
+            1 => {
+                rng.random(0x20);
+                self.throw_back();
+                self.shakes.push((0x10, 8));
+                if damage > 0x4f && rng.random(3) != 0 {
+                    rng.random(5);
+                    eprintln!("warning: blood splats (FUN_1058_0218) not ported");
+                }
+            }
+            4 => {
+                rng.random(0x20);
+                self.hurt = 1;
+                if self.state != KNOCKED_BACK {
+                    self.throw_back();
+                }
+                self.shakes.push((0x10, 8));
+            }
+            k => eprintln!("warning: hero hit kind {k} not ported"),
+        }
+        self.hurt_blink = self.hurt;
+    }
+
+    /// FUN_1088_3bee: thrown back unless the head is against a ceiling.
+    fn throw_back(&mut self) {
+        if self.head_blocked == 0 {
+            self.start_jump(-0x28, KNOCKED_BACK);
+            self.knocked = true;
+        }
     }
 
     /// The end of HeroUpdate: the aiming pose, the left button's shot, the recoil.
@@ -1436,4 +1546,43 @@ fn spawn_dust(w: &World, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
 fn slope_word(kind: i32, off: usize) -> i32 {
     let row = &crate::world::SLOPES[((kind as u16 & 0xff7f) as usize) * 0x16..];
     i16::from_le_bytes([row[off], row[off + 1]]) as i32
+}
+
+/// FUN_1088_1f41(y, x) while thrown back: blood puffs, and at frame 12 a spray of drops.
+fn bleed(ps: &mut crate::particles::Particles, rng: &mut PascalRandom, anim: i32, y: i32, x: i32) {
+    let puff = |ps: &mut crate::particles::Particles, y: i32, x: i32| {
+        // FUN_1040_62b7.
+        ps.spawn_seq(0x5300, 4, 5, y, x, 1);
+    };
+    match anim {
+        0 => puff(ps, y, x),
+        5 => puff(ps, y - 10, x - 5),
+        10 => puff(ps, y + 8, x + 4),
+        0xc => {
+            ps.p.group = 0;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x16;
+            ps.p.callback = 0x23b7;
+            for i in 1..=3 {
+                let speed = (i << 5) / 3;
+                ps.p.delay = rng.random(5);
+                let s = rng.random(2) + 0x5307;
+                ps.spawn(s, y - 5, x);
+                let a = (rng.random(0xb1) + 0xb40) - i * 0xf0;
+                ps.throw(7, speed, a);
+                ps.p.delay = rng.random(5);
+                let s = rng.random(2) * 2 + 0x5306;
+                ps.spawn(s, y - 5, x);
+                let a = ((0x1680 - rng.random(0xb1)) + i * 0xf0) % 0x1680;
+                ps.throw(7, speed, a);
+            }
+            ps.p.callback = 0;
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            ps.p.group = 1;
+            ps.p.delay = 0;
+        }
+        0xf => puff(ps, y + 1, x + 1),
+        _ => {}
+    }
 }
