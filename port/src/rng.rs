@@ -3,7 +3,7 @@
 
 pub struct PascalRandom {
     pub seed: u32,
-    /// Calls since the last `take_calls`, to compare against the demo's CHECK windows.
+    /// Calls so far, to compare against the demo's CHECK windows.
     calls: u32,
 }
 
@@ -27,9 +27,6 @@ impl PascalRandom {
         self.calls
     }
 
-    pub fn take_calls(&mut self) -> u32 {
-        std::mem::take(&mut self.calls)
-    }
 }
 
 /// Number of LCG steps from `from` to `to`, if it is at most `limit`.

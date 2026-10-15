@@ -29,18 +29,20 @@ at 70 frames per second, the VGA refresh rate it was designed for.
 
 ## Determinism check
 
-`--headless --demo` replays a demo as fast as it can. Every 35th frame, right after the frame's
-input is read (where the original recorder samples it), it compares `RandSeed` with the demo's
-CHECK entry. On a mismatch it reports how many `Random()` calls the original made in that window
+`--headless --demo` replays a demo as fast as it can. `CHECK[k]` is `RandSeed` at the input read
+of frame 35k + 1 (1-based; the recorder tests the level frame counter, which is bumped at the end
+of the frame), and `CHECK[0]` is the seed after level setup. The port compares at the same point,
+before the hero update. Window k is the calls from sample k − 1 to sample k; window 1 starts at
+`DemoLoad` (seed 0), so it includes the level setup, as in the tracer. On a mismatch it reports how many `Random()` calls the original made in that window
 against the port's count, then resyncs the seed so each later window is judged on its own.
 
 `--trace FROM TO` prints, for the frames FROM..TO, the inputs, the hero's state and position and
 how many Random() calls each frame made.
 
 Current state ([re/rng.md](../re/rng.md)): in the ported states the hero draws Random where the decompiled code
-does (checked only against GRINDER). GRINDER, which has no enemies, matches window 1 and windows 3, 5, 6 and 7, but window 2 is
-one call short (source unknown) and window 4 lands at the map bottom because the grinder
-platform is missing. The other demos spend 60–400 calls in window 1 on level setup (the enemy
+does (checked only against GRINDER). GRINDER, which has no enemies, matches windows 1–3 and 5–7 (58 of 113 overall);
+window 4 lands at the map bottom because the grinder platform is missing, and window 8 is the
+grinder itself. The other demos spend 60–400 calls in window 1 on level setup (the enemy
 factory and objects), which isn't ported.
 
 ## Not yet

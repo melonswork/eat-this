@@ -10,7 +10,7 @@ pub struct Demo {
     pub frames: u32,
     keys: [Vec<i8>; INPUTS], // already past the priming frame
     mouse: Vec<(i16, i16)>,
-    pub checks: Vec<u32>, // checks[k] = RandSeed when the recorder's counter reached 35k; [0] is garbage
+    pub checks: Vec<u32>, // checks[k] = RandSeed at the input read of frame 35k + 1 (1-based); [0] after level setup
 }
 
 fn bad(msg: String) -> io::Error {

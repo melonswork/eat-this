@@ -102,7 +102,11 @@ struct Game {
 
 #[derive(Default)]
 struct CheckReport {
+    /// Whether RandSeed matched CHECK[0], the seed after level setup.
+    setup: Option<bool>,
     windows: u32,
+    /// Random() calls before the current window.
+    calls_before: u32,
     matched: u32,
     /// Windows 1..=leading all matched: the demo replays exactly up to frame 35 * leading.
     leading: u32,
@@ -141,9 +145,10 @@ impl Game {
         let input = match &self.demo {
             Some(d) => {
                 let (k, _mouse) = d.input(self.frame);
-                let count = self.frame + 1; // DemoRecordFrame's counter, after this frame's input
-                if count % CHECK_PERIOD == 0 {
-                    self.check(count / CHECK_PERIOD);
+                // DemoRecordFrame tests the level frame counter, which GameFrameInGame bumps at
+                // its very end: CHECK[k] is RandSeed at this input read of 0-based frame 35k.
+                if self.frame % CHECK_PERIOD == 0 {
+                    self.check(self.frame / CHECK_PERIOD);
                 }
                 k
             }
@@ -158,7 +163,16 @@ impl Game {
         let Some(&want) = d.checks.get(k as usize) else {
             return;
         };
-        let ours = self.rng.take_calls();
+        if k == 0 {
+            // The seed after level setup. Its calls stay in window 1, which starts at
+            // DemoLoad (RandSeed := 0), as in the tracer.
+            self.report.setup = Some(self.rng.seed == want);
+            self.rng.seed = want;
+            return;
+        }
+        // Window k: the calls from sample k - 1 to sample k.
+        let ours = self.rng.calls() - self.report.calls_before;
+        self.report.calls_before = self.rng.calls();
         let prev = if k == 1 { 0 } else { d.checks[k as usize - 1] };
         self.report.windows += 1;
         let original = steps_between(prev, want, 1_000_000);
@@ -323,6 +337,9 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>) {
         }
     }
     let r = &game.report;
+    if let Some(ok) = r.setup {
+        println!("CHECK[0] (after level setup): {}", if ok { "ok" } else { "differs" });
+    }
     println!("window  original  port");
     for (k, (orig, ours)) in r.rows.iter().enumerate().take(12) {
         let o = orig.map_or("?".into(), |n| n.to_string());

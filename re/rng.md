@@ -53,9 +53,17 @@ Ported in `port/src/hero.rs`, in the original's order:
 | window | original | port | why |
 |---|---|---|---|
 | 1 | 0 | 0 | the hero stands; no enemies |
-| 2 | 30 | 29 | walking from frame 41: frames 41–70 are 30 calls. CHECK[2] is taken at frame 71's input read, not frame 70's ([demo.md](demo.md)); the port samples one frame early |
-| 3–7 | 35 each | 35, 36, 35, 35, 35 | 1/frame (walk, jump, fall); the port's extra one in 4 is a landing at the map bottom |
-| 8 | 296 | 25 | the grinder |
+| 2 | 30 | 30 | walking from frame 41: frames 41–70 are 30 calls |
+| 3 | 35 | 35 | 1/frame (walk, jump, fall) |
+| 4 | 35 | 36 | frame 138: the port's hero lands at the map bottom, `Random` for the landing |
+| 5–7 | 35 each | 35 each | 1/frame |
+| 8 | 296 | 25 | the grinder: frame 265 is 267 calls (66 × 4 in `FUN_1040_5833`, `GrinderUpdate`, `FUN_1090_1a70`); frames 249–253 the original's hero still draws, the port's (at the map bottom) doesn't |
+| 9–10 | 35 each | 35 each | |
+| 11 | 85 | 36 | the grinder again at frame 376 (51 calls); the port's extra one at frame 354 |
+| 12 | 35 | 35 | |
+
+Per frame, the port's `--trace 1 420` agrees with the tracer's `calls.tsv` everywhere except
+frames 138, 249–253, 265, 354 and 376. Over the whole demo 58 of 113 windows match.
 
 The grinder is object 0x2724 (`FUN_1090_1a91`, called through a function pointer): a moving
 extra map whose top `DAT_1170_4ee0` starts at the record's y (1997) and, once triggered
