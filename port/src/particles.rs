@@ -742,6 +742,11 @@ impl Level {
     fn particle_effect(&mut self, id: i32, y: i32, x: i32, f: &mut Frame) {
         match id {
             62 => self.bullet_hit(y, x, f),
+            15 => {
+                // FUN_1040_0a80: a metallic ping and sparks.
+                f.rng.random(0x1e);
+                self.sparks(0x191b, y, x);
+            }
             // FUN_1040_0ab0: debris bounces off the floor. No Random(); not ported, it just ends.
             16 => {}
             _ => effects::effect(f.world, id as u16, y, x, f.rng, f.fx),
@@ -755,8 +760,12 @@ impl Level {
         if std::env::var_os("ET_DEBUG").is_some() {
             eprintln!("DBG {} bullet hit ({x},{y}) at ({},{}) state {} age {}", self.particles.now, m.w(8), m.w(0xa), m.w(0x3e), m.w(0x24));
         }
-        if f.world.tile_function_at(m.w(0xa), m.w(8)) == 13000 {
-            eprintln!("warning: bullet into a 13000 tile (its own effect) not ported");
+        let (py, px) = (m.w(0xa), m.w(8));
+        if f.world.tile_function_at(py, px) == 13000 {
+            // A tile with its own sound of being hit (function 4).
+            let cell = f.world.cell_at(crate::world::MAIN_PLANE, py, px).unwrap_or(0);
+            let id = f.world.cell_function(cell, 4) as i16 as i32;
+            self.particle_effect(id, y, x, f);
             return;
         }
         if m.w(0x3e) == -1 && f.rng.random(0xc) == 0 {
