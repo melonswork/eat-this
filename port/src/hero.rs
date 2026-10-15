@@ -4,8 +4,9 @@
 //! because the recorded demos check RandSeed (see re/demo.md). Ladders, pipes, ledges, slopes,
 //! platforms, levers, doors and weapons are not ported yet.
 
+use crate::level::{Level, Platform};
 use crate::rng::PascalRandom;
-use crate::world::{World, solid};
+use crate::world::{MAIN_PLANE, OUTSIDE, World, solid};
 
 /// gInput indices (ReadGameInput, 1088:53a5).
 pub const UP: usize = 0;
@@ -18,6 +19,7 @@ pub const GROUND: i32 = 0;
 pub const FALL: i32 = 1;
 pub const JUMP: i32 = 5;
 pub const CROUCH: i32 = -40;
+pub const LEDGE: i32 = -4;
 pub const KNOCKED_DOWN: i32 = -200;
 
 /// gHeroGround kind for an ordinary floor (HeroReset sets it; the heavy-landing test checks it).
@@ -53,8 +55,16 @@ pub struct Hero {
     idle_timer: i32,
     idle_next: i32,
     ground: i32, // gHeroGround from the last collision
-    nudge: i32, // 1170:4e06: HeroPushOutOfWalls' push, becomes next frame's starting dx (FUN_1088_532c)
+    nudge: i32,
+    hang_x: i32, // 1170:4e52
+    hang_y: i32, // 1170:4e54
+    climb: i32,  // 1170:4e0e: 0 hanging, 1..0x1b pulling up
+    /// 1170:4e9e after the collision: -1 hit a ceiling, 1 landed (read next frame as 4e66).
+    ceiling: i32,
+    head_blocked: i32, // 1170:4e68
+    pub crushed: bool, // 1170:4e06: HeroPushOutOfWalls' push, becomes next frame's starting dx (FUN_1088_532c)
     released: [bool; 9],
+    input_cache: [i8; 9],
     pub height: i32,
     half_width: i32,
     /// Screen shake requested this frame: (strength, duration).
@@ -84,11 +94,18 @@ impl Hero {
             turn: NO_TURN,
             turn_kind: 0,
             stand_frame: 0x84,
-            idle_timer: -0x10 - 4,
+            idle_timer: -0x10 - 3,
             idle_next: 0xd2 + 0x1a4 / 2,
             ground: FLAT_FLOOR,
             nudge: 0,
+            hang_x: 0,
+            hang_y: 0x7fff,
+            climb: 0,
+            ceiling: 0,
+            head_blocked: 0,
+            crushed: false,
             released: [true; 9],
+            input_cache: [0; 9],
             height: HEIGHT,
             half_width: 6,
             shake: None,
@@ -146,7 +163,7 @@ impl Hero {
         self.anim = 6;
     }
 
-    pub fn update(&mut self, w: &World, input: &[i8; 9], rng: &mut PascalRandom) {
+    pub fn update(&mut self, w: &World, lv: &Level, input: &[i8; 9], rng: &mut PascalRandom) {
         let mut input = *input;
         let prev_facing = self.facing;
         self.frame = NONE;
@@ -166,7 +183,16 @@ impl Hero {
             input[LEFT] = 0;
             input[RIGHT] = 0;
         }
+        self.input_cache = input;
         let held = |k: usize| input[k] > 0;
+
+        // A ceiling right above the head forces a crouch.
+        if w.solidity_at(self.y - 0x2b, self.x) & solid::WALL != 0 {
+            self.head_blocked = 1;
+        }
+        if self.head_blocked > 0 && self.state == GROUND {
+            self.crouch_down();
+        }
 
         // Landing: the previous frame's collision found a floor.
         if self.ground > 0 && self.vy >= 0 && self.state >= 0 {
@@ -194,22 +220,26 @@ impl Hero {
         if self.state == CROUCH {
             if self.crouch < 8 {
                 self.crouch = (self.crouch + 1).abs();
+            }
+            self.frame = self.crouch.abs() + 0xa0;
+            if self.head_blocked == 0 {
+                self.crouch_max = self.crouch_max.max(self.crouch);
+                if !held(DOWN) {
+                    self.crouch = -self.crouch;
+                    self.turn = NO_TURN;
+                }
+                self.height = HEIGHT - self.crouch.abs() * 0x12 / 8;
+            } else {
+                self.height = 0x18;
+            }
+            if self.crouch == -1 {
+                self.stand();
             } else if self.crouch > 7 && (held(LEFT) || held(RIGHT)) {
-                // Crouch-walk: one pixel a frame.
+                // Crouch-walk, one pixel a frame (the 4df8 turn and its frames aren't ported).
                 let dir = if held(LEFT) { -1 } else { 1 };
                 dx += dir;
                 self.facing = dir;
                 walking = true;
-            }
-            self.frame = self.crouch.abs() + 0xa0;
-            self.crouch_max = self.crouch_max.max(self.crouch);
-            if !held(DOWN) {
-                self.crouch = -self.crouch;
-                self.turn = NO_TURN;
-            }
-            self.height = HEIGHT - self.crouch.abs() * 0x12 / 8;
-            if self.crouch == -1 {
-                self.stand();
             }
         }
 
@@ -274,11 +304,25 @@ impl Hero {
                 }
                 self.height = if vy_before == self.vy0 { 0x21 } else { 0x1f };
             }
-            if self.vy >= 1 {
+            if self.vy < 1 {
+                if self.vy < 0 && self.ceiling < 0 {
+                    self.vy = 0;
+                }
+            } else {
                 self.fall += self.vy / 10;
+                let (ndx, ndy) = self.grab_ledge(w, lv, self.y - 0x20, dx, dy);
+                (dx, dy) = (ndx, ndy);
             }
             self.vy = self.vy.min(0x32);
         }
+
+        let mut collide_flags = 3;
+        if self.state == LEDGE {
+            let (ndx, ndy) = self.hang(w, lv, &input, dx, dy);
+            (dx, dy) = (ndx, ndy);
+            collide_flags = 1;
+        }
+        let _ = collide_flags;
 
         if self.vx != 0 && friction {
             let s = self.vx.signum();
@@ -292,9 +336,10 @@ impl Hero {
         }
 
         self.ground = 0;
-        let blocked = self.move_and_collide(w, dx, dy);
+        self.head_blocked = 0;
+        let (blocked, step_h) = self.move_and_collide(w, lv, dx, dy);
         self.push_out_of_walls(w);
-        self.end_of_frame(walking, blocked, rng);
+        self.end_of_frame(walking, blocked, step_h, rng);
     }
 
     /// The landing block at the top of HeroUpdate.
@@ -323,7 +368,7 @@ impl Hero {
         } else {
             (d / 0x20 + 1).min(8)
         };
-        if p < 2 {
+        if p < 2 && self.head_blocked == 0 {
             self.stand();
         } else {
             self.crouch_down();
@@ -335,7 +380,7 @@ impl Hero {
     }
 
     /// The tail of HeroUpdate after the collision: animation frames and the Random() calls.
-    fn end_of_frame(&mut self, walking: bool, blocked: i32, rng: &mut PascalRandom) {
+    fn end_of_frame(&mut self, walking: bool, blocked: i32, step_h: i32, rng: &mut PascalRandom) {
         if self.state != GROUND {
             if self.state != CROUCH {
                 self.turn = NO_TURN;
@@ -358,7 +403,7 @@ impl Hero {
             self.anim = 6;
             return;
         }
-        if walking {
+        if walking && (blocked == 0 || step_h > 0x13) {
             if blocked != 0 && blocked.signum() == self.facing {
                 // Pushing against a wall.
                 self.anim = (self.anim + 1) % 0x54;
@@ -407,62 +452,484 @@ impl Hero {
         }
     }
 
-    /// A simplified HeroMoveAndCollide (1088:3322) + HeroFindFloor (1088:304c). Returns how much
-    /// of dx was blocked (gHeroBlockedDX, 1170:4e9c).
-    fn move_and_collide(&mut self, w: &World, dx: i32, dy: i32) -> i32 {
-        let hw = self.half_width;
-        let mut moved = dx;
+    /// HeroMoveAndCollide (1088:3322) with HeroFindFloor (1088:304c): platforms first, then
+    /// tiles, horizontally; then the ceiling or the floor. Returns (gHeroBlockedDX 4e9c = what
+    /// of dx was refused, the height of what blocked it 4ea6).
+    fn move_and_collide(&mut self, w: &World, lv: &Level, mut dx: i32, dy: i32) -> (i32, i32) {
+        let (h, hw) = (self.height, self.half_width);
+        let (x0, y0, dx_req) = (self.x, self.y, dx);
+        let head = (y0 - h) + 1;
+        let mut step_h = 0;
+        let wall = |plane: usize, y: i32, x: i32| {
+            let s = w.solidity_in(plane, y, x);
+            s != OUTSIDE && s & solid::WALL != 0
+        };
+        // Platforms.
+        let (right, left, rows) = (x0 + dx + hw, x0 + dx - hw, (h + 15) >> 4);
+        for p in lv.platforms.iter().rev().flatten() {
+            if !overlaps(p, y0, right, y0 - 0x29, left) {
+                continue;
+            }
+            let (lx, rx) = (left - p.x, right - p.x);
+            let mut ly = head - p.prev_y;
+            let (mut hit_left, mut hit_right) = (false, false);
+            let mut k = rows;
+            loop {
+                if wall(p.plane, ly, lx) {
+                    dx = ((lx & !15) + 16 + hw + p.x) - x0;
+                    hit_left = true;
+                }
+                if wall(p.plane, ly, rx) {
+                    hit_right = true;
+                    break;
+                }
+                if hit_left {
+                    step_h = (y0 - p.prev_y) - ly;
+                    break;
+                }
+                ly = if k == 1 { y0 - p.prev_y } else { ly + 16 };
+                if k == 0 {
+                    break;
+                }
+                k -= 1;
+            }
+            if hit_right {
+                if hit_left {
+                    dx = dx_req;
+                    if wall(p.plane, (y0 - (h >> 1)) - p.prev_y, (x0 + dx) - p.x) {
+                        self.crushed = true; // FUN_1088_3c32(0x8e)
+                    }
+                } else {
+                    dx = (((rx & !15) - 1) - hw + p.x) - x0;
+                }
+                step_h = (y0 - p.prev_y) - ly;
+            }
+            if wall(p.plane, (y0 - 0x29) - p.prev_y, x0 - p.x) {
+                self.head_blocked = 2;
+            }
+        }
+        // Tiles.
         if dx != 0 {
             let s = dx.signum();
-            let edge = self.x + dx + s * hw;
-            let head = self.y - self.height + 1;
-            let mut ys: Vec<i32> = (head..self.y).step_by(16).collect();
-            ys.push(self.y);
-            if ys
-                .iter()
-                .any(|&y| w.solidity_at(y, edge) & solid::WALL != 0)
-            {
-                let x = (edge & !15) + if s < 0 { 15 } else { 0 } - (hw + 1) * s;
-                moved = x - self.x;
-                self.x = x;
+            let edge = x0 + dx + s * hw;
+            let mut k = (h + 15) >> 4;
+            let mut ly = head;
+            let mut hit = false;
+            loop {
+                if w.solidity_at(ly, edge) & solid::WALL != 0 {
+                    hit = true;
+                    break;
+                }
+                ly = if k == 1 { y0 } else { ly + 16 };
+                if k == 0 {
+                    break;
+                }
+                k -= 1;
+            }
+            if hit {
+                step_h = y0 - ly;
+                self.x = ((edge & !15) + if s == -1 { 15 } else { 0 }) - (hw + 1) * s;
             } else {
                 self.x += dx;
             }
         }
+        let blocked = dx_req - (self.x - x0);
+        self.ceiling = 0;
         if dy < 0 {
-            let head = self.y - self.height + 1 + dy;
-            let hit = (head >> 4) != ((self.y - self.height + 1) >> 4)
-                && [-hw, hw]
-                    .iter()
-                    .any(|&o| w.solidity_at(head, self.x + o) & solid::WALL != 0);
-            if hit {
-                self.y = (head & !15) + 16 + self.height - 1;
-                self.vy = 0;
-            } else {
-                self.y += dy;
-            }
-        } else {
-            let mut row_y = self.y + 1;
-            while row_y <= self.y + dy + 1 {
-                if [-hw, hw]
-                    .iter()
-                    .any(|&o| w.solidity_at(row_y, self.x + o) & solid::HERO_FLOOR != 0)
-                {
-                    self.y = (row_y & !15) - 1;
-                    self.ground = FLAT_FLOOR;
-                    break;
+            let new_head = head + dy;
+            let mut y = y0 + dy;
+            let cols = (hw * 2 + 15) >> 4;
+            let row_hit = |plane: usize, ry: i32, xl: i32, xr: i32| {
+                let (mut cx, mut k, mut any) = (xl, cols, false);
+                loop {
+                    if w.solidity_in(plane, ry, cx) & solid::WALL != 0 {
+                        any = true;
+                    }
+                    cx = if k == 1 { xr } else { cx + 16 };
+                    if k == 0 {
+                        break any;
+                    }
+                    k -= 1;
                 }
-                row_y = (row_y & !15) + 16;
+            };
+            if (((new_head - dy) + 16) as u32 >> 4) != ((new_head + 16) as u32 >> 4)
+                && row_hit(MAIN_PLANE, new_head, self.x - hw, self.x + hw)
+            {
+                let v = (new_head & !15) + 0xf + h;
+                if v >= y {
+                    y = v;
+                    self.ceiling = -1;
+                }
             }
-            if self.ground == 0 {
-                self.y += dy;
+            for p in lv.platforms.iter().rev().flatten() {
+                if overlaps(p, new_head, self.x + hw, new_head, self.x - hw)
+                    && row_hit(
+                        p.plane,
+                        new_head - p.y,
+                        self.x - hw - p.x,
+                        self.x + hw - p.x,
+                    )
+                {
+                    let v = ((new_head - p.y) & !15) + 0xf + h + p.y;
+                    if v >= y {
+                        y = v;
+                        self.ceiling = -1;
+                    }
+                }
+            }
+            self.y = y;
+        } else {
+            let (floor, carry) = self.find_floor(w, lv, self.x - x0, y0, y0 + dy);
+            if floor == NONE {
+                self.y = y0 + dy;
+            } else {
+                self.y = floor;
+                if dy > 0 {
+                    self.ceiling = 1;
+                }
+                if blocked.signum() != carry.signum() {
+                    self.x += carry;
+                }
             }
         }
-        dx - moved
+        (blocked, step_h)
+    }
+
+    /// HeroFindFloor (1088:304c, see re/rng.md): the highest floor in the row under y_new.
+    /// Returns (new y or NONE, the carrying platform's dx).
+    fn find_floor(&mut self, w: &World, lv: &Level, dx: i32, y_old: i32, y_new: i32) -> (i32, i32) {
+        let hw = self.half_width;
+        let x = self.x;
+        let e = if self.ground <= 9 && self.state <= 0 {
+            2
+        } else {
+            0
+        };
+        let cols = (hw * 2 + 15) >> 4;
+        let _ = dx; // tolerance |dx| only applies right after riding an object platform (4ea4)
+        let mut best = NONE;
+        let mut carry = 0;
+        let mut ground = self.ground;
+        // One column test (FUN_1088_2cff + 2c97). `offset` and `pdy` are 0 for the map.
+        let mut column = |func0: u16,
+                          sol: u16,
+                          sy: i32,
+                          sx_abs: (usize, i32),
+                          offset: i32,
+                          pdy: i32,
+                          best: &mut i32,
+                          ground: &mut i32|
+         -> bool {
+            let solid_floor = sol & solid::HERO_FLOOR != 0;
+            let ladder_top = func0 == 10
+                && self.state != -5
+                && (sol & 0x10 != 0 || w.tile_function_in(sx_abs.0, sy - 6, sx_abs.1) != 10);
+            if !(solid_floor || ladder_top) {
+                return false;
+            }
+            let cand = ((sy & !15) - 1) + offset;
+            let moving_down = pdy < 0;
+            let found = if !moving_down || y_old != cand {
+                cand <= *best && ranges_overlap(cand, cand + pdy, y_old - e - 1, y_new + e)
+            } else {
+                true
+            };
+            if found {
+                *best = cand;
+                *ground = if !solid_floor && *ground > 9 {
+                    0x14
+                } else if func0 == 11000 {
+                    5
+                } else if *ground != 5 {
+                    9
+                } else {
+                    *ground
+                };
+            }
+            found
+        };
+        let sy = y_new + 1;
+        let (mut sx, mut k) = (x - hw, cols);
+        loop {
+            let func0 = w.tile_function_at(sy, sx);
+            let sol = w.solidity_in(2, sy, sx) | w.solidity_in(MAIN_PLANE, sy, sx);
+            column(
+                func0,
+                sol,
+                sy,
+                (MAIN_PLANE, sx),
+                0,
+                0,
+                &mut best,
+                &mut ground,
+            );
+            sx = if k == 1 { x + hw } else { sx + 16 };
+            if k == 0 {
+                break;
+            }
+            k -= 1;
+        }
+        for p in lv.platforms.iter().rev().flatten() {
+            if !overlaps(p, y_new + 16, x + hw, y_new, x - hw) {
+                continue;
+            }
+            let b = p.bounds;
+            if !(b.0 <= x + hw && b.1 <= y_new + 16 && x - hw <= b.2 && y_new <= b.3) {
+                continue;
+            }
+            let pdy = p.prev_y - p.y;
+            let tol = if pdy < 0 { 1 - pdy } else { 1 };
+            let mut sy = (y_new - p.y) + 1;
+            if self.state != -4 {
+                sy += tol;
+            }
+            let (mut sx, mut k) = ((x - hw) - p.x, cols);
+            loop {
+                let func0 = w.tile_function_in(p.plane, sy, sx);
+                if func0 != OUTSIDE {
+                    let sol = w.solidity_in(p.plane, sy, sx);
+                    if column(
+                        func0,
+                        sol,
+                        sy,
+                        (p.plane, sx),
+                        p.y,
+                        pdy,
+                        &mut best,
+                        &mut ground,
+                    ) {
+                        carry = p.x - p.prev_x;
+                    }
+                }
+                sx = if k == 1 { (x + hw) - p.x } else { sx + 16 };
+                if k == 0 {
+                    break;
+                }
+                k -= 1;
+            }
+        }
+        if best != NONE {
+            self.ground = ground;
+        }
+        (best, carry)
     }
 }
 
+/// FUN_10f0_1317(t, 1, div, n): a ping-pong frame index 0..n-1.
+fn anim_pingpong(t: i32, div: i32, n: i32) -> i32 {
+    let v = ((t / div) % (n * 2 - 2) - n) + 1;
+    (n - 1) - v.abs()
+}
+
+/// FUN_1078_0198: does the platform's rectangle meet [left, right] x [top, bottom]?
+fn overlaps(p: &Platform, bottom: i32, right: i32, top: i32, left: i32) -> bool {
+    !(right < p.x || bottom < p.y || p.x + p.width <= left || p.y + p.height <= top)
+}
+
+/// FUN_1118_02ac.
+fn ranges_overlap(a: i32, b: i32, c: i32, d: i32) -> bool {
+    let (lo1, hi1) = (a.min(b), a.max(b));
+    let (lo2, hi2) = (c.min(d), c.max(d));
+    hi1 >= lo2 && lo1 <= hi2
+}
+
 impl Hero {
+    /// FUN_1078_0f1a: solidity of the main plane OR'ed with every platform covering the point.
+    fn solidity_all(w: &World, lv: &Level, y: i32, x: i32) -> u16 {
+        let mut s = w.solidity_at(y, x);
+        for p in lv.platforms.iter().rev().flatten() {
+            if x >= p.x && y >= p.y && x < p.x + p.width && y < p.y + p.height {
+                s |= w.solidity_in(p.plane, y - p.y, x - p.x);
+            }
+        }
+        s
+    }
+
+    /// FUN_1088_3dad: room above the ledge to pull up into.
+    fn room_to_climb(&self, w: &World, lv: &Level) -> bool {
+        let x2 = if self.facing < 1 {
+            self.x - 7
+        } else {
+            self.x + 7
+        };
+        Self::solidity_all(w, lv, self.hang_y - 0x38, self.x) & solid::WALL == 0
+            && Self::solidity_all(w, lv, self.hang_y - 0x38, x2) & solid::WALL == 0
+    }
+
+    /// FUN_1088_3e0d: while falling and pushing towards a wall, catch a ledge (solidity bit 4).
+    /// Returns the frame's (dx, dy) (it zeroes dy when it grabs).
+    fn grab_ledge(&mut self, w: &World, lv: &Level, y: i32, dx: i32, dy: i32) -> (i32, i32) {
+        if self.state == LEDGE {
+            return (dx, dy);
+        }
+        let probe_x = if self.facing < 1 {
+            if self.input_cache[LEFT] < 1 || !self.released[LEFT] {
+                return (dx, dy);
+            }
+            (self.x - self.half_width) - 1
+        } else {
+            if self.input_cache[RIGHT] < 1 || !self.released[RIGHT] {
+                return (dx, dy);
+            }
+            self.x + self.half_width + 1
+        };
+        self.hang_y = 0x7fff;
+        let py = y + 8;
+        let mut hx = 0;
+        if w.solidity_at(py, probe_x) & 4 != 0 {
+            self.hang_y = (py & !15) + 0x20;
+            hx = if self.facing < 1 {
+                (probe_x & !15) + 0x16
+            } else {
+                (probe_x & !15) - 7
+            };
+        } else {
+            for p in lv.platforms.iter().rev().flatten() {
+                if p.prev_x <= probe_x
+                    && p.y <= py
+                    && probe_x < p.prev_x + p.width
+                    && py < p.y + p.height
+                {
+                    if w.solidity_in(p.plane, py - p.y, probe_x - p.prev_x) & 4 != 0 {
+                        self.hang_y = ((py - p.y) & !15) + 0x20 + p.y;
+                        let b = ((probe_x - p.prev_x) & !15) + p.x;
+                        hx = if self.facing < 1 { b + 0x16 } else { b - 7 };
+                    }
+                }
+            }
+        }
+        if self.hang_y == 0x7fff
+            || Self::solidity_all(w, lv, y, self.facing * 8 + probe_x) & solid::WALL != 0
+            || Self::solidity_all(w, lv, y + 0x30, self.x) & solid::HERO_FLOOR != 0
+        {
+            return (dx, dy);
+        }
+        let free_below = Self::solidity_all(w, lv, y + 0x3c, self.x) & solid::HERO_FLOOR == 0;
+        if !(free_below || self.room_to_climb(w, lv)) {
+            return (dx, dy);
+        }
+        if self.state > 0 {
+            self.shake = Some((8, 3));
+        }
+        self.vy = ON_GROUND_VY;
+        self.state = LEDGE;
+        self.y = self.hang_y;
+        self.x = hx;
+        self.half_width = 6;
+        self.released[UP] = false;
+        self.vx = 0;
+        if free_below {
+            self.climb = 0;
+            if self.fall < 0x40 {
+                self.released[UP] = true;
+            } else {
+                self.shake = Some((0xc, 6));
+            }
+            self.anim = 0x37;
+        } else {
+            self.climb = 5;
+            self.y -= 4;
+        }
+        (dx, 0)
+    }
+
+    /// The gHeroState == -4 block of HeroUpdate: hang, pull up, or let go.
+    fn hang(
+        &mut self,
+        w: &World,
+        lv: &Level,
+        input: &[i8; 9],
+        mut dx: i32,
+        mut dy: i32,
+    ) -> (i32, i32) {
+        let mut hx = if self.facing < 1 {
+            self.x - 7
+        } else {
+            self.x + 7
+        };
+        self.height = 0x20;
+        // FUN_1088_4116: ride a moving platform's ledge.
+        let py = (self.hang_y - 0x21) + 4;
+        let probe = self.facing * 2 + hx;
+        for p in lv.platforms.iter().rev().flatten() {
+            if probe >= p.x && py >= p.y && probe < p.x + p.width && py < p.y + p.height {
+                let s = w.solidity_in(p.plane, py - p.y, probe - p.x);
+                if s != OUTSIDE && s & 4 != 0 {
+                    dy = (((py - p.y) & !15) - 1 + p.y) - (self.hang_y - 0x21);
+                    dx = p.x - p.prev_x;
+                    self.hang_y += dy;
+                }
+            }
+        }
+        let wall_here = Self::solidity_all(w, lv, self.hang_y - 0x21, hx);
+        hx += dx;
+        let y_next = self.y + dy;
+        if self.climb == 0 {
+            let back = self.facing * -0x20;
+            let open = (0..2).all(|k| {
+                Self::solidity_all(w, lv, k * 16 + self.hang_y - 8, hx) & solid::WALL == 0
+                    && Self::solidity_all(w, lv, k * 16 + self.hang_y - 8, hx + back) & solid::WALL
+                        == 0
+            });
+            self.frame = if open {
+                anim_pingpong(self.anim, 5, 0xb) + 0x21
+            } else {
+                0x2d
+            };
+            self.anim += 1;
+            if input[UP] < 1 || !self.released[UP] || !self.room_to_climb(w, lv) {
+                let limit = if wall_here & 0x20 == 0 {
+                    let l = if open { 0x14f } else { 0x497 };
+                    if l - 0x28 == self.anim {
+                        dy += 1;
+                    }
+                    l
+                } else {
+                    if self.anim == 0x41 {
+                        dy += 1;
+                    }
+                    0x50
+                };
+                let away = input[if self.facing < 0 { RIGHT } else { LEFT }];
+                if input[DOWN] == 1
+                    || away > 0
+                    || y_next < self.hang_y
+                    || self.hang_y + 1 < y_next
+                    || limit < self.anim
+                {
+                    self.start_jump(1, FALL);
+                    self.state_before_jump = 5;
+                    self.released[if self.facing > 0 { RIGHT } else { LEFT }] = false;
+                }
+            } else {
+                self.climb = 1;
+                self.released[UP] = false;
+                self.y = self.hang_y - dy;
+            }
+        } else if self.climb < 0x1c {
+            self.frame = self.climb / 2 + 0xf1;
+            dy -= 1;
+            self.climb += 1;
+        } else {
+            dx = self.facing * 0xc;
+            self.y -= 6;
+            self.ground = 9;
+            self.crouch_down();
+            self.crouch = 8;
+            self.frame = 0xa8;
+            self.released[UP] = false;
+        }
+        if self.state == LEDGE {
+            if wall_here & solid::WALL != 0
+                || Self::solidity_all(w, lv, self.hang_y - 0x11, hx) & 4 == 0
+            {
+                self.start_jump(1, FALL);
+                self.state_before_jump = 5;
+            }
+        }
+        (dx, dy)
+    }
+
     /// HeroPushOutOfWalls (1088:2a78): if a wall overlaps the body, find the nearer free side
     /// and move the hero 1 px towards it when his centre is in the wall, else nudge next frame.
     fn push_out_of_walls(&mut self, w: &World) {

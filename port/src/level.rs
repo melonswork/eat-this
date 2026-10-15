@@ -1,0 +1,458 @@
+//! Level logic around the tiles: lever/sector scripts (OBJECTS 0x44c/0x44d, FUN_1088_a9af) and the
+//! moving platforms they create (map areas cut into their own planes, FUN_1078_*). See
+//! re/level.md and tools/scripts.py.
+
+use crate::world::{FIRST_PLATFORM_PLANE, MAIN_PLANE, PLANE_SLOTS, Plane, World, func};
+
+/// Lever tiles a sector's icon cell is set to when the hero enters / leaves it (FUN_1088_1280).
+pub const SECTOR_ON_TILE: u16 = 0x308;
+pub const SECTOR_OFF_TILE: u16 = 0x312;
+
+/// One moving platform (the game's struct behind gPlatforms[i], word offsets in comments).
+#[derive(Clone, Debug)]
+pub struct Platform {
+    pub x: i32,                       // w0
+    pub y: i32,                       // w1
+    pub prev_x: i32,                  // w2
+    pub prev_y: i32,                  // w3
+    pub x16: i32,                     // w4:w5, x in 1/16 px
+    pub y16: i32,                     // w6:w7
+    pub width: i32,                   // w9, px
+    pub height: i32,                  // w10
+    pub sound: i32,                   // w11: sound set (1170:0ec0 when created)
+    pub plane: usize,                 // w13
+    pub flags: i32, // w14 (1170:0ebe): 1/2 bounds from the start/end point, 4 accelerate, 8 shake, 0x10 dust
+    pub volume: i32, // w16 (1170:0ec2)
+    pub accel: i32, // w17
+    pub sector: usize, // w18:w19: the sector of the last point; the platform moves only while the hero is in it
+    pub cam_lock: i32, // w20
+    pub bounds: (i32, i32, i32, i32), // w21..w24: where the hero can stand on it
+    pub start: (i32, i32), // w25, w26
+    pub point: usize,  // w28: index of the point it is heading for
+    pub points: Vec<(i32, i32, i32)>, // w29..: (x, y, speed in 1/16 px per frame)
+}
+
+/// Things a script asks of the rest of the game.
+#[derive(Debug, Default)]
+pub struct Effects {
+    pub damage_hero: Vec<i32>,
+    pub grinder_platform: Option<usize>,
+    pub grinder_slow: bool,
+}
+
+pub struct Level {
+    /// Script buffers as the game keeps them (1170:513c): w[0] = word count, w[1] = type, ...
+    pub scripts: Vec<Vec<u16>>,
+    pub platforms: Vec<Option<Platform>>,
+    /// The hero's sector (DAT_1170_4656); None before the first frame.
+    pub sector: Option<usize>,
+    // Script globals.
+    platform_flags: i32,  // 1170:0ebe
+    platform_sound: i32,  // 1170:0ec0
+    platform_volume: i32, // 1170:0ec2
+}
+
+impl Level {
+    pub fn new(world: &mut World) -> Level {
+        let scripts = world
+            .map
+            .object_records()
+            .into_iter()
+            .filter(|r| r[0] == 0x44c || r[0] == 0x44d)
+            .map(|r| {
+                std::iter::once(r.len() as u16)
+                    .chain(r.iter().map(|&v| v as u16))
+                    .collect::<Vec<u16>>()
+            })
+            .collect();
+        // SpawnFromIconTiles (FUN_1088_1797), the part that matters here: SECTOR icons, plane 2 then 1.
+        for plane in [2, MAIN_PLANE] {
+            let Some(p) = world.planes[plane].clone() else {
+                continue;
+            };
+            for (i, &c) in p.cells.iter().enumerate() {
+                if c != 0 && c & 0x8000 == 0 && world.cell_function(c, 0) == func::SECTOR_ICON {
+                    let (y, x) = ((i as i32 / p.width) * 16, (i as i32 % p.width) * 16);
+                    let s = world.sector_at(y, x);
+                    world.sectors[s].icon = i as i32;
+                }
+            }
+        }
+        Level {
+            scripts,
+            platforms: Vec::new(),
+            sector: None,
+            platform_flags: 0,
+            platform_sound: 0,
+            platform_volume: 0x100,
+        }
+    }
+
+    /// FUN_1088_140b: state 0..9 of a lever cell, or -1.
+    fn lever_state(world: &World, cell: u16) -> i32 {
+        let w = world.main().width;
+        let f = world.tile_function_at((cell as i32 / w) * 16, (cell as i32 % w) * 16);
+        if (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f) {
+            (f - func::LEVER_FIRST) as i32
+        } else {
+            -1
+        }
+    }
+
+    /// FUN_1088_1280: the hero is now in `sector`.
+    pub fn enter_sector(&mut self, world: &mut World, sector: usize, fx: &mut Effects) {
+        if self.sector == Some(sector) {
+            return;
+        }
+        if let Some(old) = self.sector {
+            let icon = world.sectors[old].icon;
+            if icon != -1 {
+                self.set_cell(world, SECTOR_OFF_TILE, icon as u16, fx);
+            }
+        }
+        self.sector = Some(sector);
+        let icon = world.sectors[sector].icon;
+        if icon != -1 {
+            self.set_cell(world, SECTOR_ON_TILE, icon as u16, fx);
+        }
+    }
+
+    /// FUN_1088_1364 + FUN_1088_12f9: put a tile in a main-plane cell; levers run their scripts.
+    pub fn set_cell(&mut self, world: &mut World, tile: u16, cell: u16, fx: &mut Effects) {
+        world.main_mut().cells[cell as usize] = tile;
+        let f = world.cell_function(tile, 0);
+        if (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f) {
+            self.run_scripts(world, cell, fx);
+        }
+    }
+
+    /// FUN_1088_a9af: run the scripts that list `cell` among their conditions and whose
+    /// conditions all hold (0x44c) or don't all hold (0x44d).
+    pub fn run_scripts(&mut self, world: &mut World, cell: u16, fx: &mut Effects) {
+        let mut i = 0;
+        while i < self.scripts.len() {
+            let w = self.scripts[i].clone();
+            let n = (w[2] & 0xff) as usize;
+            let listed = (0..n).any(|k| w[3 + 2 * k] == cell);
+            if listed {
+                let all = (0..n).all(|k| {
+                    Self::lever_state(world, w[3 + 2 * k]) == (w[4 + 2 * k] & 0xff) as i32
+                });
+                let run = if w[1] == 0x44d { !all } else { all };
+                if run {
+                    let aborted = self.run_commands(world, &w, 2 + 2 * n, fx);
+                    self.platform_sound = 0;
+                    self.platform_volume = 0x100;
+                    if w[2] >> 8 == 1 && !aborted {
+                        // FUN_1088_1208: the last script moves into this slot.
+                        self.scripts.swap_remove(i);
+                        continue;
+                    }
+                }
+            }
+            i += 1;
+        }
+    }
+
+    /// The command loop of FUN_1088_a9af. Returns true if command 7 aborted it.
+    fn run_commands(
+        &mut self,
+        world: &mut World,
+        w: &[u16],
+        mut lc: usize,
+        fx: &mut Effects,
+    ) -> bool {
+        let mut last_platform = usize::MAX;
+        let width = world.main().width;
+        while lc < w[0] as usize {
+            let (op, plane) = (w[lc + 1] & 0xff, (w[lc + 1] >> 8) as usize);
+            let arg = |k: usize| w[lc + 1 + k];
+            match op {
+                0x00 => {
+                    if plane == MAIN_PLANE {
+                        self.set_cell(world, arg(2), arg(1), fx);
+                    } else if let Some(p) = world.planes[plane].as_mut() {
+                        p.cells[arg(1) as usize] = arg(2);
+                    }
+                    lc += 3;
+                }
+                0x03 => {
+                    let count = arg(5) as usize;
+                    let start = (arg(3) as i16 as i32, arg(4) as i16 as i32);
+                    let last = if count >= 2 {
+                        let at = lc + 6 + (count - 2) * 3;
+                        (w[at + 1] as i16 as i32, w[at + 2] as i16 as i32)
+                    } else {
+                        start
+                    };
+                    let (c1, c2) = (arg(1) as i32, arg(2) as i32);
+                    let existing = self.platforms.iter().position(|p| {
+                        p.as_ref().is_some_and(|p| {
+                            p.points.last().map(|q| (q.0, q.1)) == Some(start) && p.start == last
+                        })
+                    });
+                    let idx = match existing {
+                        Some(i) => i,
+                        None => {
+                            let i = self.create_platform(world, count - 1);
+                            let area = (c1 % width, c1 / width, c2 % width, c2 / width);
+                            self.cut_area(world, i, area);
+                            i
+                        }
+                    };
+                    {
+                        let p = self.platforms[idx].as_mut().unwrap();
+                        p.start = start;
+                    }
+                    lc += 6;
+                    let mut pts = Vec::new();
+                    for _ in 0..count.saturating_sub(1) {
+                        let speed = w[lc + 3] as i16 as i32;
+                        pts.push((
+                            w[lc + 1] as i16 as i32,
+                            w[lc + 2] as i16 as i32,
+                            if speed == 0 { 1 } else { speed },
+                        ));
+                        lc += 3;
+                    }
+                    self.platforms[idx].as_mut().unwrap().points = pts;
+                    self.start_platform(world, idx, existing.is_some());
+                    self.platform_flags = 0;
+                    last_platform = idx;
+                }
+                0x04 => {
+                    self.platform_flags |= 1;
+                    lc += 1;
+                }
+                0x05 => {
+                    self.platform_volume = arg(1) as i16 as i32;
+                    lc += 2;
+                }
+                0x06 => {
+                    self.platform_flags |= 2;
+                    lc += 1;
+                }
+                0x07 => {
+                    let c = world.planes[plane]
+                        .as_ref()
+                        .map_or(0, |p| p.cells[arg(1) as usize]);
+                    if c & 0x8000 == 0 && c == arg(2) {
+                        return true;
+                    }
+                    lc += 3;
+                }
+                0x08 => {
+                    self.platform_flags = arg(1) as i16 as i32;
+                    lc += 2;
+                }
+                0x09 => {
+                    self.platform_sound = arg(1) as i16 as i32;
+                    lc += 2;
+                }
+                0x0b => {
+                    fx.damage_hero.push(arg(1) as i16 as i32);
+                    lc += 2;
+                }
+                0x13 => {
+                    fx.grinder_platform = Some(last_platform);
+                    if let Some(Some(p)) = self.platforms.get_mut(last_platform) {
+                        if let Some(first) = p.points.first_mut() {
+                            first.2 = 0;
+                        }
+                    }
+                    lc += 1;
+                }
+                0x1d => {
+                    fx.grinder_slow = true;
+                    lc += 1;
+                }
+                // Not ported yet; skipped with their sizes (tools/scripts.py COMMANDS).
+                0x01 | 0x02 | 0x0a | 0x0e => lc += 4,
+                0x0f => lc += 5,
+                0x0c | 0x10 | 0x11 | 0x15 | 0x17 | 0x19 => lc += 3,
+                0x12 | 0x14 | 0x1a => lc += 2,
+                _ => lc += 1,
+            }
+        }
+        false
+    }
+
+    /// FUN_1078_02e5.
+    fn create_platform(&mut self, world: &mut World, points: usize) -> usize {
+        let i = self
+            .platforms
+            .iter()
+            .position(|p| p.is_none())
+            .unwrap_or_else(|| {
+                self.platforms.push(None);
+                self.platforms.len() - 1
+            });
+        let plane = (FIRST_PLATFORM_PLANE..PLANE_SLOTS)
+            .find(|&s| world.planes[s].is_none())
+            .unwrap_or(PLANE_SLOTS - 1);
+        world.planes[plane] = Some(Plane {
+            width: 0,
+            height: 0,
+            cells: Vec::new(),
+        });
+        self.platforms[i] = Some(Platform {
+            x: 0,
+            y: 0,
+            prev_x: 0,
+            prev_y: 0,
+            x16: 0,
+            y16: 0,
+            width: 0,
+            height: 0,
+            sound: self.platform_sound,
+            plane,
+            flags: self.platform_flags,
+            volume: self.platform_volume,
+            accel: 0,
+            sector: 0,
+            cam_lock: 0x7fff,
+            bounds: (0, 0, 0, 0),
+            start: (0, 0),
+            point: 0,
+            points: Vec::with_capacity(points),
+        });
+        i
+    }
+
+    /// FUN_1078_03bc(cut = 1, plane 1, ...): move a rectangle of main-plane cells into the
+    /// platform's plane. "Won't be cut" tiles stay; an "area parameters" tile sets the sound.
+    fn cut_area(&mut self, world: &mut World, i: usize, (x1, y1, x2, y2): (i32, i32, i32, i32)) {
+        let (w, h) = (x2 - x1 + 1, y2 - y1 + 1);
+        let mut cells = vec![0u16; (w * h).max(0) as usize];
+        let mw = world.main().width;
+        for ty in y1..=y2 {
+            for tx in x1..=x2 {
+                let at = (ty * mw + tx) as usize;
+                let mut c = world.main().cells[at];
+                let f = world.cell_function(c, 0);
+                if f == func::NOT_CUT {
+                    c = 0;
+                } else {
+                    world.main_mut().cells[at] = 0;
+                    let p = self.platforms[i].as_mut().unwrap();
+                    if p.sound == 0 && f == func::AREA_PARAMS {
+                        p.sound = world.cell_function(c, 2) as i16 as i32;
+                    }
+                }
+                cells[((ty - y1) * w + tx - x1) as usize] = c;
+            }
+        }
+        let p = self.platforms[i].as_mut().unwrap();
+        p.width = w * 16;
+        p.height = h * 16;
+        world.planes[p.plane] = Some(Plane {
+            width: w,
+            height: h,
+            cells,
+        });
+    }
+
+    /// FUN_1078_05a0.
+    fn start_platform(&mut self, world: &World, i: usize, reverse: bool) {
+        let p = self.platforms[i].as_mut().unwrap();
+        if reverse {
+            p.point = p.points.len().saturating_sub(1) - p.point;
+            return;
+        }
+        (p.x, p.y) = p.start;
+        p.x16 = p.x << 4;
+        p.y16 = p.y << 4;
+        (p.prev_x, p.prev_y) = (p.x, p.y);
+        p.point = 0;
+        p.accel = 1;
+        let last = *p.points.last().unwrap_or(&(p.x, p.y, 0));
+        p.sector = world.sector_at(last.1, last.0);
+        p.bounds = if p.flags & 3 == 0 {
+            world.sectors[p.sector].cam
+        } else {
+            let (bx, by) = if p.flags & 1 == 0 {
+                (p.x, p.y)
+            } else {
+                (last.0, last.1)
+            };
+            (bx, by, bx + p.width - 1, by + p.height - 1)
+        };
+    }
+
+    /// FUN_1078_0aef: move the platforms of the hero's sector one step along their paths.
+    pub fn update_platforms(&mut self, world: &mut World) {
+        for i in 0..self.platforms.len() {
+            let Some(p) = self.platforms[i].as_mut() else {
+                continue;
+            };
+            if Some(p.sector) != self.sector {
+                continue;
+            }
+            (p.prev_x, p.prev_y) = (p.x, p.y);
+            let Some(&(px, py, speed)) = p.points.get(p.point) else {
+                continue;
+            };
+            let (tx, ty) = (px << 4, py << 4);
+            let mut arrived = false;
+            if p.x16 == tx {
+                let dir = if ty - p.y16 < 0 { -1 } else { 1 };
+                if p.flags & 4 == 0 {
+                    p.y16 += dir * speed;
+                } else {
+                    p.y16 += p.accel;
+                    p.accel += if p.accel >> 2 == 0 { 1 } else { p.accel >> 2 };
+                    p.accel = p.accel.min(speed);
+                }
+                let passed = p.y16 == ty || (p.y16 - ty).signum() == dir;
+                if passed {
+                    p.y16 = ty;
+                    arrived = p.point + 1 < p.points.len() || (p.prev_y << 4) == ty;
+                }
+            } else {
+                let dir = if tx - p.x16 < 0 { -1 } else { 1 };
+                p.x16 += dir * speed;
+                if p.x16 == tx || (p.x16 - tx).signum() == dir {
+                    p.x16 = tx;
+                    arrived = true;
+                }
+            }
+            p.x = p.x16 >> 4;
+            p.y = p.y16 >> 4;
+            if arrived {
+                p.point += 1;
+                if p.point == p.points.len() {
+                    self.paste_back(world, i);
+                }
+            }
+        }
+    }
+
+    /// End of a path: FUN_1078_0765(1, i) pastes the platform's cells into the main plane, then
+    /// FUN_1078_00ae frees it.
+    fn paste_back(&mut self, world: &mut World, i: usize) {
+        let p = self.platforms[i].take().unwrap();
+        if let Some(src) = world.planes[p.plane].take() {
+            let (mw, mh) = (world.main().width, world.main().height);
+            let (x0, y0) = (p.x / 16, p.y / 16);
+            let lo = ((x0).max(p.bounds.0 >> 4), (y0).max(p.bounds.1 >> 4));
+            let hi = (
+                (x0 + src.width - 1).min(p.bounds.2 >> 4),
+                (y0 + src.height - 1).min(p.bounds.3 >> 4),
+            );
+            for ty in lo.1..=hi.1 {
+                for tx in lo.0..=hi.0 {
+                    if tx < 0 || ty < 0 || tx >= mw || ty >= mh {
+                        continue;
+                    }
+                    let c = src.get(tx - x0, ty - y0);
+                    if c != 0 {
+                        world.main_mut().cells[(ty * mw + tx) as usize] = c;
+                    }
+                }
+            }
+        }
+        while self.platforms.last().is_some_and(|p| p.is_none()) {
+            self.platforms.pop();
+        }
+    }
+}

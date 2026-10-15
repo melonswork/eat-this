@@ -116,9 +116,32 @@ pub struct Map {
     #[allow(dead_code)] // not yet: the .LBM picture behind the planes
     pub background: String,
     pub groups: Vec<Option<String>>, // 16 slots; cell >> 8 indexes this
+    pub header: Vec<u8>,
+    pub objects: Vec<u8>,
 }
 
 impl Map {
+    /// OBJECTS: MAP HEADER u16 @10 records of {u8 n; i16 words[n + 1]}, words[0] = type
+    /// (FUN_10f0_5d1e; tools/formats.py has the same).
+    pub fn object_records(&self) -> Vec<Vec<i16>> {
+        let count = u16_at(&self.header, 10) as usize;
+        let mut out = Vec::with_capacity(count);
+        let mut at = 0;
+        for _ in 0..count {
+            let Some(&n) = self.objects.get(at) else {
+                break;
+            };
+            let n = n as usize + 1;
+            out.push(
+                (0..n)
+                    .map(|i| i16_at(&self.objects, at + 1 + 2 * i))
+                    .collect(),
+            );
+            at += 1 + 2 * n;
+        }
+        out
+    }
+
     pub fn load(path: &Path) -> io::Result<Map> {
         let a = Archive::open(path)?;
         let h = a.get("MAP HEADER").ok_or_else(|| missing("MAP HEADER"))?;
@@ -152,6 +175,8 @@ impl Map {
                 .iter()
                 .map(|s| (!s.is_empty()).then(|| s.clone()))
                 .collect(),
+            objects: a.get("OBJECTS").unwrap_or_default(),
+            header: h,
         })
     }
 

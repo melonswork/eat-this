@@ -9,12 +9,14 @@ mod archive;
 mod data;
 mod demo;
 mod hero;
+mod level;
 mod rng;
 mod world;
 
 use data::{Palette, SpriteGroup, TILE};
 use demo::{CHECK_PERIOD, Demo};
 use hero::Hero;
+use level::{Effects, Level};
 use rng::{PascalRandom, steps_between};
 use std::{
     error::Error,
@@ -96,6 +98,7 @@ fn key_poll(counter: &mut i8, down: bool) -> i8 {
 
 struct Game {
     world: World,
+    level: Level,
     hero: Hero,
     rng: PascalRandom,
     frame: u32,
@@ -119,8 +122,19 @@ struct CheckReport {
 }
 
 impl Game {
-    fn new(world: World, demo: Option<Demo>) -> Game {
-        let hero = Hero::new(world.map.start, 1);
+    fn new(mut world: World, demo: Option<Demo>) -> Game {
+        let mut level = Level::new(&mut world);
+        let mut hero = Hero::new(world.map.start, 1);
+        // LevelFirstFrame (1088:b4db): enter the start sector (its scripts run), face its far side.
+        let mut fx = Effects::default();
+        let sector = world.sector_at(hero.y, hero.x);
+        level.enter_sector(&mut world, sector, &mut fx);
+        let cam = world.sectors[sector].cam;
+        hero.facing = if hero.x - cam.0 < cam.2 - hero.x {
+            1
+        } else {
+            -1
+        };
         // LevelInit calls Randomize unless a demo plays; DemoLoad zeroes RandSeed.
         let seed = if demo.is_some() {
             0
@@ -131,6 +145,7 @@ impl Game {
         };
         Game {
             world,
+            level,
             hero,
             rng: PascalRandom::new(seed),
             frame: 0,
@@ -145,6 +160,8 @@ impl Game {
 
     /// One game frame. `keys` is ignored while a demo plays.
     fn step(&mut self, keys: [i8; 9]) {
+        // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
+        self.level.update_platforms(&mut self.world);
         let input = match &self.demo {
             Some(d) => {
                 let (k, _mouse) = d.input(self.frame);
@@ -157,7 +174,8 @@ impl Game {
             }
             None => keys,
         };
-        self.hero.update(&self.world, &input, &mut self.rng);
+        self.hero
+            .update(&self.world, &self.level, &input, &mut self.rng);
         self.frame += 1;
     }
 
@@ -246,14 +264,34 @@ impl Graphics {
         let cam_x = (g.hero.x - W / 2).clamp(0, (mw - W).max(0));
         let cam_y = (g.hero.y - H / 2 - 20).clamp(0, (mh - H).max(0));
         let map = &g.world.map;
-        for plane in [0, MAIN_PLANE] {
-            for ty in cam_y / TILE..=(cam_y + H) / TILE {
-                for tx in cam_x / TILE..=(cam_x + W) / TILE {
-                    let cell = map.cell(plane, tx, ty);
+        // The map planes, then the platforms (their own planes, at their positions).
+        let mut layers: Vec<(usize, i32, i32)> = vec![(0, 0, 0), (MAIN_PLANE, 0, 0)];
+        layers.extend(
+            g.level
+                .platforms
+                .iter()
+                .flatten()
+                .map(|p| (p.plane, p.x, p.y)),
+        );
+        for (plane, ox, oy) in layers {
+            let Some(pl) = g.world.planes[plane].as_ref() else {
+                continue;
+            };
+            for ty in 0..pl.height {
+                let sy = oy + ty * TILE - cam_y;
+                if sy <= -TILE || sy >= H {
+                    continue;
+                }
+                for tx in 0..pl.width {
+                    let sx = ox + tx * TILE - cam_x;
+                    if sx <= -TILE || sx >= W {
+                        continue;
+                    }
+                    let cell = pl.get(tx, ty);
                     if cell == 0 || cell & 0x8000 != 0 {
                         continue;
                     }
-                    let gi = (cell >> 8) as usize;
+                    let gi = (cell >> 8) as usize & 15;
                     let hidden = map.groups[gi]
                         .as_deref()
                         .is_some_and(|n| n.contains("ICON"));
@@ -269,8 +307,8 @@ impl Graphics {
                         group.tile((cell & 0xff) as usize),
                         TILE,
                         TILE,
-                        tx * TILE - cam_x,
-                        ty * TILE - cam_y,
+                        sx,
+                        sy,
                         false,
                     );
                 }
