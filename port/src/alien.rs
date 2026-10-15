@@ -40,6 +40,11 @@ struct Look {
 impl Level {
     /// FUN_1070_60ca.
     pub fn alien(&mut self, id: usize, env: &mut Env) {
+        if std::env::var_os("ET_DEBUG").is_some() {
+            let o = self.o(id);
+            let words: Vec<String> = (0..0x4c).step_by(2).map(|i| o.w(i).to_string()).collect();
+            eprintln!("OBJ {}\t{}", env.frame + 1, words.join(" "));
+        }
         let h = env.h;
         {
             let o = self.o(id);
@@ -867,7 +872,7 @@ impl Level {
 
     /// FUN_1088_3a81(sprite, y, x): the hero standing on the corpse (4e26), or landing on its
     /// head holding up (a bounce). Returns 1 on a bounce.
-    fn stomp(&mut self, sprite: i32, y: i32, x: i32, flip: bool, env: &mut Env) -> i32 {
+    pub(crate) fn stomp(&mut self, sprite: i32, y: i32, x: i32, flip: bool, env: &mut Env) -> i32 {
         let h = env.h;
         let Some((l, t, r, b)) = sprites::hitbox(sprite) else {
             return 0;
@@ -982,7 +987,7 @@ impl Level {
 
     /// FUN_1068_0dd8(half, dx): walk dx along the patrol range; turn at its ends, walls and
     /// drops.
-    fn patrol_step(&mut self, id: usize, env: &mut Env, half: i32, dx: i32) {
+    pub(crate) fn patrol_step(&mut self, id: usize, env: &mut Env, half: i32, dx: i32) {
         let o = self.o(id);
         o.set(0xe, o.w(0xe) + dx);
         let (ya, yb) = if o.w(0x1c) == 5 {
@@ -1002,7 +1007,7 @@ impl Level {
     }
 
     /// FUN_1068_0a54(y2, x2, y1, x1): nothing with solidity 0x40 on the line, tested once a tile.
-    fn line_of_sight(&self, env: &Env, y2: i32, x2: i32, y1: i32, x1: i32) -> bool {
+    pub(crate) fn line_of_sight(&self, env: &Env, y2: i32, x2: i32, y1: i32, x1: i32) -> bool {
         let (dx, dy) = (x2 - x1, y2 - y1);
         let s = |y: i32, x: i32| crate::hero::Hero::solidity_all(env.world, self, y, x) & 0x40 != 0;
         if dy.abs() < dx.abs() {
@@ -1120,7 +1125,7 @@ fn blood_puff(ps: &mut crate::particles::Particles, y: i32, x: i32) {
 }
 
 /// FUN_1040_637a: a lingering smoke sprite.
-fn smoke_sprite(ps: &mut crate::particles::Particles, y: i32, x: i32) {
+pub(crate) fn smoke_sprite(ps: &mut crate::particles::Particles, y: i32, x: i32) {
     ps.p.callback = 0x18e6;
     ps.p.colour = 0x10;
     ps.spawn_seq(0x6a00, 1, 0x17e, y, x, 0);

@@ -21,6 +21,7 @@ mod particles;
 mod palette;
 mod picture;
 mod rng;
+mod smallbot;
 mod sprites;
 mod tileanim;
 mod trig;

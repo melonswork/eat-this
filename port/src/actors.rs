@@ -40,6 +40,18 @@ impl Level {
     /// rectangle, 1170:45ca..45d0).
     pub fn update_actors(&mut self, env: &mut Env, window: (i32, i32, i32, i32)) {
         let sector = self.sector.unwrap_or(0);
+        if std::env::var_os("ET_DEBUG2").is_some() && env.frame == 950 {
+            for (s, l) in self.lists.iter().enumerate() {
+                for (li, ids) in l.iter().enumerate() {
+                    for &id in ids {
+                        if let Some(o) = &self.objects[id] {
+                            eprintln!("LIST sector {s} list {li} id {id} kind {:#x} bbox {:?} pos ({},{})", o.kind, o.bbox(), o.w(0xe), o.w(0x10));
+                        }
+                    }
+                }
+            }
+            eprintln!("LIST hero sector {sector} window {window:?}");
+        }
         self.walk(sector, list::ACTORS, env, window);
         self.update_triggers(sector, env);
         if sector != 0 {
@@ -474,53 +486,6 @@ impl Level {
             }
             0x1428 => self.alien_after_move(id),
             k => eprintln!("warning: move hook of {k:#x} not ported"),
-        }
-    }
-
-    /// FUN_1070_a3cf: the small security bot (smallbot.spr).
-    fn smallbot(&mut self, id: usize, env: &mut Env) {
-        {
-            let o = self.o(id);
-            if o.w(0x26) > 0 {
-                o.set(0x26, o.w(0x26) - 1);
-            }
-            o.set(0x22, o.w(0x10));
-        }
-        let (x, y) = {
-            let o = self.objects[id].as_ref().unwrap();
-            (o.w(0xe), o.w(0x10))
-        };
-        self.patrol_box(id, y + 0x20, x + 0x30, y - 0x40, x - 0x30);
-        let hit = self.actor_physics(id, env, 0xe, 7, 3);
-        if hit >= 1 {
-            eprintln!("warning: smallbot destroyed by the map (FUN_1068_10f3/a2e0) not ported");
-            return;
-        }
-        let state = self.objects[id].as_ref().unwrap().w(0x24);
-        match state {
-            1 => {
-                let o = self.o(id);
-                o.set(0x2a, o.w(0x2a) + 1);
-                let i = o.w(0x2a) % 0x200;
-                if i == 0x1e8 || i == 0x1eb {
-                    o.set(0x28, o.w(0x28) + 3);
-                    o.set(0xe, o.w(0xe) + ((o.w(0x2a) / 0x200) & 1) * 2 - 1);
-                }
-                let i = o.w(0x2a) % 0x100;
-                if i == 0x3f {
-                    let (x, y) = (o.w(0xe), o.w(0x10));
-                    crate::effects::smoke(y - 0xe, x + 0x10, env.rng);
-                }
-            }
-            0 | 2 | 3 | 4 => {
-                eprintln!("warning: smallbot state {state} not ported");
-            }
-            _ => {}
-        }
-        // Damage from the hero's shots (FUN_1050_5960) needs the projectiles: not ported yet.
-        let o = self.objects[id].as_ref().unwrap();
-        if o.w(0x2c) < 1 && o.b(0x35) != 0 && (env.frame & 7) == 0 && env.rng.random(4) != 0 {
-            env.rng.random(9);
         }
     }
 }

@@ -599,7 +599,68 @@ impl Level {
                 m.set(0x30, x + 3);
                 m.set(0x32, y + 3);
             }
-            CB_CRITTER => {}
+            CB_CRITTER | 0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 => {} // drawing only
+            0x1a3 => {
+                // FUN_1050_01a3: a 9x9 box.
+                let (x, y) = (m.w(8), m.w(0xa));
+                m.set(0x2c, x - 4);
+                m.set(0x2e, y - 4);
+                m.set(0x30, x + 4);
+                m.set(0x32, y + 4);
+            }
+            0x23b7 => {
+                // FUN_1050_23b7: a gib that stopped against a wall slides down it.
+                let p = &mut self.particles.list[i];
+                let (m, v) = (&mut p.m, &mut p.v);
+                let (x, y) = (m.w(8), m.w(0xa));
+                if v.l(0) == 0 && f.world.solidity_at(y, x - 1 + ((x & 0xf) > 7) as i32 * 2) & 2 != 0 {
+                    v.set(8, 4);
+                    m.set(6, y);
+                }
+                if m.w(0x24) > 0xb {
+                    m.set(0x3a, 0x84);
+                }
+            }
+            0x11e6 => {
+                // FUN_1050_11e6: a grenade smokes every 5 frames.
+                if m.w(0x24) % 5 == 0 {
+                    let (x, y) = (m.w(8), m.w(0xa));
+                    let ps = &mut self.particles;
+                    ps.p.group = 0;
+                    ps.p.colour = 0x10;
+                    ps.p.callback = 0x2192;
+                    let r = f.rng.random(9);
+                    ps.spawn_seq(0x6c00, 1, 0x19, y - 5, (x - 3) - r, 1);
+                    let a = f.rng.random(0x141) + 0x500;
+                    ps.line(10, a);
+                    ps.p.callback = 0;
+                    ps.p.colour = 0;
+                    ps.p.group = 1;
+                }
+            }
+            0x2299 => {
+                // FUN_1050_2299: a trail of smoke.
+                if m.w(0x24) % 4 == 3 {
+                    let (x, y) = (m.w(8), m.w(0xa));
+                    let ps = &mut self.particles;
+                    ps.p.delay = 3;
+                    ps.p.group = 0;
+                    ps.p.colour = 0x10;
+                    ps.spawn_seq(0x6805, 3, 10, y, x, 1);
+                    ps.p.colour = 0;
+                    ps.p.group = 1;
+                    ps.p.delay = 0;
+                }
+            }
+            0x18e6 => {
+                // FUN_1050_18e6: smoke lying on the floor; gone when there's no floor.
+                let (x, y) = (m.w(8), m.w(0xa));
+                if f.world.solidity_at(y + 1, x) & 0x211 == 0 {
+                    m.set(0x24, m.w(0x22));
+                } else if SMOKE_AGES && m.w(0x24) < m.w(0x22) {
+                    m.set(0x24, m.w(0x24) + 1);
+                }
+            }
             other => eprintln!("warning: particle procedure 1050:{other:04x} not ported"),
         }
     }
@@ -691,6 +752,9 @@ impl Level {
     fn bullet_hit(&mut self, y: i32, x: i32, f: &mut Frame) {
         let i = self.particles.current;
         let m = &self.particles.list[i].m;
+        if std::env::var_os("ET_DEBUG").is_some() {
+            eprintln!("DBG {} bullet hit ({x},{y}) at ({},{}) state {} age {}", self.particles.now, m.w(8), m.w(0xa), m.w(0x3e), m.w(0x24));
+        }
         if f.world.tile_function_at(m.w(0xa), m.w(8)) == 13000 {
             eprintln!("warning: bullet into a 13000 tile (its own effect) not ported");
             return;
@@ -712,6 +776,57 @@ impl Level {
         ps.spawn_seq(sprite, 4, 3, y, x, 1);
         ps.throw(0xe, 0x10, (angle + 0xb40 + side * 0x1e0) % 0x1680);
     }
+}
+
+/// 1170:4f0c > 10 (FUN_1050_18e6): lying smoke ages (the frame rate's headroom, as measured).
+const SMOKE_AGES: bool = true;
+
+/// FUN_1040_6577(y, x): a puff of smoke rising, six particles over 40 frames (with the current
+/// group and colour).
+pub fn smoke(ps: &mut Particles, rng: &mut PascalRandom, y: i32, x: i32) {
+    for i in 0..6 {
+        ps.p.delay = i << 3;
+        let px = x - 5 + rng.random(0xb);
+        let py = y - rng.random(8);
+        if i < 3 {
+            ps.spawn_seq(0x6800, 2, 0xf, py, px, 1);
+        } else {
+            ps.spawn_seq(0x5111, 4, 9, py, px, 1);
+        }
+        ps.line(8, 0x5a0);
+    }
+    ps.p.delay = 0;
+}
+
+/// FUN_1040_6623(kinds, sprite, speed range, speed, angle range, spread, y, x, n): n pieces
+/// thrown in a fan (gravity 9).
+#[allow(clippy::too_many_arguments)]
+pub fn fan(
+    ps: &mut Particles,
+    rng: &mut PascalRandom,
+    kinds: i32,
+    sprite: i32,
+    speed_range: i32,
+    speed: i32,
+    angle_range: i32,
+    spread: i32,
+    y: i32,
+    x: i32,
+    n: i32,
+) {
+    ps.p.hits = 0x8000;
+    let last = n - 1;
+    if last >= 0 {
+        for i in 0..=last {
+            let s = sprite + rng.random(kinds as u16) as i32;
+            ps.spawn(s, y, x);
+            let r = rng.random((angle_range + 1) as u16) as i32;
+            let a = i * ((spread << 1) / last) + ((0x5a0 - spread) - (angle_range >> 1)) + r;
+            let v = speed + rng.random(speed_range as u16) as i32;
+            ps.throw(9, v, a);
+        }
+    }
+    ps.p.hits = 0;
 }
 
 /// FUN_1050_00a7: the frame to draw. Animations (negative sprites) aren't ported.
