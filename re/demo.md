@@ -29,7 +29,7 @@ The demo state is a record at 1170:5374 (`gDemo`). Its fields:
 | function | role |
 |---|---|
 | `DemoStartRecording` 1098:0002 | allocates the buffers (48000 B per key = 16000 runs, 64000 B of mouse = 16000 entries); **RandSeed := 0** |
-| `DemoRecordFrame` 1098:033a | called from `ReadGameInput` after the keys are read; extends the runs; frame counter += 1; every 35th frame stores RandSeed |
+| `DemoRecordFrame` 1098:033a | called from `ReadGameInput` after the keys are read; extends the runs; frame counter += 1; when the **level frame counter** `DAT_1170_617e` is a multiple of 35 it stores RandSeed in `CHECK[617e / 35]` |
 | `DemoSave` 1098:00ff | writes `USER<n>.REC` (entries 0..11) when recording stops or a buffer fills |
 | `DemoLoad` 1098:0537 | reads entries 0–10 (CHECK is **not** read); **RandSeed := 0**; warns if the version isn't 3 |
 | `DemoPlayFrame` 1098:06c2 | replaces all of `ReadGameInput`'s polling: `gInput[0..8]`, `gMouseX/Y`; frame counter −= 1; at 0 it calls `DemoStop` |
@@ -42,7 +42,7 @@ The demo state is a record at 1170:5374 (`gDemo`). Its fields:
 | 0 | `REC HEADER` | u32 frames, u16 0, u16 version = 3 |
 | 1 | `MOUSE` | 4-byte entries: `(i16 x, i16 y)` = the mouse position for one frame, or `(0x8001, u16 n)` = the previous position for n more frames. Coordinates are in the 320×200 game screen and can fall outside it. |
 | 2–10 | `KEY #0`..`KEY #8` | 3-byte runs `(u16 extra, i8 value)`: `value` for `extra + 1` frames. The order is gInput's: Up, Down, Left, Right, LeftShoot, RightShoot, 6, 7, SwitchWeapon. Values are `KeyPoll` states: −1 up, 0 released this frame, 1 pressed this frame, 2 held. Mouse buttons arrive as 0/1/2 in LeftShoot/RightShoot. Each stream covers `frames + 1` frames: the first frame is the priming run, which `DemoLoad` consumes before the first game frame. |
-| 11 | `CHECK` | u32 × (frames/35 + 1): `CHECK[k]` is RandSeed when the recorder's frame counter reached 35·k. `CHECK[0]` is never written (it holds whatever was in memory). |
+| 11 | `CHECK` | u32 × (frames/35 + 1): `CHECK[k]` is RandSeed at the input read of game frame 35·k + 1 (1-based), when the level frame counter `DAT_1170_617e` equals 35·k. `CHECK[0]` is the seed after the level setup, at the first input read. |
 
 ## RandSeed is the oracle
 
@@ -60,7 +60,7 @@ A port is deterministic against a demo when:
    state, RandSeed = 0),
 2. it feeds `Demo.input_at(frame)` into the hero instead of the keyboard,
 3. it uses the same LCG and calls `Random` in the same order, and
-4. RandSeed after each 35th frame's input read equals `CHECK[k]`.
+4. RandSeed at the input read of frame 35k + 1 (1-based) equals `CHECK[k]`.
 
 The first window whose seed differs points at the bug: compare the call counts to see whether
 the port makes too few or too many calls in that window.
@@ -72,13 +72,19 @@ startup. Matching inputs plus a matching RNG stream should therefore mean matchi
 
 Caveats:
 
-- The sample is taken inside `ReadGameInput`, so window k covers the end of frame 35(k−1) and
-  the start of frame 35k up to the hero's input read. `GameFrameInGame` calls a few systems
-  (`FUN_10a0_023f`, `FUN_1078_0aef`) before `HeroUpdate`; a port has to keep that order.
+- The sample is taken inside `ReadGameInput`, but the recorder tests `DAT_1170_617e`, the level
+  frame counter that `GameFrameInGame` increments at its very end, not its own counter. During
+  frame f (1-based) it is f − 1, so `CHECK[k]` is taken at the input read of frame 35k + 1 and
+  window k covers the rest of frame 35(k−1) + 1, frames 35(k−1) + 2 … 35k, and the start of
+  frame 35k + 1 up to the hero's input read. (Found with the tracer, [tracer.md](tracer.md):
+  sampling at frame 35k instead makes walking windows look one call short, e.g. BROYEUR
+  window 2 = 29 instead of 30.) `GameFrameInGame` calls a few systems (`FUN_10a0_023f`,
+  `FUN_1078_0aef`) before `HeroUpdate`; a port has to keep that order.
 - Anything else that draws on `Random` counts too: particles, idle animations, screen shake,
   sounds picked at random. Cosmetic code isn't exempt, because it advances the same seed.
 - The frame-skipper in `VideoPresent` decides whether to *draw*, not whether to *update*. The
   draw-only calls in `GameFrameInGame` (`FUN_1078_0abd`, `FUN_1088_026d`, `FUN_1088_20bc`)
-  never reach `Random`, so frame skipping doesn't change the RNG stream.
+  never reach `Random`, so frame skipping doesn't change the RNG stream. (Checked in the
+  tracer: clearing `gDrawThisFrame` on every frame leaves all of BROYEUR's counts unchanged.)
 - `LevelInit` runs after `DemoLoad` has zeroed the seed, so the first window includes the
   level's setup calls (START: 290 calls in window 1).

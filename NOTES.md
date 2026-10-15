@@ -87,6 +87,8 @@ CD audio over MCI, and direct VGA port I/O.
 - `mise run render -- {tiles|sprites|map} <file> <out.png>`
 - `uv run python tools/frames.py SPRITES/PPHERO.SPR out.png 0x81-0x94`: a strip of numbered frames
 - `python tools/fn.py {show|tree|callers} NAME`: browse the exported decompilation
+- `mise run trace -- work/cd/BIN/USERMAPS/GRINDER.DMO` — run the original game under an x86
+  emulator on a demo and log every `Random` call ([re/tracer.md](re/tracer.md))
 - `mise run ghidra` — Ghidra GUI (open project `work/ghidra/EatThis`)
 - `mise run ghidra-natives` — one-off after installing Ghidra: builds the macOS arm64 decompiler,
   which the release zip doesn't ship

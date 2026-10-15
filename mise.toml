@@ -68,6 +68,10 @@ description = "Play a recorded demo headless in the port and compare RandSeed wi
 dir = "port"
 run = "cargo run --release -- --headless --demo"
 
+[tasks.trace]
+description = "Run the original game under an x86 emulator on a demo and log every Random call: mise run trace -- work/cd/BIN/USERMAPS/GRINDER.DMO"
+run = "uv run python tools/tracer.py"
+
 [env]
 # SDL2 (built from source by the sdl2 crate) still declares cmake_minimum_required < 3.5
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"

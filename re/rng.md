@@ -53,7 +53,7 @@ Ported in `port/src/hero.rs`, in the original's order:
 | window | original | port | why |
 |---|---|---|---|
 | 1 | 0 | 0 | the hero stands; no enemies |
-| 2 | 30 | 29 | walking from frame 41 is 29 calls; the 30th comes from somewhere else (unknown) |
+| 2 | 30 | 29 | walking from frame 41: frames 41–70 are 30 calls. CHECK[2] is taken at frame 71's input read, not frame 70's ([demo.md](demo.md)); the port samples one frame early |
 | 3–7 | 35 each | 35, 36, 35, 35, 35 | 1/frame (walk, jump, fall); the port's extra one in 4 is a landing at the map bottom |
 | 8 | 296 | 25 | the grinder |
 
@@ -66,6 +66,9 @@ speed. It is also the platform the hero lands on, which the port doesn't have ye
 hero falls to the map bottom instead.
 
 ## Next
+
+`tools/tracer.py` ([tracer.md](tracer.md)) now runs the original code on a demo and lists every
+call with its site, frame and window; it reproduces all 3550 CHECK entries of the 7 demos.
 
 Matching more than the first windows needs the systems that draw Random: the enemy factory and
 enemy AI (CITY01 window 1: 79, window 2: 12), the grinder and extra maps (GRINDER windows 4, 8),

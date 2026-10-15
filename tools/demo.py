@@ -12,8 +12,9 @@ Entries:
                 states: -1 up, 0 just released, 1 just pressed, 2 held (0/1/2 for the mouse
                 buttons merged into LeftShoot/RightShoot). Run 0 is a priming run the loader
                 consumes one frame of before the first game frame.
-    CHECK       u32 per 35 frames: Borland Pascal RandSeed, sampled in the recorder when its
-                frame counter reaches 35*k (CHECK[0] is never written: uninitialised memory).
+    CHECK       u32 per 35 frames: Borland Pascal RandSeed, sampled in the recorder when the
+                level frame counter DAT_1170_617e is 35*k, i.e. at the input read of game frame
+                35*k+1 (1-based). CHECK[0] is the seed after the level setup.
                 The game never reads it back, so it is a free determinism oracle for a port.
 
 RandSeed is zeroed when recording and playback start.
@@ -72,7 +73,7 @@ class Demo:
     version: int
     keys: list[list[int]]  # keys[k][frame], already past the priming run
     mouse: list[tuple[int, int]]  # mouse[frame]
-    checks: list[int]  # checks[k] = RandSeed at frame 35*k (k >= 1)
+    checks: list[int]  # checks[k] = RandSeed at the input read of frame 35*k+1
 
     @classmethod
     def load(cls, path: Path) -> "Demo":
