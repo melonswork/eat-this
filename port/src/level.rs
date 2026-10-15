@@ -40,6 +40,12 @@ pub struct Effects {
     pub grinder_slow: bool,
     /// ScreenShake calls (strength, amplitude), in order.
     pub shakes: Vec<(i32, i32)>,
+    /// FUN_1088_3a81: the hero bounced off an enemy's head (HeroStartJump(0, -50, 10)).
+    pub hero_bounce: bool,
+    /// 1170:4e26: the hero stands by an enemy he can kick (1, or 2 with the pointer on it).
+    pub hero_by_enemy: i32,
+    /// Enemies killed (1170:4eb0).
+    pub kills: i32,
 }
 
 pub struct Level {

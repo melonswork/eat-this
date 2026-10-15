@@ -23,8 +23,9 @@ const SLOTS: &[(u16, &str)] = &[
     (0x70, "BOWLEXP"), (0x75, "SVN"), (0x78, "MPOINTER"), (0x7d, "MOVIE"),
 ];
 
-/// Per slot: each frame's first hit box when it is a plain box (type 0), else None.
-type Boxes = Vec<Option<(i32, i32, i32, i32)>>;
+/// Per slot and frame: the image height (sprite +2), and its first hit box when that is a plain
+/// box (type 0).
+type Boxes = Vec<Option<(i32, Option<(i32, i32, i32, i32)>)>>;
 static GROUPS: OnceLock<Mutex<HashMap<u16, Boxes>>> = OnceLock::new();
 
 fn i16_at(b: &[u8], at: usize) -> i32 {
@@ -44,9 +45,11 @@ fn load(slot: u16) -> Boxes {
     g.sprites
         .iter()
         .map(|s| {
-            let e = &s.as_ref()?.extra;
-            (e.len() >= 18 && i16_at(e, 0) != 0 && i16_at(e, 2) == 0)
-                .then(|| (i16_at(e, 10), i16_at(e, 12), i16_at(e, 14), i16_at(e, 16)))
+            let s = s.as_ref()?;
+            let e = &s.extra;
+            let hit = (e.len() >= 18 && i16_at(e, 0) != 0 && i16_at(e, 2) == 0)
+                .then(|| (i16_at(e, 10), i16_at(e, 12), i16_at(e, 14), i16_at(e, 16)));
+            Some((s.height, hit))
         })
         .collect()
 }
@@ -54,8 +57,28 @@ fn load(slot: u16) -> Boxes {
 /// Sprite `id`'s hit box relative to its anchor: (left, top, right, bottom) = sprite
 /// +0x14, +0x16, +0x18, +0x1a, when its first box is a plain one (count +0xa != 0, type +0xc == 0).
 pub fn hitbox(id: i32) -> Option<(i32, i32, i32, i32)> {
+    frame(id).and_then(|f| f.1)
+}
+
+fn frame(id: i32) -> Option<(i32, Option<(i32, i32, i32, i32)>)> {
     let slot = (id as u16) >> 8;
     let mut m = GROUPS.get_or_init(Default::default).lock().unwrap();
     let boxes = m.entry(slot).or_insert_with(|| load(slot));
     boxes.get((id & 0xff) as usize).copied().flatten()
+}
+
+/// FUN_10f0_1f8e: the sprite's height.
+pub fn height(id: i32) -> i32 {
+    frame(id).map_or(0, |f| f.0)
+}
+
+/// FUN_1050_5960's box for a sprite drawn at (x, y), mirrored when `flip` (1170:1ae5 = 1):
+/// (bottom, right, top, left), the order FUN_1050_568b takes them.
+pub fn hit_rect(id: i32, y: i32, x: i32, flip: bool) -> Option<(i32, i32, i32, i32)> {
+    let (l, t, r, b) = hitbox(id)?;
+    Some(if flip {
+        (y + b, x - l, y + t, x - r)
+    } else {
+        (y + b, x + r, y + t, x + l)
+    })
 }

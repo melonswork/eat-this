@@ -14,6 +14,24 @@ pub struct Env<'a> {
     pub fx: &'a mut Effects,
     pub hero: (i32, i32, i32), // gHeroX, gHeroY, gHeroHeight
     pub frame: u32,            // DAT_1170_617e, the level frame counter
+    pub h: HeroView,
+    /// 1170:465e: 2 the frame the hero fired, 1 when a screen shake just started.
+    pub noise: i32,
+    pub camera: (i32, i32),
+}
+
+/// The hero globals the objects read.
+#[derive(Clone, Copy, Default, Debug)]
+pub struct HeroView {
+    pub x: i32,
+    pub y: i32,
+    pub prev_x: i32,
+    pub prev_y: i32,
+    pub height: i32,
+    pub state: i32,
+    pub vy: i32,
+    pub fall: i32,
+    pub up: bool,
 }
 
 impl Level {
@@ -80,6 +98,7 @@ impl Level {
         match kind {
             0x145a => self.smallbot(id, env),
             0x143c => self.crate_box(id, env),
+            0x1428 => self.alien(id, env),
             0x14aa => {} // FUN_1070_a06a: draws a sprite
             0x13c4 => {} // FUN_1068_315a: plain sound emitters (kinds < 10000) don't draw Random
             _ => {}
@@ -87,7 +106,7 @@ impl Level {
     }
 
     /// FUN_1070_0002: delete the object being updated from the collection being walked.
-    fn remove_current(&mut self, id: usize) {
+    pub(crate) fn remove_current(&mut self, id: usize) {
         let (s, l) = self.walking;
         let i = self.walk_index as usize;
         debug_assert_eq!(self.lists[s][l][i], id);
@@ -228,12 +247,12 @@ impl Level {
         env.rng.random(0x40); // the squeak's pitch
     }
 
-    fn o(&mut self, id: usize) -> &mut crate::objects::Obj {
+    pub(crate) fn o(&mut self, id: usize) -> &mut crate::objects::Obj {
         self.objects[id].as_mut().unwrap()
     }
 
     /// FUN_1068_1765: grow the activity box around the actor's patrol range.
-    fn patrol_box(&mut self, id: usize, bottom: i32, right: i32, top: i32, left: i32) {
+    pub(crate) fn patrol_box(&mut self, id: usize, bottom: i32, right: i32, top: i32, left: i32) {
         let o = self.o(id);
         if o.w(0x14) == -0x7fff || o.w(2) == -0x7fff {
             o.set(2, left);
@@ -453,6 +472,7 @@ impl Level {
                     o.set(0x1a, 0);
                 }
             }
+            0x1428 => self.alien_after_move(id),
             k => eprintln!("warning: move hook of {k:#x} not ported"),
         }
     }

@@ -84,6 +84,8 @@ pub struct Hero {
     /// the feet are on, -1 none.
     slope: i32,
     collide_flags: i32,
+    /// gHeroPrevX/Y: where this frame's move started.
+    prev: (i32, i32),
     /// 1170:511b: on a slope, set by FUN_1088_2f6b; walls are then looked for higher up.
     on_slope: bool,
 }
@@ -150,6 +152,7 @@ impl Hero {
             gun: Gun::default(),
             slope: -1,
             collide_flags: 3,
+            prev: (x, y),
             on_slope: false,
         }
     }
@@ -207,6 +210,26 @@ impl Hero {
     fn stand(&mut self) {
         self.state = GROUND;
         self.anim = 6;
+    }
+
+    /// The globals the objects read.
+    pub fn view(&self, up: bool) -> crate::actors::HeroView {
+        crate::actors::HeroView {
+            x: self.x,
+            y: self.y,
+            prev_x: self.prev.0,
+            prev_y: self.prev.1,
+            height: self.height,
+            state: self.state,
+            vy: self.vy,
+            fall: self.fall,
+            up,
+        }
+    }
+
+    /// HeroStartJump(0, vy, kind) from outside HeroUpdate.
+    pub fn bounce(&mut self, vy: i32, kind: i32) {
+        self.start_jump(vy, kind);
     }
 
     pub fn gun_mouse(&self) -> (i32, i32) {
@@ -715,6 +738,7 @@ impl Hero {
     fn move_and_collide(&mut self, w: &World, lv: &Level, mut dx: i32, dy: i32) -> (i32, i32) {
         let (h, hw) = (self.height, self.half_width);
         let (x0, y0, dx_req) = (self.x, self.y, dx);
+        self.prev = (x0, y0);
         let head = (y0 - h) + 1;
         let prev_slope = std::mem::replace(&mut self.slope, -1); // 1170:4ea4
         let mut step_h = 0;

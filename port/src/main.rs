@@ -6,6 +6,7 @@
 //!                                                   RandSeed with the demo's CHECK entries
 
 mod actors;
+mod alien;
 mod archive;
 mod bg;
 mod camera;
@@ -213,6 +214,11 @@ impl Game {
     fn step(&mut self, keys: [i8; 9]) {
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
         self.level.update_platforms(&mut self.world);
+        // FUN_10a0_023f: delayed particles due this frame.
+        self.level.particles.now = self.frame;
+        self.level.particles.release_due();
+        // 1170:465e: a screen shake just started (or the hero fires, below).
+        let mut noise = self.camera.shake_started() as i32;
         let mut mouse_now = self.hero.gun_mouse();
         let input = match &self.demo {
             Some(d) => {
@@ -243,6 +249,7 @@ impl Game {
             .update(&self.world, &self.level, &input, mouse_now, cam, &mut self.rng);
         if let Some((y, x, aim, parity)) = self.hero.gun.shot {
             self.level.particles.hero_fire(y, x, aim, parity);
+            noise = 2;
         }
         let mut fx = Effects::default();
         for (ty, tx) in std::mem::take(&mut self.hero.touched) {
@@ -280,8 +287,14 @@ impl Game {
             fx: &mut fx,
             hero: (self.hero.x, self.hero.y, self.hero.height),
             frame: self.frame,
+            h: self.hero.view(input[hero::UP] > 0),
+            noise,
+            camera: cam,
         };
         self.level.update_actors(&mut env, window);
+        if std::mem::take(&mut fx.hero_bounce) {
+            self.hero.bounce(-0x32, 10);
+        }
         // FUN_1050_4ca5(1): the hero's shots and their sparks.
         let mut pf = particles::Frame {
             world: &mut self.world,

@@ -39,6 +39,8 @@ pub const MOVE_NONE: u16 = 0x2aa4;
 pub const MOVE_LINE: u16 = 0x2ade;
 /// FUN_1050_2c17: a throw under gravity (FUN_1050_44da).
 pub const MOVE_THROW: u16 = 0x2c17;
+/// FUN_1050_2d37: a bouncing throw (FUN_1050_457e).
+pub const MOVE_BOUNCE: u16 = 0x2d37;
 /// FUN_1050_36a9: a running critter (FUN_1050_4622).
 pub const MOVE_CRITTER: u16 = 0x36a9;
 
@@ -107,8 +109,14 @@ pub struct Particles {
     pub p: Params,
     /// 1170:45b4: the particle being updated.
     pub current: usize,
-    /// 1170:45b0: the last one spawned.
+    /// 1170:45b0: the last one spawned (in `pending` when `last_pending`).
     pub last: usize,
+    last_pending: bool,
+    /// Spawns waiting for their frame (FUN_10a0_0161's event queue 1170:19d2), by due frame,
+    /// later ones after earlier ones with the same frame.
+    pub pending: Vec<(u32, Particle)>,
+    /// DAT_1170_617e, the level frame counter.
+    pub now: u32,
     /// 1170:45b6: cleared by a death effect that keeps its particle alive.
     keep_dying: bool,
     /// 1170:45b8: the side of the wall hit, 0/1 horizontal (1: moving right), 2 up, 3 down.
@@ -132,9 +140,6 @@ impl Particles {
     /// a new particle from the current parameters. `seq` is (steps, frames per step, animate)
     /// for 3de2 (lifetime steps * frames); 3f77 lives "forever" (0x7ffe frames).
     fn new_particle(&mut self, sprite: i32, y: i32, x: i32, seq: Option<(i32, i32, i32)>) -> usize {
-        if self.p.delay != 0 {
-            eprintln!("warning: delayed particle spawn (FUN_10a0_0161) not ported; spawning now");
-        }
         let p = self.p;
         let mut m = Obj::new(0, 0, 0x50);
         m.set(0, p.group);
@@ -181,11 +186,21 @@ impl Particles {
         m.set(0x4c, 0);
         m.set(0x4a, p.mover as i32);
         m.set(0x42, p.callback as i32);
-        self.list.push(Particle {
+        let particle = Particle {
             m,
             v: Obj::new(0, 0, 0x10),
-        });
+        };
+        if p.delay != 0 {
+            let due = self.now.wrapping_add(p.delay as u32);
+            let at = self.pending.iter().position(|(d, _)| due < *d).unwrap_or(self.pending.len());
+            self.pending.insert(at, (due, particle));
+            self.last = at;
+            self.last_pending = true;
+            return at;
+        }
+        self.list.push(particle);
         self.last = self.list.len() - 1;
+        self.last_pending = false;
         if p.on_spawn != 0 {
             eprintln!("warning: particle spawn effect {} not ported", p.on_spawn);
         }
@@ -200,9 +215,24 @@ impl Particles {
         self.new_particle(sprite, y, x, Some((steps, frames, animate)))
     }
 
-    fn last_mut(&mut self) -> &mut Particle {
+    pub fn last_mut(&mut self) -> &mut Particle {
         let i = self.last;
-        &mut self.list[i]
+        if self.last_pending {
+            &mut self.pending[i].1
+        } else {
+            &mut self.list[i]
+        }
+    }
+
+    /// FUN_10a0_023f at the start of a frame: the spawns that are due join the array.
+    pub fn release_due(&mut self) {
+        while self.pending.first().is_some_and(|(d, _)| *d <= self.now) {
+            let (_, p) = self.pending.remove(0);
+            if p.m.w(0x28) != 0 {
+                eprintln!("warning: particle spawn effect {} not ported", p.m.w(0x28));
+            }
+            self.list.push(p);
+        }
     }
 
     /// FUN_1050_43c0(speed, angle): fly straight; 1/16 px per frame per unit of speed. It starts
@@ -238,6 +268,12 @@ impl Particles {
         v.set(0xc, bounce);
         p.m.set(0x4e, 0x7fff);
         p.m.set(0x3c, p.m.w(0x3c) | 0x200);
+    }
+
+    /// FUN_1050_457e(gravity, speed, angle): a bouncing throw (FUN_1050_2d37).
+    pub fn bounce(&mut self, gravity: i32, speed: i32, angle: i32) {
+        self.throw(gravity, speed, angle);
+        self.last_mut().m.set(0x4a, MOVE_BOUNCE as i32);
     }
 
     /// FUN_1050_4622(gravity, speed, angle): a critter running along the floor. Its mover

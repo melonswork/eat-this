@@ -70,6 +70,11 @@ impl Camera {
         self.vertical.start(strength, amplitude);
     }
 
+    /// 1170:465e's test at the start of a frame: a vertical shake started last frame.
+    pub fn shake_started(&self) -> bool {
+        self.vertical.strength - 1 == self.vertical.count
+    }
+
     /// FUN_1050_5c7d.
     pub fn shake_sideways(&mut self, strength: i32, amplitude: i32) {
         self.horizontal.start(strength, amplitude);
