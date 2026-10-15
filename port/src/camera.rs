@@ -1,122 +1,229 @@
-//! The scrolling camera: where the view sits relative to Leon (`FUN_1088_0a3b` + `FUN_1088_087b` +
-//! `FUN_1088_0c82`). The camera trails a target that follows the hero with a dead zone of ±40 px
-//! horizontally and ±30 vertically, moves at most 15 px per frame, and stops at the map's edge (the
-//! `0xa75f` TileFunctionAt returns outside the map) and at "stop scrolling" tiles (function 7100).
-//!
-//! Not ported: the mouse look (DAT_4e4c/4e4e), the hero code's own nudges of the screen offset
-//! (hanging, climbing, DAT_4e34/36 changes in HeroUpdate), the shake (DAT_45c2) and the scripted
-//! camera positions (DAT_4ee0).
+//! The camera, as the original moves it every frame (GameFrameInGame): FUN_1088_0a3b (target and
+//! dead zone, mouse look, the grinder's scripted camera, horizontal shake) → FUN_1088_087b (at most
+//! 15 px a frame, never past a STOP tile or the map edge) → FUN_1088_099d (vertical shake) →
+//! FUN_1088_0c82 (move). LevelFirstFrame instead jumps straight to the target and clamps it to the
+//! sector (FUN_1088_06f3). Objects only update while their box meets the camera's rectangle, so
+//! this has to be exact; `--dump` compares it with the tracer.
 
-use crate::world::{OUTSIDE, World};
+use crate::world::{OUTSIDE, World, func};
 
 const SCREEN: (i32, i32) = (320, 200);
-const STOP_SCROLLING: u16 = 7100;
+/// Where on screen the hero rests (1170:4e34/4e36 drift back to this by 1 px a frame).
+const REST: (i32, i32) = (0xa0, 0x7d);
 
-pub struct Camera {
-    pub x: i32,
-    pub y: i32,
-    /// Where on screen the hero rests (DAT_4e34/4e36): drifts back to (0xa0, 0x7d) by 1 px a frame.
-    offset: (i32, i32),
-    /// The point the camera is heading for (DAT_4e38/4e3a).
-    target: (i32, i32),
+/// A shake (1170:45ba vertical, 45c2 horizontal): frames left, the starting count, the amount
+/// last applied, the amplitude.
+#[derive(Clone, Copy, Default)]
+struct Shake {
+    count: i32,
+    strength: i32,
+    amount: i32,
+    amplitude: i32,
 }
 
-/// Rounds `v` to the tile edge on the side the camera is moving from, with the original's 16-bit
-/// wrap (`(v as u16 >> 4) + (d < 0)) * 16 - probe`).
-fn snap(probe: i32, d: i32) -> i32 {
-    let v = (probe + d) as i16 as u16;
-    ((i32::from(v >> 4) + i32::from(d < 0)) * 16 - probe) as i16 as i32
+impl Shake {
+    /// ScreenShake (1050:5c4a) / FUN_1050_5c7d: a new shake wins unless the running one is
+    /// still bigger.
+    fn start(&mut self, strength: i32, amplitude: i32) {
+        if self.count < 1 || (self.amplitude * self.count) / self.strength <= amplitude {
+            self.amplitude = amplitude;
+            self.strength = strength;
+            self.count = strength;
+        }
+    }
+}
+
+pub struct Camera {
+    pub x: i32, // gCameraX
+    pub y: i32,
+    /// The hero's resting point on screen (4e34/4e36); the hero code nudges it.
+    pub offset: (i32, i32),
+    target: (i32, i32), // 4e38/4e3a
+    step: (i32, i32),   // 1af4/1af6: this frame's move
+    /// Mouse look (4e4c/4e4e): how far the mouse is past the screen edge.
+    pub look: (i32, i32),
+    vertical: Shake,
+    horizontal: Shake,
+    sin: Vec<i32>, // 1170:6bb8: round(sin(i / 16 deg) * 0x4000)
 }
 
 impl Camera {
-    /// LevelLoad's `FUN_1088_0c20`: the camera starts on its target, held inside the map.
-    pub fn new(world: &World, hero: (i32, i32)) -> Camera {
-        let offset = (0xa0, 0x7d);
-        let target = (hero.0 - offset.0, hero.1 - offset.1);
-        let (mw, mh) = world.pixel_size();
+    /// HeroReset's camera: at 0, the hero resting at (0xa0, 0x7d).
+    pub fn new() -> Camera {
         Camera {
-            x: target.0.clamp(0, (mw - SCREEN.0).max(0)),
-            y: target.1.clamp(0, (mh - SCREEN.1).max(0)),
-            offset,
-            target,
+            x: 0,
+            y: 0,
+            offset: REST,
+            target: (0, 0),
+            step: (0, 0),
+            look: (0, 0),
+            vertical: Shake::default(),
+            horizontal: Shake::default(),
+            sin: (0..5760)
+                .map(|i| ((i as f64 / 16.0).to_radians().sin() * 16384.0).round() as i32)
+                .collect(),
         }
     }
 
-    /// One frame, after the hero has moved.
-    pub fn update(&mut self, world: &World, hero: (i32, i32)) {
-        // FUN_1088_0a3b(1): the target keeps within a dead zone around the hero's resting point.
-        let follow = |hero: i32, off: i32, target: i32, zone: i32| {
-            let want = hero - off;
-            let d = want - target;
-            if d.abs() > zone { want - d.signum() * zone } else { target }
-        };
-        self.target.0 = follow(hero.0, self.offset.0, self.target.0, 0x28);
-        self.target.1 = follow(hero.1, self.offset.1, self.target.1, 0x1e);
-        self.offset.0 += (0xa0 - self.offset.0).signum();
-        self.offset.1 += (0x7d - self.offset.1).signum();
-        let mut dx = self.target.0 - self.x;
-        let mut dy = self.target.1 - self.y;
+    /// ScreenShake(strength, amplitude).
+    pub fn shake(&mut self, strength: i32, amplitude: i32) {
+        self.vertical.start(strength, amplitude);
+    }
 
-        // FUN_1088_087b: at most 15 px a frame, and not into stop tiles or off the map.
-        let stops = |f: u16| f == STOP_SCROLLING || f == OUTSIDE;
-        if dx != 0 {
-            let probe = if dx < 1 { self.x } else { self.x + SCREEN.0 };
-            dx = dx.clamp(-15, 15);
-            if stops(world.tile_function_at(hero.1, probe + dx)) {
-                dx = snap(probe, dx);
+    /// FUN_1050_5c7d.
+    pub fn shake_sideways(&mut self, strength: i32, amplitude: i32) {
+        self.horizontal.start(strength, amplitude);
+    }
+
+    /// LevelFirstFrame (1088:b4db): FUN_1088_0a3b(0), FUN_1088_06f3, FUN_1088_0c82.
+    pub fn first_frame(&mut self, world: &World, hero: (i32, i32), grinder: Option<(i32, i32)>) {
+        self.follow(hero, false, grinder);
+        self.sector_clamp(world, hero);
+        self.x += self.step.0;
+        self.y += self.step.1;
+    }
+
+    /// One frame of GameFrameInGame. `follow` is false while riding (DAT_1170_5127 == 1).
+    pub fn update(
+        &mut self,
+        world: &World,
+        hero: (i32, i32),
+        follow: bool,
+        grinder: Option<(i32, i32)>,
+    ) {
+        if follow {
+            self.follow(hero, true, grinder);
+        }
+        self.limit(world, hero);
+        // FUN_1088_099d: the vertical shake, then the limits again.
+        let v = &mut self.vertical;
+        if v.count < 1 {
+            v.amount = 0;
+        } else {
+            let i = pingpong(v.count, 4);
+            v.amount = (((3 - i) * v.amplitude * v.count) / v.strength) / 3;
+            self.step.1 -= v.amount;
+            v.count -= 1;
+        }
+        if self.vertical.count > 0 {
+            self.step.1 = Self::limit_axis(self.step.1, self.y, SCREEN.1, |p| {
+                world.tile_function_at(p, hero.0)
+            });
+        }
+        self.x += self.step.0;
+        self.y += self.step.1;
+    }
+
+    /// FUN_1088_0a3b: where the camera wants to be.
+    fn follow(&mut self, hero: (i32, i32), smooth: bool, grinder: Option<(i32, i32)>) {
+        match grinder {
+            Some((gy, offset)) => {
+                self.target = (0, gy - offset);
+            }
+            None => {
+                let want = (hero.0 - self.offset.0, hero.1 - self.offset.1);
+                let zone = |want: i32, target: i32, z: i32| {
+                    let d = want - target;
+                    if !smooth {
+                        want
+                    } else if d.abs() > z {
+                        want - d.signum() * z
+                    } else {
+                        target
+                    }
+                };
+                self.target = (
+                    zone(want.0, self.target.0, 0x28),
+                    zone(want.1, self.target.1, 0x1e),
+                );
+                if self.offset.0 != REST.0 {
+                    self.offset.0 += if REST.0 - self.offset.0 < 0 { -1 } else { 1 };
+                }
+                if self.offset.1 != REST.1 {
+                    self.offset.1 += if REST.1 - self.offset.1 < 0 { -1 } else { 1 };
+                }
+                let look = |look: i32, target: &mut i32, want: i32, z: i32| {
+                    if look != 0 {
+                        *target += look;
+                        if look < 0 {
+                            *target = (*target).max(want - z);
+                        } else {
+                            *target = (*target).min(want + z);
+                        }
+                    }
+                };
+                look(self.look.0, &mut self.target.0, want.0, 0x28);
+                look(self.look.1, &mut self.target.1, want.1, 0x1e);
             }
         }
-        if dy != 0 {
-            let probe = if dy < 1 { self.y } else { self.y + SCREEN.1 };
-            dy = dy.clamp(-15, 15);
-            if stops(world.tile_function_at(probe + dy, hero.0)) {
-                dy = snap(probe, dy);
+        self.step = (self.target.0 - self.x, self.target.1 - self.y);
+        let h = &mut self.horizontal;
+        if h.count > 0 {
+            let i = ((h.count * 0x400) % 0x1680) as usize;
+            let k = ((h.amplitude * h.count) as i16 as i32 / h.strength) / 3;
+            self.step.0 += (self.sin[i] * k) / 0x4000;
+            h.count -= 1;
+        }
+    }
+
+    /// FUN_1088_087b.
+    fn limit(&mut self, world: &World, hero: (i32, i32)) {
+        if self.step.0 != 0 {
+            self.step.0 = Self::limit_axis(self.step.0, self.x, SCREEN.0, |p| {
+                world.tile_function_at(hero.1, p)
+            });
+        }
+        if self.step.1 != 0 {
+            self.step.1 = Self::limit_axis(self.step.1, self.y, SCREEN.1, |p| {
+                world.tile_function_at(p, hero.0)
+            });
+        }
+    }
+
+    /// At most 15 px; a move into a STOP tile or off the map stops at the tile edge.
+    fn limit_axis(mut d: i32, pos: i32, screen: i32, f: impl Fn(i32) -> u16) -> i32 {
+        let edge = if d < 1 { pos } else { pos + screen };
+        d = d.clamp(-0xf, 0xf);
+        let v = f(edge + d);
+        if v == func::STOP || v == OUTSIDE {
+            d = ((((edge + d) as u16 >> 4) as i32) + (d < 0) as i32) * 0x10 - edge;
+        }
+        d
+    }
+
+    /// FUN_1088_06f3: keep the first view inside the hero's sector.
+    fn sector_clamp(&mut self, world: &World, hero: (i32, i32)) {
+        let stop = |v: u16| v == func::STOP || v == OUTSIDE;
+        let (hx, hy) = ((hero.0 as u16 >> 4) as i32, (hero.1 as u16 >> 4) as i32);
+        for c in ((self.x + self.step.0) >> 4)..=hx {
+            if stop(world.tile_function_at(hero.1, c << 4)) {
+                self.step.0 = (c + 1) * 16 - self.x;
             }
         }
-        self.x += dx;
-        self.y += dy;
+        let mut c = ((self.x + SCREEN.0 + self.step.0) as u16 >> 4) as i32;
+        while c >= hx {
+            if stop(world.tile_function_at(hero.1, c << 4)) {
+                self.step.0 = c * 16 - (self.x + SCREEN.0);
+            }
+            c -= 1;
+        }
+        for r in ((self.y + self.step.1) >> 4)..=hy {
+            if stop(world.tile_function_at(r << 4, hero.0)) {
+                self.step.1 = (r + 1) * 16 - self.y;
+            }
+        }
+        let mut r = ((self.y + SCREEN.1 + self.step.1) as u16 >> 4) as i32;
+        while r >= hy {
+            if stop(world.tile_function_at(r << 4, hero.0)) {
+                self.step.1 = r * 16 - (self.y + SCREEN.1);
+            }
+            r -= 1;
+        }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn snap_stops_at_the_tile_edge() {
-        // moving left: round down to a tile edge and add a tile, as the original does
-        assert_eq!(snap(100, -3), 112 - 100);
-        // moving right: round down
-        assert_eq!(snap(420, 5), 416 - 420);
-        // off the left edge of the map: back to 0
-        assert_eq!(snap(4, -9), -4);
-    }
-
-    /// Feeds the original's hero positions (tools/dumpframe.py --camera-trace) to the camera and
-    /// compares with the camera the original drew with. Needs the CD and the trace:
-    ///   cargo test --release -- --ignored camera_follows
-    #[test]
-    #[ignore]
-    fn camera_follows_the_original() {
-        let map = "../work/cd/BIN/MAPS/CITY01.MAP";
-        let trace = std::fs::read_to_string("../work/frames/CITY01/cam.tsv").unwrap();
-        let world = World::load(std::path::Path::new(map), std::path::Path::new("../work/cd/BIN/TILES")).unwrap();
-        let rows: Vec<Vec<i32>> = trace
-            .lines()
-            .map(|l| l.split(' ').map(|v| v.parse().unwrap()).collect())
-            .filter(|r: &Vec<i32>| r[0] >= 1)
-            .collect();
-        let mut cam = Camera::new(&world, (rows[0][3], rows[0][4]));
-        let (mut bad, mut first) = (0, None);
-        for (i, r) in rows.iter().enumerate() {
-            cam.update(&world, (r[3], r[4]));
-            if (cam.x, cam.y) != (r[1], r[2]) {
-                bad += 1;
-                first.get_or_insert((i, (cam.x, cam.y), (r[1], r[2])));
-                if bad < 40 { println!("frame {} hero {:?} ours {:?} original {:?}", r[0], (r[3], r[4]), (cam.x, cam.y), (r[1], r[2])); }
-            }
-        }
-        println!("{bad} of {} frames differ; first {first:?}", rows.len());
-        assert!(bad * 10 < rows.len());
-    }
+/// FUN_10f0_1317(t, 1, 1, n).
+fn pingpong(t: i32, n: i32) -> i32 {
+    let v = (t % (n * 2 - 2) - n) + 1;
+    (n - 1) - v.abs()
 }

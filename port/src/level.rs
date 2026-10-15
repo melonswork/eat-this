@@ -38,6 +38,8 @@ pub struct Effects {
     pub damage_hero: Vec<i32>,
     pub grinder_platform: Option<usize>,
     pub grinder_slow: bool,
+    /// ScreenShake calls (strength, amplitude), in order.
+    pub shakes: Vec<(i32, i32)>,
 }
 
 pub struct Level {
@@ -609,6 +611,7 @@ impl Level {
             // The crunch sound's pitch, drawn when it is audible (always so far: the camera
             // follows the grinder).
             rng.random(0x50);
+            fx.shakes.push((0x18, 10));
         }
         hit_hero
     }

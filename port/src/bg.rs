@@ -34,9 +34,21 @@ fn copy_row(fb: &mut [u8], pic: &Picture, y: usize, shift: usize) {
 
 impl Background {
     fn sprite(&self, slot: usize, n: usize, fb: &mut [u8], x: i32, y: i32) {
-        let Some(Some(g)) = self.groups.get(slot) else { return };
-        let Some(Some(s)) = g.sprites.get(n) else { return };
-        blit(fb, &s.pixels, s.width, s.height, x + s.hotspot.0, y + s.hotspot.1, false);
+        let Some(Some(g)) = self.groups.get(slot) else {
+            return;
+        };
+        let Some(Some(s)) = g.sprites.get(n) else {
+            return;
+        };
+        blit(
+            fb,
+            &s.pixels,
+            s.width,
+            s.height,
+            x + s.hotspot.0,
+            y + s.hotspot.1,
+            false,
+        );
     }
 
     /// Draw mode 0x30: each pixel is blended with what is under it through the PalMix table.
@@ -44,7 +56,9 @@ impl Background {
         let (Some(mix), Some(Some(g))) = (&self.mix, self.groups.get(slot)) else {
             return self.sprite(slot, n, fb, x, y);
         };
-        let Some(Some(s)) = g.sprites.get(n) else { return };
+        let Some(Some(s)) = g.sprites.get(n) else {
+            return;
+        };
         for sy in 0..s.height {
             for sx in 0..s.width {
                 let src = s.pixels[(sy * s.width + sx) as usize];

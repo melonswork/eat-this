@@ -52,7 +52,10 @@ mod tests {
     #[test]
     fn begin_end_loops() {
         let r = rec(1, 3, 8, 5, 0); // SV008 tile 6: frames 5..7, 8 game frames each
-        let seq: Vec<u8> = [0, 7, 8, 16, 23, 24, 25].iter().map(|&f| tile(&r, 6, f)).collect();
+        let seq: Vec<u8> = [0, 7, 8, 16, 23, 24, 25]
+            .iter()
+            .map(|&f| tile(&r, 6, f))
+            .collect();
         assert_eq!(seq, [5, 5, 6, 7, 7, 5, 5]);
     }
 

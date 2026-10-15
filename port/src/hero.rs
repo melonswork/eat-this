@@ -71,8 +71,10 @@ pub struct Hero {
     input_cache: [i8; 9],
     pub height: i32,
     half_width: i32,
-    /// Screen shake requested this frame: (strength, duration).
-    pub shake: Option<(i32, i32)>,
+    /// ScreenShake calls made this frame, in order: (strength, amplitude).
+    pub shakes: Vec<(i32, i32)>,
+    /// Changes to the camera's resting point (1170:4e34/4e36) made this frame.
+    pub cam_nudge: (i32, i32),
 }
 
 impl Hero {
@@ -115,7 +117,8 @@ impl Hero {
             input_cache: [0; 9],
             height: HEIGHT,
             half_width: 6,
-            shake: None,
+            shakes: Vec::new(),
+            cam_nudge: (0, 0),
         }
     }
 
@@ -181,7 +184,8 @@ impl Hero {
         self.prev_state = self.state;
         self.half_width = 6;
         self.height = HEIGHT - (self.ground == 1) as i32;
-        self.shake = None;
+        self.shakes.clear();
+        self.cam_nudge = (0, 0);
         let mut friction = true;
         let mut walking = false;
         let (mut dx, mut dy) = (std::mem::take(&mut self.nudge), 0);
@@ -243,6 +247,8 @@ impl Hero {
         if self.state == CROUCH {
             if self.crouch < 8 {
                 self.crouch = (self.crouch + 1).abs();
+            } else if self.ground != 0x15 {
+                self.half_width = 9;
             }
             self.frame = self.crouch + 0xa0;
             let ix = self.facing * self.half_width + self.x;
@@ -309,13 +315,21 @@ impl Hero {
         }
 
         if held(UP) && self.released[UP] && self.state == GROUND {
-            let vy = if self.prev_state == CROUCH {
-                -(self.crouch_max >> 1) - 0x32
-            } else {
-                -0x32
-            };
-            self.start_jump(vy, JUMP);
-            self.released[UP] = false;
+            // Reach for a ledge above first (FUN_1088_3e0d), else jump.
+            let (ndx, ndy) = self.grab_ledge(w, lv, self.y - 0x30, dx, dy);
+            (dx, dy) = (ndx, ndy);
+            if self.state != LEDGE {
+                let mut vy = if self.prev_state == CROUCH {
+                    -(self.crouch_max >> 1) - 0x32
+                } else {
+                    -0x32
+                };
+                if self.ground == 0x17 {
+                    vy = (vy << 3) / 7;
+                }
+                self.start_jump(vy, JUMP);
+                self.released[UP] = false;
+            }
         }
 
         if self.state == GROUND && (held(LEFT) || held(RIGHT)) {
@@ -356,6 +370,7 @@ impl Hero {
             if self.state_before_jump < 1 {
                 if self.state < 0x10 {
                     dy -= 8;
+                    self.cam_nudge.1 -= 8;
                 }
                 self.state_before_jump = 1;
             }
@@ -419,7 +434,7 @@ impl Hero {
             self.state = KNOCKED_DOWN;
             self.anim = ((d - FATAL_FALL) >> 1) + 100;
             self.anim = self.anim.min(0xaa);
-            self.shake = Some((0x18, 0xe));
+            self.shakes.push((0x18, 0xe));
             return;
         }
         let p = if w.solidity_at(self.y - 0x20, self.facing * self.half_width + self.x)
@@ -441,7 +456,7 @@ impl Hero {
             self.crouch = p;
         }
         if d > 0x60 {
-            self.shake = Some((8, (d / 0x10 - 4).min(8)));
+            self.shakes.push((8, (d / 0x10 - 4).min(8)));
         }
     }
 
@@ -887,10 +902,11 @@ impl Hero {
             return (dx, dy);
         }
         if self.state > 0 {
-            self.shake = Some((8, 3));
+            self.shakes.push((8, 3));
         }
         self.vy = ON_GROUND_VY;
         self.state = LEDGE;
+        self.cam_nudge.1 += self.hang_y - self.y;
         self.y = self.hang_y;
         self.x = hx;
         self.half_width = 6;
@@ -901,7 +917,7 @@ impl Hero {
             if self.fall < 0x40 {
                 self.released[UP] = true;
             } else {
-                self.shake = Some((0xc, 6));
+                self.shakes.push((0xc, 6));
             }
             self.anim = 0x37;
         } else {
@@ -991,6 +1007,8 @@ impl Hero {
         } else {
             dx = self.facing * 0xc;
             self.y -= 6;
+            self.cam_nudge.0 += dx;
+            self.cam_nudge.1 -= 6;
             self.ground = 9;
             self.crouch_down();
             self.crouch = 8;

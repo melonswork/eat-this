@@ -277,7 +277,9 @@ mod tests {
 
     #[test]
     fn script_keys() {
-        let s = Script::parse("' Foreground colors\nForegroundColors=175\nBackground=citybac.lbm\n'Background=x.lbm\n");
+        let s = Script::parse(
+            "' Foreground colors\nForegroundColors=175\nBackground=citybac.lbm\n'Background=x.lbm\n",
+        );
         assert_eq!(s.foreground_colors, Some(175));
         assert_eq!(s.background.as_deref(), Some("citybac.lbm"));
     }
@@ -285,9 +287,14 @@ mod tests {
 
 /// `PALS/*.MIX`: result colour of drawing colour `src` over colour `dst`, as a 256x256 table.
 pub fn load_palmix(path: &Path) -> io::Result<Vec<u8>> {
-    let t = Archive::open(path)?.get("PALMIX").ok_or_else(|| missing("PALMIX"))?;
+    let t = Archive::open(path)?
+        .get("PALMIX")
+        .ok_or_else(|| missing("PALMIX"))?;
     if t.len() != 256 * 256 {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "PALMIX is not 256x256"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "PALMIX is not 256x256",
+        ));
     }
     Ok(t)
 }

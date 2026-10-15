@@ -91,6 +91,8 @@ def main():
     ap.add_argument("--pre-seed", type=lambda x: int(x, 0), help="RandSeed for HeroReset's four draws before DemoLoad zeroes it")
     ap.add_argument("--ini", action="append", default=[], metavar="KEY=VALUE", help="EatThis.ini setting, e.g. GameDetail=4")
     ap.add_argument("--watch", default="", help="comma-separated globals (names from re/names.csv or 1170:xxxx) to log as i16 at the start of every game frame into watch.tsv")
+    ap.add_argument("--dump-mem", action="append", default=[], metavar="SEL:OFF:LEN", help="hex-dump memory into mem_SEL_OFF.bin when the demo starts (DemoLoad), e.g. 1170:07b2:400")
+    ap.add_argument("--entry", action="append", default=[], metavar="NAME|SEL:OFF", help="log every entry into this function with the frame and its callers (BP chain) into entries.txt")
     ap.add_argument("--platforms", action="store_true", help="log the first 0x40 bytes (as i16) of every platform (gPlatforms, 1170:4662) at the start of every game frame into platforms.tsv")
     ap.add_argument("--writes", default="", help="comma-separated globals; log every write to them (frame, CS:IP, function, new value) into writes.tsv")
     ap.add_argument("-v", "--verbose", action="store_true", help="log file opens and Windows calls")
@@ -167,6 +169,10 @@ def main():
 
     def on_demo_load(e):
         st.update(started=True, frame=0, played=0, window=1, calls=[])
+        for spec in o.dump_mem:
+            sel, off, ln = (int(v, 16) for v in spec.split(":"))
+            data = bytes(e.rb(sel, off, ln))
+            (out / f"mem_{sel:04x}_{off:04x}.bin").write_bytes(data)
 
     def on_play_frame(e):
         # The recorder (DemoRecordFrame 1098:04ec) samples on the level frame counter
@@ -244,6 +250,30 @@ def main():
         for _, a in writes:
             emu.uc.hook_add(UC_HOOK_MEM_WRITE, on_write, begin=base + a, end=base + a + 1)
 
+    entries_f = open(out / "entries.txt", "w") if o.entry else None
+    for spec in o.entry:
+        if ":" in spec:
+            sel, off = (int(v, 16) for v in spec.split(":"))
+        else:
+            sel, off = (int(v, 16) for v in names[spec].split(":"))
+
+        def on_entry(e, spec=spec):
+            if not st["started"]:
+                return
+            ss, sp, bp = e["ss"], e["sp"], e["bp"]
+            # At entry the return address is on top: try far (ip, cs) first.
+            ip, cs = e.rw(ss, sp), e.rw(ss, sp + 2)
+            chain = [syms.name(cs, ip - 5) if 0x1000 <= cs < 0x1170 else syms.name(e["cs"], ip - 3)]
+            for _ in range(8):
+                if not bp:
+                    break
+                ip, cs = e.rw(ss, bp + 2), e.rw(ss, bp + 4)
+                chain.append(syms.name(cs, ip - 5) if 0x1000 <= cs < 0x1170 else syms.name(e["cs"], ip - 3) + "?")
+                bp = e.rw(ss, bp)
+            entries_f.write(f"{st['frame']}\t{spec}\t" + " <- ".join(chain) + "\n")
+
+        emu.hook(sel, off, on_entry)
+
     t = time.time()
     emu.run()
     calls_f.close()
@@ -253,6 +283,8 @@ def main():
         writes_f.close()
     if plat_f:
         plat_f.close()
+    if entries_f:
+        entries_f.close()
     why =st["done"] or emu.error or "stopped"
     print(f"{why}; {st['played']} demo frames, {len(st['windows'])} windows in {time.time() - t:.1f} s")
     if st["calls"]:

@@ -100,7 +100,8 @@ impl Picture {
                 for x in 0..w {
                     let bit = 7 - (x & 7);
                     pixels.push(
-                        (0..planes).fold(0u8, |v, p| v | (row[p * stride + (x >> 3)] >> bit & 1) << p),
+                        (0..planes)
+                            .fold(0u8, |v, p| v | (row[p * stride + (x >> 3)] >> bit & 1) << p),
                     );
                 }
             } else {

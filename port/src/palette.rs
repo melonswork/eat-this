@@ -41,7 +41,11 @@ impl LevelPalette {
         let mut best = (i64::MAX, 0);
         for i in free {
             let p = self.colors[i];
-            let (dr, dg, db) = (r - i64::from(p[0]), g - i64::from(p[1]), b - i64::from(p[2]));
+            let (dr, dg, db) = (
+                r - i64::from(p[0]),
+                g - i64::from(p[1]),
+                b - i64::from(p[2]),
+            );
             let rg = dr * dr + dg * dg;
             let d = rg * rg + db * db * db * db;
             if d < best.0 {
@@ -62,7 +66,11 @@ impl LevelPalette {
         let fg = self.foreground + 1..=255;
         for c in 1..=255usize {
             if used[c] {
-                let range = if c <= boundary { bg.clone() } else { fg.clone() };
+                let range = if c <= boundary {
+                    bg.clone()
+                } else {
+                    fg.clone()
+                };
                 t[c] = self.nearest(pal[c], range);
             }
         }

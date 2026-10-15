@@ -151,12 +151,15 @@ impl Game {
         if let (Some(g), Some(i)) = (level.grinder.as_mut(), fx.grinder_platform) {
             g.platform = Some(i);
         }
+        let mut camera = Camera::new();
+        let grinder = level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
         let cam = world.sectors[sector].cam;
         hero.facing = if hero.x - cam.0 < cam.2 - hero.x {
             1
         } else {
             -1
         };
+        camera.first_frame(&world, (hero.x, hero.y), grinder);
         // LevelInit calls Randomize unless a demo plays; DemoLoad zeroes RandSeed.
         let seed = if demo.is_some() {
             0
@@ -166,7 +169,7 @@ impl Game {
                 .map_or(1, |d| d.as_secs() as u32)
         };
         Game {
-            camera: Camera::new(&world, (hero.x, hero.y)),
+            camera,
             world,
             level,
             hero,
@@ -187,7 +190,18 @@ impl Game {
         self.level.update_platforms(&mut self.world);
         let input = match &self.demo {
             Some(d) => {
-                let (k, _mouse) = d.input(self.frame);
+                let (k, mouse) = d.input(self.frame);
+                // FUN_1088_4340: the mouse past the screen edge looks around.
+                let look = |m: i32, max: i32| {
+                    if m < 0 {
+                        m
+                    } else if m <= max {
+                        0
+                    } else {
+                        m - max
+                    }
+                };
+                self.camera.look = (look(mouse.0 as i32, 0x13f), look(mouse.1 as i32, 199));
                 // DemoRecordFrame tests the level frame counter, which GameFrameInGame bumps at
                 // its very end: CHECK[k] is RandSeed at this input read of 0-based frame 35k.
                 if self.frame % CHECK_PERIOD == 0 {
@@ -204,13 +218,24 @@ impl Game {
             self.level
                 .touch_sensitive(&mut self.world, ty, tx, &mut self.rng, &mut fx);
         }
-        // The level's foreground procedure ((*DAT_1170_4c36)()): the grinder in GRINDER. The
-        // camera follows it at x 0 (FUN_1088_0a3b); a general camera isn't ported.
+        // After HeroUpdate: its camera nudges and shakes, then FUN_1088_0a3b(1) .. FUN_1088_0c82.
+        self.camera.offset.0 += self.hero.cam_nudge.0;
+        self.camera.offset.1 += self.hero.cam_nudge.1;
+        for &(a, b) in &self.hero.shakes {
+            self.camera.shake(a, b);
+        }
+        let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
+        self.camera
+            .update(&self.world, (self.hero.x, self.hero.y), true, grinder);
+        // The level's foreground procedure ((*DAT_1170_4c36)()) runs last: the grinder in GRINDER.
         let h = &self.hero;
         let hero = (h.x, h.y, h.crouch_level(), false);
+        let cam_x = self.camera.x;
         self.level
-            .update_grinder(&mut self.world, hero, 0, &mut self.rng, &mut fx);
-        self.camera.update(&self.world, (self.hero.x, self.hero.y));
+            .update_grinder(&mut self.world, hero, cam_x, &mut self.rng, &mut fx);
+        for &(a, b) in &fx.shakes {
+            self.camera.shake(a, b);
+        }
         self.frame += 1;
     }
 
@@ -304,7 +329,12 @@ impl Graphics {
             Some(p) => p.palette,
             None => {
                 // No picture: borrow the first tile group's palette.
-                let g = world.groups.iter().flatten().next().ok_or("map has no tile groups")?;
+                let g = world
+                    .groups
+                    .iter()
+                    .flatten()
+                    .next()
+                    .ok_or("map has no tile groups")?;
                 g.palette.map(|c| c.map(|v| v >> 2))
             }
         };
@@ -326,7 +356,8 @@ impl Graphics {
             .unwrap_or_default()
             .iter()
             .map(|name| {
-                let mut g = find_ci(&data.join("SPRITES"), name).and_then(|p| SpriteGroup::load(&p).ok());
+                let mut g =
+                    find_ci(&data.join("SPRITES"), name).and_then(|p| SpriteGroup::load(&p).ok());
                 if let Some(g) = &mut g {
                     g.fit_to(&level);
                 }
@@ -413,15 +444,7 @@ impl Graphics {
                         (cell & 0xff) as u8,
                         frame,
                     );
-                    blit(
-                        fb,
-                        group.tile(t as usize),
-                        TILE,
-                        TILE,
-                        sx,
-                        sy,
-                        false,
-                    );
+                    blit(fb, group.tile(t as usize), TILE, TILE, sx, sy, false);
                 }
             }
         }
@@ -475,7 +498,7 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) 
     if let Some(f) = dump.as_mut() {
         writeln!(
             f,
-            "frame\t{}\t1170:4ee0\t1170:4eea",
+            "frame\t{}\t1170:4ee0\t1170:4eea\tgCameraX\tgCameraY",
             Hero::WATCH.replace(',', "\t")
         )
         .unwrap();
@@ -490,7 +513,16 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) 
                 .grinder
                 .as_ref()
                 .map_or((0x7fff, -1), |g| (g.y, g.speed));
-            writeln!(f, "{count}\t{}\t{}\t{}", v.join("\t"), g.0, g.1).unwrap();
+            writeln!(
+                f,
+                "{count}\t{}\t{}\t{}\t{}\t{}",
+                v.join("\t"),
+                g.0,
+                g.1,
+                game.camera.x,
+                game.camera.y
+            )
+            .unwrap();
         }
         let traced = trace.is_some_and(|(a, b)| (a..=b).contains(&count));
         let before = game.rng.calls();
