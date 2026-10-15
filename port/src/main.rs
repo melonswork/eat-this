@@ -9,12 +9,16 @@ mod archive;
 mod data;
 mod demo;
 mod hero;
+mod palette;
+mod picture;
 mod rng;
 mod world;
 
-use data::{Palette, SpriteGroup, TILE};
+use data::{Palette, Script, SpriteGroup, TILE};
 use demo::{CHECK_PERIOD, Demo};
 use hero::Hero;
+use palette::{DEFAULT_FOREGROUND, LevelPalette};
+use picture::Picture;
 use rng::{PascalRandom, steps_between};
 use std::{
     error::Error,
@@ -35,6 +39,7 @@ struct Options {
     scale: u32,
     shot: Option<(u32, PathBuf)>,
     trace: Option<(u32, u32)>,
+    camera: Option<(i32, i32)>,
 }
 
 fn options() -> Result<Options, String> {
@@ -46,6 +51,7 @@ fn options() -> Result<Options, String> {
         scale: 3,
         shot: None,
         trace: None,
+        camera: None,
     };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -59,6 +65,10 @@ fn options() -> Result<Options, String> {
             "--trace" => {
                 let from = value()?.parse().map_err(|e| format!("--trace FROM TO: {e}"))?;
                 o.trace = Some((from, value()?.parse().map_err(|e| format!("--trace FROM TO: {e}"))?));
+            }
+            "--camera" => {
+                let x = value()?.parse().map_err(|e| format!("--camera X Y: {e}"))?;
+                o.camera = Some((x, value()?.parse().map_err(|e| format!("--camera X Y: {e}"))?));
             }
             "--shot" => {
                 let frame = value()?.parse().map_err(|e| format!("--shot FRAME FILE.ppm: {e}"))?;
@@ -202,46 +212,87 @@ impl Game {
     }
 }
 
-/// Every .TIL and .SPR carries its own 256-colour palette. The original remaps them into one
-/// level palette at load time (USED CLRS); until that is ported, each layer is drawn in its own
-/// colours into an RGB frame.
+/// Finds `name` in `dir` ignoring case (the script says `citybac.lbm`, the CD has `CITYBAC.LBM`).
+fn find_ci(dir: &Path, name: &str) -> Option<PathBuf> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| {
+            p.file_name()
+                .is_some_and(|f| f.to_string_lossy().eq_ignore_ascii_case(name))
+        })
+}
+
+/// The frame is one 320x200 indexed buffer and the level has one palette, as in the original:
+/// tiles and the background picture are drawn as they are, sprites are fitted into the palette
+/// when they load (palette.rs). `present` turns the indices into RGB.
 struct Graphics {
-    sky: [u8; 3],
+    /// Debug: fixed camera position (--camera X Y) instead of following the hero.
+    camera: Option<(i32, i32)>,
+    palette: Palette,
     hero: Vec<SpriteGroup>,
-    hero_palette: Palette,
 }
 
 impl Graphics {
-    fn load(data: &Path, world: &World) -> Result<Graphics, Box<dyn Error>> {
-        let hero: Vec<SpriteGroup> = ["PPHERO.SPR", "PPHERO2.SPR", "PPHERO3.SPR"]
+    fn load(data: &Path, world: &World, map_path: &Path) -> Result<Graphics, Box<dyn Error>> {
+        // The script holds ForegroundColors and names the background; a map without one gets
+        // the map's own background slot and the default split.
+        let script = find_ci(map_path.parent().unwrap_or(Path::new(".")), &{
+            let mut n = map_path.file_stem().unwrap_or_default().to_os_string();
+            n.push(".SCR");
+            n.to_string_lossy().into_owned()
+        })
+        .and_then(|p| std::fs::read(p).ok())
+        .map(|t| Script::parse(&String::from_utf8_lossy(&t)));
+        let background = script
+            .as_ref()
+            .and_then(|s| s.background.clone())
+            .unwrap_or_else(|| world.map.background.clone());
+        let picture = find_ci(&data.join("PICTURES"), &background)
+            .map(|p| Picture::load(&p))
+            .transpose()?;
+        let colors = match &picture {
+            Some(p) => p.palette,
+            None => {
+                // No picture: borrow the first tile group's palette.
+                let g = world.groups.iter().flatten().next().ok_or("map has no tile groups")?;
+                g.palette.map(|c| c.map(|v| v >> 2))
+            }
+        };
+        let level = LevelPalette {
+            colors,
+            foreground: script
+                .and_then(|s| s.foreground_colors)
+                .unwrap_or(DEFAULT_FOREGROUND),
+        };
+        let mut hero: Vec<SpriteGroup> = ["PPHERO.SPR", "PPHERO2.SPR", "PPHERO3.SPR"]
             .iter()
             .map(|f| SpriteGroup::load(&data.join("SPRITES").join(f)))
             .collect::<Result<_, _>>()?;
-        let sky = world
-            .groups
-            .iter()
-            .flatten()
-            .next()
-            .ok_or("map has no tile groups")?
-            .palette[0];
-        let hero_palette = hero
-            .iter()
-            .find_map(|g| g.palette)
-            .ok_or("hero sprites have no palette")?;
+        for g in &mut hero {
+            g.fit_to(&level);
+        }
         Ok(Graphics {
-            sky,
+            camera: None,
+            palette: level.rgb(),
             hero,
-            hero_palette,
         })
     }
 
-    fn draw(&self, g: &Game, fb: &mut [u8]) {
-        for px in fb.chunks_exact_mut(3) {
-            px.copy_from_slice(&self.sky);
+    /// Indexed frame -> RGB24.
+    fn present(&self, fb: &[u8], rgb: &mut [u8]) {
+        for (px, &i) in rgb.chunks_exact_mut(3).zip(fb) {
+            px.copy_from_slice(&self.palette[i as usize]);
         }
+    }
+
+    fn draw(&self, g: &Game, fb: &mut [u8]) {
+        fb.fill(0);
         let (mw, mh) = g.world.pixel_size();
-        let cam_x = (g.hero.x - W / 2).clamp(0, (mw - W).max(0));
-        let cam_y = (g.hero.y - H / 2 - 20).clamp(0, (mh - H).max(0));
+        let (cam_x, cam_y) = self.camera.unwrap_or((
+            (g.hero.x - W / 2).clamp(0, (mw - W).max(0)),
+            (g.hero.y - H / 2 - 20).clamp(0, (mh - H).max(0)),
+        ));
         let map = &g.world.map;
         for plane in [0, MAIN_PLANE] {
             for ty in cam_y / TILE..=(cam_y + H) / TILE {
@@ -262,7 +313,6 @@ impl Graphics {
                     }
                     blit(
                         fb,
-                        &group.palette,
                         group.tile((cell & 0xff) as usize),
                         TILE,
                         TILE,
@@ -287,7 +337,6 @@ impl Graphics {
             };
             blit(
                 fb,
-                &self.hero_palette,
                 &s.pixels,
                 s.width,
                 s.height,
@@ -299,8 +348,8 @@ impl Graphics {
     }
 }
 
-/// Draws indexed pixels (0 = transparent) into the RGB frame.
-fn blit(fb: &mut [u8], pal: &Palette, px: &[u8], w: i32, h: i32, x0: i32, y0: i32, flip: bool) {
+/// Draws indexed pixels (0 = transparent) into the indexed frame.
+fn blit(fb: &mut [u8], px: &[u8], w: i32, h: i32, x0: i32, y0: i32, flip: bool) {
     for y in 0..h {
         let sy = y0 + y;
         if !(0..H).contains(&sy) {
@@ -310,8 +359,7 @@ fn blit(fb: &mut [u8], pal: &Palette, px: &[u8], w: i32, h: i32, x0: i32, y0: i3
             let sx = x0 + x;
             let c = px[(y * w + if flip { w - 1 - x } else { x }) as usize];
             if c != 0 && (0..W).contains(&sx) {
-                let at = (sy * W + sx) as usize * 3;
-                fb[at..at + 3].copy_from_slice(&pal[c as usize]);
+                fb[(sy * W + sx) as usize] = c;
             }
         }
     }
@@ -382,7 +430,8 @@ fn run_window(mut game: Game, gfx: Graphics, scale: u32) -> Result<(), Box<dyn E
     let tc = canvas.texture_creator();
     let mut tex = tc.create_texture_streaming(PixelFormatEnum::RGB24, W as u32, H as u32)?;
     let mut events = sdl.event_pump()?;
-    let mut fb = vec![0u8; (W * H * 3) as usize];
+    let mut fb = vec![0u8; (W * H) as usize];
+    let mut rgb = vec![0u8; (W * H * 3) as usize];
     let mut counters = [-1i8; 9];
     // gKeyMap defaults: arrows, Insert (LeftShoot), Space (RightShoot), Tab (SwitchWeapon).
     let keymap = [
@@ -421,7 +470,8 @@ fn run_window(mut game: Game, gfx: Graphics, scale: u32) -> Result<(), Box<dyn E
             next += tick;
         }
         gfx.draw(&game, &mut fb);
-        tex.update(None, &fb, W as usize * 3)?;
+        gfx.present(&fb, &mut rgb);
+        tex.update(None, &rgb, W as usize * 3)?;
         canvas.copy(&tex, None, None)?;
         canvas.present();
         let title = match &game.demo {
@@ -444,10 +494,12 @@ fn screenshot(mut game: Game, gfx: &Graphics, frames: u32, path: &Path) -> std::
     for _ in 0..frames {
         game.step([-1; 9]);
     }
-    let mut fb = vec![0u8; (W * H * 3) as usize];
+    let mut fb = vec![0u8; (W * H) as usize];
     gfx.draw(&game, &mut fb);
+    let mut rgb = vec![0u8; (W * H * 3) as usize];
+    gfx.present(&fb, &mut rgb);
     let mut out = format!("P6\n{W} {H}\n255\n").into_bytes();
-    out.extend(&fb);
+    out.extend(&rgb);
     std::fs::write(path, out)
 }
 
@@ -472,7 +524,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         run_headless(game, o.trace);
         return Ok(());
     }
-    let gfx = Graphics::load(&o.data, &game.world)?;
+    let mut gfx = Graphics::load(&o.data, &game.world, &map_path)?;
+    gfx.camera = o.camera;
     if let Some((frames, path)) = &o.shot {
         return Ok(screenshot(game, &gfx, *frames, path)?);
     }

@@ -20,12 +20,33 @@ at 70 frames per second, the VGA refresh rate it was designed for.
 | module | from |
 |---|---|
 | `archive.rs` | Image Line archives + LZW (1108:00d6) |
-| `data.rs` | palettes, `.TIL`, `.SPR`, `.MAP` (start position from the map header, as `LevelLoad` does) |
+| `data.rs` | `.TIL`, `.SPR`, `.MAP` (start position from the map header, as `LevelLoad` does), the few `.SCR` keys used |
+| `palette.rs` | the level palette and the sprite remap (`FUN_10f0_1970`) |
+| `picture.rs` | IFF `.LBM` pictures (PBM and ILBM, ByteRun1) |
 | `world.rs` | `TileSolidityAt` / `TileFunctionAt` on the main plane, `0xa75f` outside the map |
 | `rng.rs` | Borland Pascal `Random` (the LCG the demos' CHECK entries sample) |
 | `demo.rs` | `.REC` playback: key runs, mouse runs, CHECK |
 | `hero.rs` | Leon per [re/hero.md](../re/hero.md): stand, walk (accelerate to 7, `|vx|/4+1` px), jump (−50, +3/+10 gravity, cap 50), fall, crouch, the landing table, knocked down after 0x120 px; walls, ceilings and floors |
 | `main.rs` | 70 Hz loop, `KeyPoll` counters, 320×200 frame scaled by SDL, demo player, headless checker, PPM screenshots |
+
+## Graphics
+
+The frame is one 320×200 indexed buffer with one palette, like the original's. The level palette is
+the CMAP of the picture named by the script's `Background=` (8-bit in the file, the game keeps
+the top 6 bits); `ForegroundColors=N` splits it into background colours 1..=N and foreground colours
+N+1..=255 (208 without the key). **Tiles are authored in that palette and are drawn raw** (the
+`PALETTE` inside a `.TIL` is just the editor's copy; where it differs, e.g. SVEN3's magenta marker
+colours, the level's wins). **Sprite groups are remapped at load**: each colour marked in `USED CLRS`
+becomes the nearest level colour, colours up to the header's boundary word (SPR-HEADER word 5: 255
+for most groups, 175 or 0 for some) from the background range, the others from the foreground range.
+The metric is `(dr²+dg²)² + db⁴` on 6-bit values, first minimum wins (`FUN_10f0_6039`).
+Verified against the original: `tools/dumpframe.py` runs it under the emulator and dumps its frame
+buffer and palette; on CITY01 (demo frame 300, same camera) 89 % of the port's non-black pixels equal
+the original's index for index, the rest being the missing background, objects, lights and a few
+tiles the original doesn't draw (the `60308` "dumpster" tiles).
+Not verified: the remap against a frame with a sprite group other than Leon's, and PalMix/light
+tables (the `.MIX`/`.LIT` shading) which are not ported. `--camera X Y` fixes the camera for
+comparisons.
 
 ## Determinism check
 
@@ -49,7 +70,5 @@ factory and objects), which isn't ported.
 
 - Ladders, pipes, ledges, slopes and stairs, moving platforms. In the CITY01 demo Leon gets
   stuck at the first staircase.
-- The level palette. Every `.TIL`/`.SPR` has its own palette and the original remaps them into
-  one per level; for now each layer is drawn in its own colours.
 - Background picture (`.LBM`), animated tiles, map objects, enemies, weapons, sound, CD music,
   the level script (`.SCR`), menus.
