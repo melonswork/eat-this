@@ -11,6 +11,8 @@ mod camera;
 mod data;
 mod demo;
 mod effects;
+mod factory;
+mod objects;
 mod hero;
 mod level;
 mod palette;
@@ -142,8 +144,19 @@ struct CheckReport {
 
 impl Game {
     fn new(mut world: World, demo: Option<Demo>) -> Game {
+        // LevelInit calls Randomize unless a demo plays; DemoLoad zeroes RandSeed.
+        let seed = if demo.is_some() {
+            0
+        } else {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(1, |d| d.as_secs() as u32)
+        };
+        let mut rng = PascalRandom::new(seed);
         let mut level = Level::new(&mut world);
         let mut hero = Hero::new(world.map.start, 1);
+        // LevelInit: icons and OBJECTS records become objects (their constructors draw Random).
+        level.spawn_all(&mut world, hero.x, &mut rng);
         // LevelFirstFrame (1088:b4db): enter the start sector (its scripts run), face its far side.
         let mut fx = Effects::default();
         let sector = world.sector_at(hero.y, hero.x);
@@ -160,20 +173,19 @@ impl Game {
             -1
         };
         camera.first_frame(&world, (hero.x, hero.y), grinder);
-        // LevelInit calls Randomize unless a demo plays; DemoLoad zeroes RandSeed.
-        let seed = if demo.is_some() {
-            0
-        } else {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(1, |d| d.as_secs() as u32)
-        };
+        // The end of LevelFirstFrame: the hero may start inside a wall that blows up.
+                if world.solidity_at(hero.y - 0x10, hero.x) & 0x80 != 0 {
+            crate::effects::explode_tile(&mut level, &mut world, 0x60, 0x104, hero.y - 0x10, hero.x, &mut rng, &mut fx);
+        }
+        for &(a, b) in &fx.shakes {
+            camera.shake(a, b);
+        }
         Game {
             camera,
             world,
             level,
             hero,
-            rng: PascalRandom::new(seed),
+            rng,
             frame: 0,
             demo,
             report: CheckReport::default(),
@@ -512,7 +524,7 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) 
                 .level
                 .grinder
                 .as_ref()
-                .map_or((0x7fff, -1), |g| (g.y, g.speed));
+                .map_or((-1, 0), |g| (g.y, g.speed));
             writeln!(
                 f,
                 "{count}\t{}\t{}\t{}\t{}\t{}",

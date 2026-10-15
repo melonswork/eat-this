@@ -5,15 +5,39 @@ use crate::level::{Effects, Level};
 use crate::rng::PascalRandom;
 use crate::world::{OUTSIDE, World};
 
-/// FUN_1040_60bb: effect `id` at (y, x); ids >= 30000 are plain sounds.
-pub fn effect(_world: &World, id: u16, _y: i32, _x: i32, rng: &mut PascalRandom) {
+/// FUN_1040_60bb: effect `id` at (y, x); ids >= 30000 are plain sounds. The effect procedures
+/// are the table at 1170:07b2 (filled at run time; `mise run trace -- ... --dump-mem 1170:07b2:200`).
+pub fn effect(world: &World, id: u16, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
     match id {
         0 => {}
+        34 => explosion(world, y, x, rng, fx),
         72 => rubble(rng),
         // Seen in GRINDER with no Random() calls in the tracer.
         76 => {}
         id if id >= 30000 => {}
         id => eprintln!("warning: effect {id} not ported"),
+    }
+}
+
+/// FUN_1040_3b1f: a wall blowing up. The fire, debris and sprite objects it spawns aren't
+/// ported; their Random() calls are.
+fn explosion(world: &World, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+    if rng.random(4) != 0 && rng.random(3) == 0 {
+        // FUN_1040_6b03(0xd10, ...): spawns an object (not ported).
+    }
+    falling_debris(world, y + 0xf, x, rng);
+    for _ in 0..4 {
+        rng.random(2);
+        rng.random(0x81);
+        rng.random(0x20);
+    }
+    fx.shakes.push((0x18, 0xe));
+}
+
+/// FUN_1040_1d72: sometimes a crate falls from the blast.
+fn falling_debris(_world: &World, _y: i32, _x: i32, rng: &mut PascalRandom) {
+    if rng.random(5) == 0 {
+        eprintln!("warning: FUN_1040_1d72's falling object is not ported");
     }
 }
 
@@ -71,6 +95,6 @@ pub fn explode_tile(
     lv.set_cell(world, cell, cell_index, fx);
     let id = world.cell_function(original, 4);
     if id as i16 > 0 {
-        effect(world, id, (y & !15) + 7, (x & !15) + 7, rng);
+        effect(world, id, (y & !15) + 7, (x & !15) + 7, rng, fx);
     }
 }

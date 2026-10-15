@@ -49,6 +49,11 @@ pub struct Level {
     /// The hero's sector (DAT_1170_4656); None before the first frame.
     pub sector: Option<usize>,
     pub grinder: Option<Grinder>,
+    /// The game objects (EnemyFactory & co.), and each sector's seven collections of them.
+    pub objects: Vec<Option<crate::objects::Obj>>,
+    pub lists: Vec<[Vec<usize>; crate::objects::list::COUNT]>,
+    /// OBJECTS records type 1000 (teleport destinations, the 1170:5130 collection).
+    pub teleports: Vec<Vec<i16>>,
     // Script globals.
     platform_flags: i32,  // 1170:0ebe
     platform_sound: i32,  // 1170:0ec0
@@ -92,6 +97,9 @@ impl Level {
             platforms: Vec::new(),
             sector: None,
             grinder,
+            objects: Vec::new(),
+            lists: vec![Default::default(); world.sectors.len()],
+            teleports: Vec::new(),
             platform_flags: 0,
             platform_sound: 0,
             platform_volume: 0x100,
@@ -525,7 +533,7 @@ impl Level {
             return;
         }
         let step = world.cell_function(tile, 2) as i16 as i32;
-        crate::effects::effect(world, world.cell_function(tile, 4), ty << 4, tx << 4, rng);
+        crate::effects::effect(world, world.cell_function(tile, 4), ty << 4, tx << 4, rng, fx);
         let mut left = tx;
         while left > 0 && at(world, ty, left - 1) == tile {
             left -= 1;

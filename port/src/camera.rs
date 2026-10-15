@@ -186,7 +186,8 @@ impl Camera {
         d = d.clamp(-0xf, 0xf);
         let v = f(edge + d);
         if v == func::STOP || v == OUTSIDE {
-            d = ((((edge + d) as u16 >> 4) as i32) + (d < 0) as i32) * 0x10 - edge;
+            // 16-bit arithmetic: moving left off the map wraps back to 0.
+            d = (((((edge + d) as u16 >> 4) as i32) + (d < 0) as i32) * 0x10 - edge) as i16 as i32;
         }
         d
     }
