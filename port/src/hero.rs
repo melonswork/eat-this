@@ -53,6 +53,7 @@ pub struct Hero {
     idle_timer: i32,
     idle_next: i32,
     ground: i32, // gHeroGround from the last collision
+    nudge: i32, // 1170:4e06: HeroPushOutOfWalls' push, becomes next frame's starting dx (FUN_1088_532c)
     released: [bool; 9],
     pub height: i32,
     half_width: i32,
@@ -74,7 +75,7 @@ impl Hero {
             prev_state: GROUND,
             state_before_jump: GROUND,
             vx: 0,
-            vy: ON_GROUND_VY,
+            vy: 0,
             vy0: 0,
             fall: 0,
             anim: 6,
@@ -86,11 +87,34 @@ impl Hero {
             idle_timer: -0x10 - 4,
             idle_next: 0xd2 + 0x1a4 / 2,
             ground: FLAT_FLOOR,
+            nudge: 0,
             released: [true; 9],
             height: HEIGHT,
             half_width: 6,
             shake: None,
         }
+    }
+
+    /// Names and values to compare with the tracer's --watch (tools/compare_watch.py).
+    pub const WATCH: &'static str = "gHeroX,gHeroY,gHeroState,gHeroVX,gHeroVY,gHeroFallDistance,gHeroAnimTimer,gHeroFrame,gHeroFacing";
+
+    pub fn watch(&self) -> [i32; 9] {
+        let vy = if self.vy == ON_GROUND_VY {
+            0x7fff
+        } else {
+            self.vy
+        };
+        [
+            self.x,
+            self.y,
+            self.state,
+            self.vx,
+            vy,
+            self.fall,
+            self.anim,
+            self.frame,
+            self.facing,
+        ]
     }
 
     /// HeroStartJump (1088:39d4).
@@ -132,7 +156,7 @@ impl Hero {
         self.shake = None;
         let mut friction = true;
         let mut walking = false;
-        let (mut dx, mut dy) = (0, 0);
+        let (mut dx, mut dy) = (std::mem::take(&mut self.nudge), 0);
         for (r, &v) in self.released.iter_mut().zip(&input) {
             if v < 1 {
                 *r = true;
@@ -269,6 +293,7 @@ impl Hero {
 
         self.ground = 0;
         let blocked = self.move_and_collide(w, dx, dy);
+        self.push_out_of_walls(w);
         self.end_of_frame(walking, blocked, rng);
     }
 
@@ -434,6 +459,58 @@ impl Hero {
             }
         }
         dx - moved
+    }
+}
+
+impl Hero {
+    /// HeroPushOutOfWalls (1088:2a78): if a wall overlaps the body, find the nearer free side
+    /// and move the hero 1 px towards it when his centre is in the wall, else nudge next frame.
+    fn push_out_of_walls(&mut self, w: &World) {
+        let (h, hw) = (self.height, self.half_width);
+        let cols = (hw * 2 + 15) >> 4;
+        // No platform support yet: gHeroPlatform is always -1 here.
+        let (mut ly, rows) = (self.y, (h + 15) >> 4);
+        for e in 0..=rows {
+            let mut lx = self.x - hw;
+            for c in 0..=cols {
+                if w.solidity_at(ly, lx) & solid::WALL != 0 {
+                    let dir = if lx > self.x {
+                        -1
+                    } else {
+                        let mut step = 16;
+                        loop {
+                            let r = w.solidity_at(ly, lx + step);
+                            if r & solid::WALL == 0 {
+                                break 1;
+                            }
+                            if r == crate::world::OUTSIDE {
+                                break -1;
+                            }
+                            let l = w.solidity_at(ly, lx - step);
+                            if l & solid::WALL == 0 {
+                                break -1;
+                            }
+                            if l == crate::world::OUTSIDE {
+                                break 1;
+                            }
+                            step += 16;
+                        }
+                    };
+                    if w.solidity_at(ly, self.x) & solid::WALL != 0 {
+                        self.x += dir;
+                    } else {
+                        self.nudge = dir;
+                    }
+                    return;
+                }
+                lx = if c == cols - 1 { self.x + hw } else { lx + 16 };
+            }
+            ly = if e == rows - 1 {
+                self.y - h + 1
+            } else {
+                ly - 16
+            };
+        }
     }
 }
 

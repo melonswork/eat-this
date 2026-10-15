@@ -26,7 +26,6 @@ impl PascalRandom {
     pub fn calls(&self) -> u32 {
         self.calls
     }
-
 }
 
 /// Number of LCG steps from `from` to `to`, if it is at most `limit`.

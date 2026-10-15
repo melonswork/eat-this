@@ -90,6 +90,9 @@ def main():
     ap.add_argument("--menu-frames", type=int, default=5, help="menu frames to run before starting the demo")
     ap.add_argument("--pre-seed", type=lambda x: int(x, 0), help="RandSeed for HeroReset's four draws before DemoLoad zeroes it")
     ap.add_argument("--ini", action="append", default=[], metavar="KEY=VALUE", help="EatThis.ini setting, e.g. GameDetail=4")
+    ap.add_argument("--watch", default="", help="comma-separated globals (names from re/names.csv or 1170:xxxx) to log as i16 at the start of every game frame into watch.tsv")
+    ap.add_argument("--platforms", action="store_true", help="log the first 0x40 bytes (as i16) of every platform (gPlatforms, 1170:4662) at the start of every game frame into platforms.tsv")
+    ap.add_argument("--writes", default="", help="comma-separated globals; log every write to them (frame, CS:IP, function, new value) into writes.tsv")
     ap.add_argument("-v", "--verbose", action="store_true", help="log file opens and Windows calls")
     o = ap.parse_args()
 
@@ -119,6 +122,16 @@ def main():
         "windows": [],  # (k, calls, seed, expected seed, ok)
         "done": False,
     }
+    names = {}
+    for line in Path("re/names.csv").read_text().splitlines()[1:]:
+        addr, name = line.split(",")[:2]
+        names[name] = addr
+    watch = [(w, int((names.get(w) or w).split(":")[1], 16)) for w in o.watch.split(",") if w]
+    watch_f = open(out / "watch.tsv", "w") if watch else None
+    if watch_f:
+        watch_f.write("frame\t" + "\t".join(w for w, _ in watch) + "\n")
+    writes = [(w, int((names.get(w) or w).split(":")[1], 16)) for w in o.writes.split(",") if w]
+    writes_f = open(out / "writes.tsv", "w") if writes else None
     calls_f = open(out / "calls.tsv", "w")
     calls_f.write("window\tframe\tcaller\tsite\tkind\tn\tresult\tseed\n")
 
@@ -137,9 +150,20 @@ def main():
             elif st["menu"] > o.menu_frames + 400:
                 stop("the demo never started")
 
+    plat_f = open(out / "platforms.tsv", "w") if o.platforms else None
+
     def on_in_game(e):
         if st["started"]:
             st["frame"] += 1
+            if plat_f:
+                for i in range(e.rw(DS, 0x0EBC)):
+                    off, sel = e.rw(DS, 0x4662 + 4 * i), e.rw(DS, 0x4664 + 4 * i)
+                    if sel:
+                        ws = [e.rw(sel, off + 2 * k) for k in range(0x20)]
+                        plat_f.write(f"{st['frame']}\t{i}\t" + "\t".join(str(v - 0x10000 if v & 0x8000 else v) for v in ws) + "\n")
+            if watch_f:
+                vals = [e.rw(DS, a) for _, a in watch]
+                watch_f.write(f"{st['frame']}\t" + "\t".join(str(v - 0x10000 if v & 0x8000 else v) for v in vals) + "\n")
 
     def on_demo_load(e):
         st.update(started=True, frame=0, played=0, window=1, calls=[])
@@ -199,10 +223,37 @@ def main():
     emu.hook(*DEMO_STOP, on_demo_stop)
     emu.hook(*RANDOM_NEXT, on_random_next)
 
+    if writes_f:
+        from unicorn import UC_HOOK_MEM_WRITE
+        from unicorn.x86_const import UC_X86_REG_CS, UC_X86_REG_IP
+
+        writes_f.write("frame\tvar\tsite\tcaller\tvalue\n")
+        base = (DS >> 3) << 16
+        by_addr = {base + a: w for w, a in writes}
+
+        def on_write(uc, access, address, size, value, data):
+            if not st["started"]:
+                return
+            w = by_addr.get(address) or by_addr.get(address - 1)
+            if w is None:
+                return
+            cs, ip = uc.reg_read(UC_X86_REG_CS), uc.reg_read(UC_X86_REG_IP)
+            v = value & 0xFFFF if size >= 2 else value & 0xFF
+            writes_f.write(f"{st['frame']}\t{w}\t{cs:04x}:{ip:04x}\t{syms.name(cs, ip)}\t{v - 0x10000 if v & 0x8000 else v}\n")
+
+        for _, a in writes:
+            emu.uc.hook_add(UC_HOOK_MEM_WRITE, on_write, begin=base + a, end=base + a + 1)
+
     t = time.time()
     emu.run()
     calls_f.close()
-    why = st["done"] or emu.error or "stopped"
+    if watch_f:
+        watch_f.close()
+    if writes_f:
+        writes_f.close()
+    if plat_f:
+        plat_f.close()
+    why =st["done"] or emu.error or "stopped"
     print(f"{why}; {st['played']} demo frames, {len(st['windows'])} windows in {time.time() - t:.1f} s")
     if st["calls"]:
         print(f"{len(st['calls'])} calls after the last CHECK sample are in calls.tsv only")

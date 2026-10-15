@@ -35,6 +35,7 @@ struct Options {
     scale: u32,
     shot: Option<(u32, PathBuf)>,
     trace: Option<(u32, u32)>,
+    dump: Option<PathBuf>,
 }
 
 fn options() -> Result<Options, String> {
@@ -46,6 +47,7 @@ fn options() -> Result<Options, String> {
         scale: 3,
         shot: None,
         trace: None,
+        dump: None,
     };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -56,6 +58,7 @@ fn options() -> Result<Options, String> {
             "--demo" => o.demo = Some(value()?.into()),
             "--scale" => o.scale = value()?.parse().map_err(|e| format!("--scale: {e}"))?,
             "--headless" => o.headless = true,
+            "--dump" => o.dump = Some(value()?.into()),
             "--trace" => {
                 let from = value()?.parse().map_err(|e| format!("--trace FROM TO: {e}"))?;
                 o.trace = Some((from, value()?.parse().map_err(|e| format!("--trace FROM TO: {e}"))?));
@@ -317,10 +320,21 @@ fn blit(fb: &mut [u8], pal: &Palette, px: &[u8], w: i32, h: i32, x0: i32, y0: i3
     }
 }
 
-fn run_headless(mut game: Game, trace: Option<(u32, u32)>) {
+fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) {
+    use std::io::Write;
     let t = Instant::now();
+    let mut dump =
+        dump.map(|p| std::io::BufWriter::new(std::fs::File::create(p).expect("--dump file")));
+    if let Some(f) = dump.as_mut() {
+        writeln!(f, "frame\t{}", Hero::WATCH.replace(',', "\t")).unwrap();
+    }
     while !game.demo_done() {
         let count = game.frame + 1;
+        if let Some(f) = dump.as_mut() {
+            // Like the tracer's --watch: the values at the start of the frame.
+            let v: Vec<String> = game.hero.watch().iter().map(|v| v.to_string()).collect();
+            writeln!(f, "{count}\t{}", v.join("\t")).unwrap();
+        }
         let traced = trace.is_some_and(|(a, b)| (a..=b).contains(&count));
         let before = game.rng.calls();
         game.step([0; 9]);
@@ -338,7 +352,10 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>) {
     }
     let r = &game.report;
     if let Some(ok) = r.setup {
-        println!("CHECK[0] (after level setup): {}", if ok { "ok" } else { "differs" });
+        println!(
+            "CHECK[0] (after level setup): {}",
+            if ok { "ok" } else { "differs" }
+        );
     }
     println!("window  original  port");
     for (k, (orig, ours)) in r.rows.iter().enumerate().take(12) {
@@ -469,7 +486,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if game.demo.is_none() {
             return Err("--headless needs --demo".into());
         }
-        run_headless(game, o.trace);
+        run_headless(game, o.trace, o.dump.as_deref());
         return Ok(());
     }
     let gfx = Graphics::load(&o.data, &game.world)?;
