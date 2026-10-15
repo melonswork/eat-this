@@ -287,3 +287,9 @@ pub fn load_game_ds(exe: &Path) -> io::Result<()> {
     let _ = GAME_DS.set(ds);
     Ok(())
 }
+
+/// A word of the game's data segment.
+pub fn ds_word(off: usize) -> i32 {
+    let d = GAME_DS.get().expect("load_game_ds first");
+    i16::from_le_bytes([d[off], d[off + 1]]) as i32
+}

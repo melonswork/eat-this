@@ -13,6 +13,10 @@ pub const UP: usize = 0;
 pub const DOWN: usize = 1;
 pub const LEFT: usize = 2;
 pub const RIGHT: usize = 3;
+pub const LEFT_SHOOT: usize = 4;
+pub const RIGHT_SHOOT: usize = 5;
+/// 1170:4f06: the left button may fire (cleared by the crouch-flip move, not ported).
+const FIRE_OK: bool = true;
 
 /// gHeroState values.
 pub const GROUND: i32 = 0;
@@ -75,6 +79,24 @@ pub struct Hero {
     pub shakes: Vec<(i32, i32)>,
     /// Changes to the camera's resting point (1170:4e34/4e36) made this frame.
     pub cam_nudge: (i32, i32),
+    pub gun: Gun,
+}
+
+/// The pistol (weapon 2's left button; HeroUpdate's end block and HeroFireWeapon 1088:6437).
+#[derive(Default)]
+pub struct Gun {
+    pub muzzle: (i32, i32), // gHeroMuzzleX/Y (4de8/4dea): offset of the gun from its rest point
+    pub aim: i32,           // gHeroAimAngle (4e46)
+    pub shooting: bool,     // gHeroShooting (5121): aiming pose; set by moving the mouse
+    armed: bool,            // 5122: this frame's pose can fire
+    pose: i32,              // 4e10: frames into the aiming pose (0..10)
+    cooldown: i32,          // 4e56: frames until the next shot, also the recoil
+    pub shots: i32,         // 4e6a
+    pub frame2: i32,        // gHeroFrame2 (4de4): the arm
+    mouse: (i32, i32),      // gMouseX/Y last frame
+    cam: (i32, i32),        // gCameraX/Y this frame (before the camera moves)
+    /// HeroFireWeapon's call this frame: (y, x, angle, sprite parity).
+    pub shot: Option<(i32, i32, i32, i32)>,
 }
 
 impl Hero {
@@ -119,6 +141,7 @@ impl Hero {
             half_width: 6,
             shakes: Vec::new(),
             cam_nudge: (0, 0),
+            gun: Gun::default(),
         }
     }
 
@@ -177,7 +200,49 @@ impl Hero {
         self.anim = 6;
     }
 
-    pub fn update(&mut self, w: &World, lv: &Level, input: &[i8; 9], rng: &mut PascalRandom) {
+    pub fn gun_mouse(&self) -> (i32, i32) {
+        self.gun.mouse
+    }
+
+    /// HeroAimAtMouse (1088:420b).
+    fn aim_at_mouse(&mut self) {
+        let g = &mut self.gun;
+        g.aim = crate::trig::atan2(
+            g.mouse.1 - ((self.y + g.muzzle.1 - 0x16) - g.cam.1),
+            g.mouse.0 - ((self.x + g.muzzle.0) - g.cam.0),
+        );
+    }
+
+    /// HeroAimFixed (1088:4242): aim, and the arm's frame for the angle.
+    fn aim_fixed(&mut self) {
+        self.aim_at_mouse();
+        let g = &mut self.gun;
+        g.frame2 = ((g.aim * 0x20 + 0xb40) / 0x1680) % 0x20 + 0x19b;
+        g.armed = true;
+    }
+
+    /// `mouse` is gMouseX/Y as the demo sets it; `cam` is the camera before this frame's move.
+    pub fn update(
+        &mut self,
+        w: &World,
+        lv: &Level,
+        input: &[i8; 9],
+        mouse: (i32, i32),
+        cam: (i32, i32),
+        rng: &mut PascalRandom,
+    ) {
+        // ReadGameInput: moving the mouse raises the gun.
+        self.gun.shot = None;
+        if mouse != self.gun.mouse {
+            self.gun.shooting = true;
+        }
+        self.gun.mouse = mouse;
+        self.gun.cam = cam;
+        self.gun.frame2 = NONE;
+        self.gun.armed = false;
+        if (input[LEFT_SHOOT] > 0 && FIRE_OK) || input[RIGHT_SHOOT] > 0 {
+            self.gun.shooting = true;
+        }
         let mut input = *input;
         let prev_facing = self.facing;
         self.frame = NONE;
@@ -230,6 +295,7 @@ impl Hero {
         }
 
         if self.state == KNOCKED_DOWN {
+            self.gun.shooting = false;
             self.frame = (self.anim / 0x1e) % 2 + 0x208;
             self.height = 0x1a;
             if self.anim < 1 {
@@ -245,6 +311,7 @@ impl Hero {
         }
 
         if self.state == CROUCH {
+            self.gun.shooting = false;
             if self.crouch < 8 {
                 self.crouch = (self.crouch + 1).abs();
             } else if self.ground != 0x15 {
@@ -383,6 +450,16 @@ impl Hero {
                     self.frame = 0x10e;
                 }
                 self.height = if vy_before == self.vy0 { 0x21 } else { 0x1f };
+                if self.gun.shooting {
+                    self.gun.muzzle = (if self.facing < 1 { 4 } else { 0 }, 8);
+                    if self.state == JUMP || self.state == 10 {
+                        self.frame += 0xf0;
+                        self.aim_fixed();
+                    } else {
+                        self.aim_at_mouse();
+                        self.gun.armed = true;
+                    }
+                }
             }
             if self.vy < 1 {
                 if self.vy < 0 && self.ceiling < 0 {
@@ -420,7 +497,50 @@ impl Hero {
         let (blocked, step_h) = self.move_and_collide(w, lv, dx, dy);
         self.prev_blocked = blocked;
         self.push_out_of_walls(w);
-        self.end_of_frame(walking, blocked, step_h, rng);
+        let posed = self.end_of_frame(walking, blocked, step_h, rng);
+        self.gun_end(posed, &input);
+    }
+
+    /// The end of HeroUpdate: the aiming pose, the left button's shot, the recoil.
+    fn gun_end(&mut self, posed: bool, input: &[i8; 9]) {
+        if posed && self.gun.shooting {
+            if self.frame < 0x81 || self.frame > 0x94 {
+                let l = self.gun.pose / 4;
+                self.gun.muzzle = (if self.facing > 0 { -l } else { l } + 2, 0);
+                self.aim_fixed();
+                self.gun.muzzle.1 += l - 2;
+                self.frame = self.gun.pose / 2 + 0x1e3;
+                if self.gun.pose < 10 {
+                    self.gun.pose += 1;
+                }
+            } else {
+                self.gun.muzzle = (2, 0);
+                self.aim_fixed();
+                self.gun.muzzle.1 -= ((self.frame - 0x7e) % 10 > 4) as i32 + 1;
+                self.frame += 0x14a;
+            }
+        }
+        // LAB_1088_9a0d
+        if self.frame < 0x1e3 || self.frame > 0x1e8 {
+            self.gun.pose = 0;
+        }
+        let g = &mut self.gun;
+        let (c, s) = (crate::trig::cos(g.aim), crate::trig::sin(g.aim));
+        if g.armed && input[LEFT_SHOOT] > 0 && FIRE_OK && g.cooldown < 1 {
+            g.cooldown = 10;
+            let x = self.x + g.muzzle.0 + (0x17 * c) / 0x4000;
+            let y = self.y + g.muzzle.1 - 0x16 - (0x17 * s) / 0x4000;
+            g.shot = Some((y, x, g.aim, g.shots & 1));
+            g.shots += 1;
+            g.shooting = true;
+        }
+        // (*1170:4dee)(): the right button's weapon (table 1170:188a). With no ammo (FUN_1088_5914),
+        // as at the start of a level, it does nothing; ammo pick-ups aren't ported.
+        if g.cooldown > 0 {
+            g.muzzle.0 -= (g.cooldown * c) / 0xc000;
+            g.muzzle.1 += (g.cooldown * s) / 0xc000;
+            g.cooldown -= 1;
+        }
     }
 
     /// The landing block at the top of HeroUpdate.
@@ -461,13 +581,14 @@ impl Hero {
     }
 
     /// The tail of HeroUpdate after the collision: animation frames and the Random() calls.
-    fn end_of_frame(&mut self, walking: bool, blocked: i32, step_h: i32, rng: &mut PascalRandom) {
+    /// Returns false where the original skips the aiming pose (goto LAB_1088_9a0d).
+    fn end_of_frame(&mut self, walking: bool, blocked: i32, step_h: i32, rng: &mut PascalRandom) -> bool {
         if self.state != GROUND {
             if self.state != CROUCH {
                 self.turn = NO_TURN;
             }
             self.idle_timer = -0x10 - rng.random(8);
-            return;
+            return false;
         }
         if self.turn != NO_TURN {
             let t = self.turn.abs();
@@ -477,12 +598,14 @@ impl Hero {
                 (t + 8) % 0x14 + 0x5b
             };
             self.turn += self.turn.signum();
-            if self.turn.abs() < 0xb {
-                return;
+            if self.turn.abs() < 0xb && !self.gun.shooting {
+                return false;
             }
             self.turn = NO_TURN;
             self.anim = 6;
-            return;
+            if !self.gun.shooting {
+                return false;
+            }
         }
         if walking && (blocked == 0 || step_h > 0x13) {
             if blocked != 0 && blocked.signum() == self.facing {
@@ -492,6 +615,10 @@ impl Hero {
                 }
                 self.anim = (self.anim + 1) % 0x54;
                 self.frame = self.anim / 7 + 0x227;
+                self.gun.shooting = false;
+                self.gun.armed = true;
+                self.gun.muzzle = (0, 0);
+                self.aim_at_mouse();
                 self.vx = self.facing * 7;
                 self.push_timer = 2;
             } else {
@@ -503,7 +630,7 @@ impl Hero {
                 self.anim = (self.anim + 1) % 0x28;
             }
             self.idle_timer = -0x10 - rng.random(8);
-            return;
+            return true;
         }
         // Standing: ease the walk cycle back to a standing pose, then idle.
         if self.push_timer > 0 {
@@ -521,10 +648,10 @@ impl Hero {
             if self.frame == NONE {
                 self.frame = self.anim / 2 + 0x81;
             }
-            return;
+            return true;
         }
         if self.frame != NONE {
-            return;
+            return true;
         }
         self.frame = 0x26f;
         self.idle_timer += 1;
@@ -543,6 +670,7 @@ impl Hero {
                 _ => 0x26f,
             };
         }
+        true
     }
 
     /// HeroMoveAndCollide (1088:3322) with HeroFindFloor (1088:304c): platforms first, then
@@ -828,7 +956,7 @@ fn ranges_overlap(a: i32, b: i32, c: i32, d: i32) -> bool {
 
 impl Hero {
     /// FUN_1078_0f1a: solidity of the main plane OR'ed with every platform covering the point.
-    fn solidity_all(w: &World, lv: &Level, y: i32, x: i32) -> u16 {
+    pub fn solidity_all(w: &World, lv: &Level, y: i32, x: i32) -> u16 {
         let mut s = w.solidity_at(y, x);
         for p in lv.platforms.iter().rev().flatten() {
             if x >= p.x && y >= p.y && x < p.x + p.width && y < p.y + p.height {

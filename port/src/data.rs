@@ -77,6 +77,8 @@ pub struct Sprite {
     pub height: i32,
     pub hotspot: (i32, i32),
     pub pixels: Vec<u8>, // 0 = transparent
+    /// The block after the header (sprite +0xa): hit boxes (u16 count, 18 bytes each), ...
+    pub extra: Vec<u8>,
 }
 
 pub struct SpriteGroup {
@@ -101,6 +103,7 @@ impl SpriteGroup {
             .map(|n| {
                 let d = a.get(n).filter(|d| !d.is_empty())?;
                 let (w, h) = (u16_at(&d, 0) as usize, u16_at(&d, 2) as usize);
+                let extra = d[10..10 + u16_at(&d, 8) as usize].to_vec();
                 let mut at = 10 + u16_at(&d, 8) as usize;
                 let mut pixels = Vec::with_capacity(w * h);
                 for _ in 0..h {
@@ -112,6 +115,7 @@ impl SpriteGroup {
                     height: h as i32,
                     hotspot: (i16_at(&d, 4) as i32, i16_at(&d, 6) as i32),
                     pixels,
+                    extra,
                 })
             })
             .collect();

@@ -56,6 +56,10 @@ pub struct Level {
     pub teleports: Vec<Vec<i16>>,
     /// FUN_1058_008f's position in the collection being walked (1170:45d6).
     pub walk_index: i32,
+    /// The (sector, list) being walked, for FUN_1070_0002.
+    pub walking: (usize, usize),
+    /// The particle engine (bullets, debris, ...): see particles.rs.
+    pub particles: crate::particles::Particles,
     // Script globals.
     platform_flags: i32,  // 1170:0ebe
     platform_sound: i32,  // 1170:0ec0
@@ -103,6 +107,8 @@ impl Level {
             lists: vec![Default::default(); world.sectors.len()],
             teleports: Vec::new(),
             walk_index: 0,
+            walking: (0, 0),
+            particles: Default::default(),
             platform_flags: 0,
             platform_sound: 0,
             platform_volume: 0x100,

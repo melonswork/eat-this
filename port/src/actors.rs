@@ -5,7 +5,7 @@
 use crate::level::{Effects, Level};
 use crate::objects::list;
 use crate::rng::PascalRandom;
-use crate::world::{OUTSIDE, World};
+use crate::world::{OUTSIDE, World, ds_word};
 
 /// The frame state the object methods read (globals in the original).
 pub struct Env<'a> {
@@ -41,6 +41,7 @@ impl Level {
             });
             if active {
                 self.walk_index = i as i32;
+                self.walking = (sector, l);
                 self.update_object(id, env);
                 i = (self.walk_index + 1) as usize;
             } else {
@@ -78,10 +79,153 @@ impl Level {
         let kind = self.objects[id].as_ref().unwrap().kind;
         match kind {
             0x145a => self.smallbot(id, env),
+            0x143c => self.crate_box(id, env),
             0x14aa => {} // FUN_1070_a06a: draws a sprite
             0x13c4 => {} // FUN_1068_315a: plain sound emitters (kinds < 10000) don't draw Random
             _ => {}
         }
+    }
+
+    /// FUN_1070_0002: delete the object being updated from the collection being walked.
+    fn remove_current(&mut self, id: usize) {
+        let (s, l) = self.walking;
+        let i = self.walk_index as usize;
+        debug_assert_eq!(self.lists[s][l][i], id);
+        self.lists[s][l].remove(i);
+        self.walk_index -= 1;
+        self.objects[id] = None;
+    }
+
+    /// FUN_1070_90f1: a crate (0x143c). Shots push it and wear it down.
+    fn crate_box(&mut self, id: usize, env: &mut Env) {
+        let t = {
+            let o = self.o(id);
+            if o.w(0x22) > 0 {
+                o.set(0x22, o.w(0x22) - 1);
+            }
+            let (x, y) = (o.w(0xe), o.w(0x10));
+            if o.w(10) == 0 {
+                // (FUN_10e0_0073 and friends keep its humming sound going.)
+                o.set(2, x - 0xb0);
+                o.set(6, x + 0xb0);
+                o.set(4, y - 0x4e);
+                o.set(8, y + 0x4e);
+            } else {
+                o.set(2, x - 0x30);
+                o.set(6, x + 0x30);
+                o.set(4, y - 0x40);
+                o.set(8, y + 0x30);
+            }
+            o.w(10)
+        };
+        // 1170:0e4a: sprite, half width, height per crate type.
+        let row = 0xe4a + (t * 6) as usize;
+        let (sprite, half, height) = (ds_word(row), ds_word(row + 2), ds_word(row + 4));
+        if self.actor_physics(id, env, height - 1, half, 4) >= 1 {
+            self.crate_destroy(id, env);
+            return;
+        }
+        if self.o(id).w(0x1c) == 5 {
+            eprintln!("warning: crate sliding on a slope (FUN_1068_17d6) not ported");
+        }
+        let (x, y) = {
+            let o = self.o(id);
+            (o.w(0xe), o.w(0x10))
+        };
+        let damage = match crate::sprites::hitbox(sprite) {
+            Some((l, tp, r, b)) => self.particles.hit_test(y + b, x + r, y + tp, x + l, 0x11fb),
+            None => 0,
+        };
+        if damage > 0 {
+            let damage = if damage == 4 && t == 0 { 1 } else { damage };
+            let push = self.particles.hit_direction();
+            let o = self.o(id);
+            o.set(0xe, o.w(0xe) + push);
+            o.set(0x20, o.w(0x20) - damage);
+            if o.w(0x20) < 1 {
+                self.crate_destroy(id, env);
+                return;
+            }
+            o.set(0x22, 3);
+            env.fx.shakes.push((0xc, 5));
+        }
+        // The hero standing on it.
+        let o = self.o(id);
+        let top = o.w(0x10) - height;
+        let (hx, hy, _) = env.hero;
+        if o.w(0xe) - half - 9 <= hx && hx <= o.w(0xe) + half + 10 && (top..top + 0x10).contains(&hy) {
+            eprintln!("warning: the hero standing on a crate not ported");
+        }
+    }
+
+    /// FUN_1070_8cd7: a crate breaks.
+    fn crate_destroy(&mut self, id: usize, env: &mut Env) {
+        let (x, y, t) = {
+            let o = self.o(id);
+            if o.w(0x12) == 0 && env.rng.random(4) == 0 {
+                o.set(0x12, 0xd10);
+            }
+            (o.w(0xe), o.w(0x10), o.w(10))
+        };
+        // FUN_1068_10f3: the bonus inside.
+        if self.o(id).w(0x12) != 0 {
+            eprintln!("warning: a crate's bonus {:#x} (FUN_1040_6b03) not ported", self.o(id).w(0x12));
+            self.o(id).set(0x12, 0);
+        }
+        if t < 1 {
+            let ps = &mut self.particles;
+            ps.p.group = 0;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            for i in 0..4 {
+                let px = x - 6 + i * 4;
+                let py = (y - 6) - env.rng.random(0xe);
+                ps.spawn(29999, py, px);
+                let angle = i * -0x50 + 0x5d0 + env.rng.random(0x81);
+                let speed = env.rng.random(0x21) + 0x50;
+                ps.throw(7, speed, angle);
+            }
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            ps.p.group = 1;
+            // FUN_1040_637a: smoke sprites (no Random()).
+            env.fx.shakes.push((0x18, 0xe));
+        } else {
+            eprintln!("warning: crate type {t} breaking not ported");
+        }
+        self.falling_critter(y, x, env);
+        self.remove_current(id);
+    }
+
+    /// FUN_1040_1d72(y, x): one time in five a critter runs out, if there's floor to run on.
+    pub fn falling_critter(&mut self, y: i32, x: i32, env: &mut Env) {
+        if env.rng.random(5) != 0 {
+            return;
+        }
+        let dir = if env.hero.0 - x < 0 { -1 } else { 1 };
+        let mut lx = x;
+        for _ in 0..4 {
+            if crate::hero::Hero::solidity_all(env.world, self, y + 0xf, lx) & 0x201 == 0 {
+                return;
+            }
+            if crate::hero::Hero::solidity_all(env.world, self, y, lx) & 2 != 0 {
+                return;
+            }
+            lx -= dir * 0x10;
+        }
+        let angle = env.rng.random(2) * 0x5a0 + 0x2d0;
+        // FUN_1070_f9c7(0x40, angle, y, x).
+        let ps = &mut self.particles;
+        ps.p.group = 0;
+        ps.p.hits = 0x8000;
+        ps.p.callback = crate::particles::CB_CRITTER;
+        ps.p.on_death = 0x5e;
+        ps.p.draw = (0x5a0..=0x10df).contains(&angle) as i32;
+        ps.p.bounce = 1;
+        ps.spawn(0x5215, y, x);
+        ps.critter(7, 0x40, angle);
+        ps.p = crate::particles::Params::default();
+        env.rng.random(0x40); // the squeak's pitch
     }
 
     fn o(&mut self, id: usize) -> &mut crate::objects::Obj {

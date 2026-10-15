@@ -82,8 +82,10 @@ pub fn explode_tile(
         return;
     }
     let mut cell = original;
+    let mut before;
     let mut left = (strength / 0x10).max(1);
     loop {
+        before = cell;
         let off = world.cell_function(cell, 2);
         cell = if off == 0x7fff {
             0
@@ -101,8 +103,12 @@ pub fn explode_tile(
         }
     }
     lv.set_cell(world, cell, cell_index, fx);
-    let id = world.cell_function(original, 4);
-    if id as i16 > 0 {
-        effect(world, id, (y & !15) + 7, (x & !15) + 7, rng, fx);
+    // The effect of the tile before the last step (the original's tile when it didn't step).
+    let id = world.cell_function(before, 4);
+    let (ey, ex) = ((y & !15) + 7, (x & !15) + 7);
+    match id as i16 {
+        i if i <= 0 => {}
+        39 => lv.breakable_wall(world, strength, ey, ex, rng, fx),
+        _ => effect(world, id, ey, ex, rng, fx),
     }
 }

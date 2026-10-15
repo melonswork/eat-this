@@ -16,10 +16,13 @@ mod factory;
 mod hero;
 mod level;
 mod objects;
+mod particles;
 mod palette;
 mod picture;
 mod rng;
+mod sprites;
 mod tileanim;
+mod trig;
 mod world;
 
 use camera::Camera;
@@ -210,9 +213,11 @@ impl Game {
     fn step(&mut self, keys: [i8; 9]) {
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
         self.level.update_platforms(&mut self.world);
+        let mut mouse_now = self.hero.gun_mouse();
         let input = match &self.demo {
             Some(d) => {
                 let (k, mouse) = d.input(self.frame);
+                mouse_now = (mouse.0 as i32, mouse.1 as i32);
                 // FUN_1088_4340: the mouse past the screen edge looks around.
                 let look = |m: i32, max: i32| {
                     if m < 0 {
@@ -233,8 +238,12 @@ impl Game {
             }
             None => keys,
         };
+        let cam = (self.camera.x, self.camera.y);
         self.hero
-            .update(&self.world, &self.level, &input, &mut self.rng);
+            .update(&self.world, &self.level, &input, mouse_now, cam, &mut self.rng);
+        if let Some((y, x, aim, parity)) = self.hero.gun.shot {
+            self.level.particles.hero_fire(y, x, aim, parity);
+        }
         let mut fx = Effects::default();
         for (ty, tx) in std::mem::take(&mut self.hero.touched) {
             self.level
@@ -256,6 +265,15 @@ impl Game {
             self.camera.x + 0x13f,
             self.camera.y + 199,
         );
+        // FUN_1050_4ca5(0): debris and critters, before the actors.
+        let cam = (self.camera.x, self.camera.y);
+        let mut pf = particles::Frame {
+            world: &mut self.world,
+            rng: &mut self.rng,
+            fx: &mut fx,
+            camera: cam,
+        };
+        self.level.update_particles(0, &mut pf);
         let mut env = actors::Env {
             world: &mut self.world,
             rng: &mut self.rng,
@@ -264,6 +282,14 @@ impl Game {
             frame: self.frame,
         };
         self.level.update_actors(&mut env, window);
+        // FUN_1050_4ca5(1): the hero's shots and their sparks.
+        let mut pf = particles::Frame {
+            world: &mut self.world,
+            rng: &mut self.rng,
+            fx: &mut fx,
+            camera: cam,
+        };
+        self.level.update_particles(1, &mut pf);
         // The level's foreground procedure ((*DAT_1170_4c36)()) runs last: the grinder in GRINDER.
         let h = &self.hero;
         let hero = (h.x, h.y, h.crouch_level(), false);
@@ -714,6 +740,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ),
     };
     world::load_game_ds(&o.data.join("../ETLAUNCH.EXE"))?;
+    let _ = sprites::DIR.set(o.data.join("SPRITES"));
     let world = World::load(&map_path, &o.data.join("TILES"))?;
     let game = Game::new(world, demo);
     if o.headless {
