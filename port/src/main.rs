@@ -14,6 +14,7 @@ mod hero;
 mod palette;
 mod picture;
 mod rng;
+mod tileanim;
 mod world;
 
 use camera::Camera;
@@ -351,9 +352,14 @@ impl Graphics {
                     if hidden || (cell & 0xff) as usize >= group.len() {
                         continue;
                     }
+                    let t = tileanim::tile(
+                        &group.infos[(cell & 0xff) as usize * 16..][..16],
+                        (cell & 0xff) as u8,
+                        frame,
+                    );
                     blit(
                         fb,
-                        group.tile((cell & 0xff) as usize),
+                        group.tile(t as usize),
                         TILE,
                         TILE,
                         tx * TILE - cam_x,

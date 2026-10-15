@@ -24,6 +24,7 @@ at 70 frames per second, the VGA refresh rate it was designed for.
 | `palette.rs` | the level palette and the sprite remap (`FUN_10f0_1970`) |
 | `camera.rs` | the scrolling camera (dead zone, 15 px/frame, stops at the map edge) |
 | `bg.rs` | what is behind the planes: BackgroundProc 0 (city) and 4 (forest, first layer) |
+| `tileanim.rs` | animated tiles (TILE INFOS bytes 1..5) |
 | `picture.rs` | IFF `.LBM` pictures (PBM and ILBM, ByteRun1) |
 | `world.rs` | `TileSolidityAt` / `TileFunctionAt` on the main plane, `0xa75f` outside the map |
 | `rng.rs` | Borland Pascal `Random` (the LCG the demos' CHECK entries sample) |
@@ -64,6 +65,17 @@ Proc 4 (forest) draws its first layer, a 320×200 sprite tiled at camera/16, but
 tile layers over it (65 % identical). The camera follows the original's (`camera.rs`); against the
 original's camera over 3000 CITY01 frames it differs on 7 %, all while Leon idles (the hero code
 nudges the screen offset).
+
+### Animated tiles
+
+TILE INFOS bytes 0..5 (the rest are functions 0..4): kind, animation type (1 begin-end, 2
+begin-end-begin, 3 reversed, 4 and 5 four times faster, 6 blink), A frames, B game frames per
+animation frame, C first tile, D phase (`tileanim.rs`, from the six functions the table at
+1170:1cdc points to). The draw replaces a tile by `C + f(frame + D)` of its own group; nothing
+else sees it, so the headless demo check is unchanged (GRINDER 58/113 windows before and after).
+On CITY01 the animated frame is the best match for three animated tiles at demo frame 1000 (the
+static tile or its neighbours match worse). Draw kinds: 2 is opaque, 0 transparent, 4/255 empty;
+6 and 8 (21 tiles) are drawn like 0 and may do more in the original.
 
 ## Determinism check
 

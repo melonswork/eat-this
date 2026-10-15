@@ -35,8 +35,17 @@ All 3987 entries on the disc decode.
 Palettes are 6-bit VGA. Colour index 0 is transparent in tiles and sprites.
 `mise run render -- map work/cd/BIN/MAPS/CITY01.MAP out.png` renders a level.
 
-Open questions: which palette a map really uses (probably the background `.LBM`'s; tile group
-palettes look darker), plane order (0 looks like the back plane), the `OBJECTS` script format.
+The level palette is the CMAP of the picture the script names with `Background=` (8-bit in the
+file, the game keeps the top 6 bits); `ForegroundColors=N` splits it into background 1..=N and
+foreground N+1..=255. Tiles are authored in it and drawn raw; sprite groups are remapped into it
+at load (`USED CLRS` + SPR-HEADER word 5, see port/README.md). `.LBM` pictures are IFF PBM
+(`tools/formats.py` `Picture`, also ILBM). Which routine draws behind the planes is
+`BackgroundProc=` in the script. Plane 0 is drawn before plane 1. `tools/dumpframe.py` dumps
+the original's frame buffer, palette and camera from the emulator for comparison.
+TILE INFOS: byte 0 draw kind, 1 animation type, 2..5 = A (frames), B (ticks per frame), C (first
+tile), D (phase), then functions 0..4 as u16 (port/src/tileanim.rs).
+
+Open questions: the `OBJECTS` script format, the other background routines, light/mix shading.
 
 ## How the game runs
 
