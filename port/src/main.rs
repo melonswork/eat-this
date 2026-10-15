@@ -8,6 +8,7 @@
 mod archive;
 mod data;
 mod demo;
+mod effects;
 mod hero;
 mod level;
 mod rng;
@@ -129,6 +130,9 @@ impl Game {
         let mut fx = Effects::default();
         let sector = world.sector_at(hero.y, hero.x);
         level.enter_sector(&mut world, sector, &mut fx);
+        if let (Some(g), Some(i)) = (level.grinder.as_mut(), fx.grinder_platform) {
+            g.platform = Some(i);
+        }
         let cam = world.sectors[sector].cam;
         hero.facing = if hero.x - cam.0 < cam.2 - hero.x {
             1
@@ -176,6 +180,17 @@ impl Game {
         };
         self.hero
             .update(&self.world, &self.level, &input, &mut self.rng);
+        let mut fx = Effects::default();
+        for (ty, tx) in std::mem::take(&mut self.hero.touched) {
+            self.level
+                .touch_sensitive(&mut self.world, ty, tx, &mut self.rng, &mut fx);
+        }
+        // The level's foreground procedure ((*DAT_1170_4c36)()): the grinder in GRINDER. The
+        // camera follows it at x 0 (FUN_1088_0a3b); a general camera isn't ported.
+        let h = &self.hero;
+        let hero = (h.x, h.y, h.crouch_level(), false);
+        self.level
+            .update_grinder(&mut self.world, hero, 0, &mut self.rng, &mut fx);
         self.frame += 1;
     }
 
@@ -364,14 +379,24 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) 
     let mut dump =
         dump.map(|p| std::io::BufWriter::new(std::fs::File::create(p).expect("--dump file")));
     if let Some(f) = dump.as_mut() {
-        writeln!(f, "frame\t{}", Hero::WATCH.replace(',', "\t")).unwrap();
+        writeln!(
+            f,
+            "frame\t{}\t1170:4ee0\t1170:4eea",
+            Hero::WATCH.replace(',', "\t")
+        )
+        .unwrap();
     }
     while !game.demo_done() {
         let count = game.frame + 1;
         if let Some(f) = dump.as_mut() {
             // Like the tracer's --watch: the values at the start of the frame.
             let v: Vec<String> = game.hero.watch().iter().map(|v| v.to_string()).collect();
-            writeln!(f, "{count}\t{}", v.join("\t")).unwrap();
+            let g = game
+                .level
+                .grinder
+                .as_ref()
+                .map_or((0x7fff, -1), |g| (g.y, g.speed));
+            writeln!(f, "{count}\t{}\t{}\t{}", v.join("\t"), g.0, g.1).unwrap();
         }
         let traced = trace.is_some_and(|(a, b)| (a..=b).contains(&count));
         let before = game.rng.calls();

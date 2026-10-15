@@ -56,13 +56,17 @@ pub struct Hero {
     idle_next: i32,
     ground: i32, // gHeroGround from the last collision
     nudge: i32,
-    hang_x: i32, // 1170:4e52
-    hang_y: i32, // 1170:4e54
-    climb: i32,  // 1170:4e0e: 0 hanging, 1..0x1b pulling up
+    hang_x: i32,       // 1170:4e52
+    hang_y: i32,       // 1170:4e54
+    climb: i32,        // 1170:4e0e: 0 hanging, 1..0x1b pulling up
+    push_timer: i32,   // 1170:4e12 (gHeroShootWalkTimer): frames since pushing a wall
+    prev_blocked: i32, // 1170:4e64: last frame's gHeroBlockedDX
     /// 1170:4e9e after the collision: -1 hit a ceiling, 1 landed (read next frame as 4e66).
     ceiling: i32,
     head_blocked: i32, // 1170:4e68
-    pub crushed: bool, // 1170:4e06: HeroPushOutOfWalls' push, becomes next frame's starting dx (FUN_1088_532c)
+    pub crushed: bool,
+    /// Sensitive-lever tiles touched this frame (HeroTouchTiles), as (ty, tx), for the level.
+    pub touched: Vec<(i32, i32)>, // 1170:4e06: HeroPushOutOfWalls' push, becomes next frame's starting dx (FUN_1088_532c)
     released: [bool; 9],
     input_cache: [i8; 9],
     pub height: i32,
@@ -101,9 +105,12 @@ impl Hero {
             hang_x: 0,
             hang_y: 0x7fff,
             climb: 0,
+            push_timer: 0,
+            prev_blocked: 0,
             ceiling: 0,
             head_blocked: 0,
             crushed: false,
+            touched: Vec::new(),
             released: [true; 9],
             input_cache: [0; 9],
             height: HEIGHT,
@@ -114,6 +121,10 @@ impl Hero {
 
     /// Names and values to compare with the tracer's --watch (tools/compare_watch.py).
     pub const WATCH: &'static str = "gHeroX,gHeroY,gHeroState,gHeroVX,gHeroVY,gHeroFallDistance,gHeroAnimTimer,gHeroFrame,gHeroFacing";
+
+    pub fn crouch_level(&self) -> i32 {
+        self.crouch
+    }
 
     pub fn watch(&self) -> [i32; 9] {
         let vy = if self.vy == ON_GROUND_VY {
@@ -184,6 +195,9 @@ impl Hero {
             input[RIGHT] = 0;
         }
         self.input_cache = input;
+        if self.push_timer > 0 {
+            self.push_timer -= 1;
+        }
         let held = |k: usize| input[k] > 0;
 
         // A ceiling right above the head forces a crouch.
@@ -192,6 +206,15 @@ impl Hero {
         }
         if self.head_blocked > 0 && self.state == GROUND {
             self.crouch_down();
+        }
+
+        // HeroTouchTiles (1088:5847).
+        self.touched.clear();
+        if w.tile_function_at(self.y - 0x1c, self.x) == crate::level::SENSITIVE_LEVER {
+            self.touched.push(((self.y - 0x1c) >> 4, self.x >> 4));
+        }
+        if w.tile_function_at(self.y - 0xc, self.x) == crate::level::SENSITIVE_LEVER {
+            self.touched.push(((self.y - 0xc) >> 4, self.x >> 4));
         }
 
         // Landing: the previous frame's collision found a floor.
@@ -221,8 +244,12 @@ impl Hero {
             if self.crouch < 8 {
                 self.crouch = (self.crouch + 1).abs();
             }
-            self.frame = self.crouch.abs() + 0xa0;
-            if self.head_blocked == 0 {
+            self.frame = self.crouch + 0xa0;
+            let ix = self.facing * self.half_width + self.x;
+            if self.head_blocked == 0
+                && (w.solidity_at(self.y - 0x20, ix) & solid::WALL == 0
+                    || w.solidity_at(self.y - 0x10, ix) & solid::WALL != 0)
+            {
                 self.crouch_max = self.crouch_max.max(self.crouch);
                 if !held(DOWN) {
                     self.crouch = -self.crouch;
@@ -234,12 +261,50 @@ impl Hero {
             }
             if self.crouch == -1 {
                 self.stand();
-            } else if self.crouch > 7 && (held(LEFT) || held(RIGHT)) {
-                // Crouch-walk, one pixel a frame (the 4df8 turn and its frames aren't ported).
-                let dir = if held(LEFT) { -1 } else { 1 };
-                dx += dir;
-                self.facing = dir;
-                walking = true;
+            } else if self.crouch > 7 {
+                // Crouch-walk.
+                let mut moving = false;
+                if !held(LEFT) {
+                    if held(RIGHT) {
+                        dx += 1;
+                        self.facing = 1;
+                        moving = true;
+                    }
+                } else {
+                    moving = !held(RIGHT);
+                    if moving {
+                        dx -= 1;
+                        self.facing = -1;
+                    }
+                }
+                if self.facing != prev_facing {
+                    self.turn = if self.turn == NO_TURN {
+                        1
+                    } else {
+                        self.turn.signum() * 0xd - self.turn
+                    };
+                }
+                if self.turn == NO_TURN {
+                    let next = if moving && self.prev_blocked == 0 {
+                        self.anim + 1
+                    } else {
+                        let i = (self.anim / 2 + 0x19) % 0x14;
+                        let mut l = i - 5;
+                        if l.abs() > 5 {
+                            l = i - 0xf;
+                        }
+                        ((self.anim / 2 - l.signum()) + 0x14) * 2
+                    };
+                    self.anim = next % 0x28;
+                    self.frame = self.anim / 2 + 0xac;
+                } else {
+                    self.turn += if self.turn < 0 { -1 } else { 1 };
+                    self.frame = 0xe4 - self.turn.abs() / 2;
+                    if self.turn.abs() > 0xc {
+                        self.turn = NO_TURN;
+                        self.anim = 0;
+                    }
+                }
             }
         }
 
@@ -338,6 +403,7 @@ impl Hero {
         self.ground = 0;
         self.head_blocked = 0;
         let (blocked, step_h) = self.move_and_collide(w, lv, dx, dy);
+        self.prev_blocked = blocked;
         self.push_out_of_walls(w);
         self.end_of_frame(walking, blocked, step_h, rng);
     }
@@ -406,10 +472,18 @@ impl Hero {
         if walking && (blocked == 0 || step_h > 0x13) {
             if blocked != 0 && blocked.signum() == self.facing {
                 // Pushing against a wall.
+                if self.push_timer == 0 {
+                    self.anim = 0x1c;
+                }
                 self.anim = (self.anim + 1) % 0x54;
                 self.frame = self.anim / 7 + 0x227;
                 self.vx = self.facing * 7;
+                self.push_timer = 2;
             } else {
+                if self.push_timer > 0 {
+                    self.anim = 6;
+                    self.vx = 0;
+                }
                 self.frame = self.anim / 2 + 0x81;
                 self.anim = (self.anim + 1) % 0x28;
             }
@@ -417,6 +491,10 @@ impl Hero {
             return;
         }
         // Standing: ease the walk cycle back to a standing pose, then idle.
+        if self.push_timer > 0 {
+            self.anim = 6;
+            self.vx = 0;
+        }
         let i = ((self.anim / 2 - (self.stand_frame - 0x81)) + 0x19) % 0x14;
         let mut l = i - 5;
         if l.abs() > 5 {

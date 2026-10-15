@@ -46,6 +46,7 @@ pub struct Level {
     pub platforms: Vec<Option<Platform>>,
     /// The hero's sector (DAT_1170_4656); None before the first frame.
     pub sector: Option<usize>,
+    pub grinder: Option<Grinder>,
     // Script globals.
     platform_flags: i32,  // 1170:0ebe
     platform_sound: i32,  // 1170:0ec0
@@ -78,10 +79,17 @@ impl Level {
                 }
             }
         }
+        let grinder = world
+            .map
+            .object_records()
+            .iter()
+            .find(|r| r[0] == 0x2724)
+            .map(|r| Grinder::from_record(r));
         Level {
             scripts,
             platforms: Vec::new(),
             sector: None,
+            grinder,
             platform_flags: 0,
             platform_sound: 0,
             platform_volume: 0x100,
@@ -89,7 +97,7 @@ impl Level {
     }
 
     /// FUN_1088_140b: state 0..9 of a lever cell, or -1.
-    fn lever_state(world: &World, cell: u16) -> i32 {
+    pub fn lever_state(world: &World, cell: u16) -> i32 {
         let w = world.main().width;
         let f = world.tile_function_at((cell as i32 / w) * 16, (cell as i32 % w) * 16);
         if (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f) {
@@ -453,6 +461,165 @@ impl Level {
         }
         while self.platforms.last().is_some_and(|p| p.is_none()) {
             self.platforms.pop();
+        }
+    }
+}
+
+/// The grinder (OBJECTS type 0x2724, GrinderUpdate 1090:1a91): a platform that climbs the shaft
+/// once its trigger lever is on, crushing every row of "grinder food" tiles (function 15000).
+#[derive(Debug)]
+pub struct Grinder {
+    pub y: i32,                  // 1170:4ee0: the top of the grinder
+    top: i32,                    // 4ee2: where it stops
+    y8: i32,                     // 4ef2:4ef4: y in 1/512 px
+    pub speed: i32,              // 4eea: -1 until triggered, then 1/512 px per frame
+    max_speed: i32,              // 4eec
+    trigger: u16,                // 4eee: lever cell
+    pub cam_offset: i32,         // 4ee6: the camera sits this far above it
+    anim: i32,                   // 4ef0
+    pub platform: Option<usize>, // 4ee4
+}
+
+/// Grinder food (TILES.TXT has no name for it; GrinderUpdate tests it).
+pub const GRINDER_FOOD: u16 = 15000;
+/// Tile function "Sensitive lever": touching it advances the whole block of it (FUN_1088_1536).
+pub const SENSITIVE_LEVER: u16 = 7030;
+
+impl Grinder {
+    /// LevelInit, record type 0x2724: [type, ?, y, top, trigger cell, camera offset].
+    pub fn from_record(r: &[i16]) -> Grinder {
+        let y = r[2] as i32;
+        Grinder {
+            y,
+            top: r[3] as i32,
+            y8: y << 9,
+            speed: -1,
+            max_speed: 0x180,
+            trigger: r[4] as u16,
+            cam_offset: r[5] as i32,
+            anim: 0x400,
+            platform: None,
+        }
+    }
+}
+
+impl Level {
+    /// FUN_1088_1536: the hero touched a sensitive-lever tile at (tx, ty): the whole rectangle of
+    /// that same cell value becomes `tile + function 2`, cell by cell (levers run their scripts).
+    pub fn touch_sensitive(
+        &mut self,
+        world: &mut World,
+        ty: i32,
+        tx: i32,
+        rng: &mut crate::rng::PascalRandom,
+        fx: &mut Effects,
+    ) {
+        let (w, h) = (world.main().width, world.main().height);
+        let at = |world: &World, r: i32, c: i32| world.main().cells[(r * w + c) as usize];
+        let tile = at(world, ty, tx);
+        // HeroTouchTiles tests its two points one after the other; the first may have changed
+        // the second already.
+        if world.cell_function(tile, 0) != SENSITIVE_LEVER {
+            return;
+        }
+        let step = world.cell_function(tile, 2) as i16 as i32;
+        crate::effects::effect(world, world.cell_function(tile, 4), ty << 4, tx << 4, rng);
+        let mut left = tx;
+        while left > 0 && at(world, ty, left - 1) == tile {
+            left -= 1;
+        }
+        let mut top = ty;
+        while top >= 1 && at(world, top - 1, left) == tile {
+            top -= 1;
+        }
+        let mut right = tx;
+        while right < w - 1 && at(world, ty, right + 1) == tile {
+            right += 1;
+        }
+        let mut bottom = ty;
+        while bottom < h - 1 && at(world, bottom + 1, right) == tile {
+            bottom += 1;
+        }
+        let new = (tile as i32 + step) as u16;
+        for r in top..=bottom {
+            for c in left..=right {
+                self.set_cell(world, new, (r * w + c) as u16, fx);
+            }
+        }
+    }
+
+    /// GrinderUpdate (1090:1a91), the parts that change the game: trigger, climb, platform,
+    /// hurting the hero, crushing rows. Returns true if it reached the hero at full speed.
+    pub fn update_grinder(
+        &mut self,
+        world: &mut World,
+        hero: (i32, i32, i32, bool),
+        cam_x: i32,
+        rng: &mut crate::rng::PascalRandom,
+        fx: &mut Effects,
+    ) -> bool {
+        let Some(g) = self.grinder.as_mut() else {
+            return false;
+        };
+        let (hero_x, hero_y, hero_crouch, _) = hero;
+        if g.speed < 0 {
+            if Self::lever_state(world, g.trigger) > 0 {
+                g.speed = 2;
+            }
+        } else {
+            if g.top < g.y {
+                if g.speed < g.max_speed {
+                    g.speed += 2;
+                }
+                let climb = hero_y < g.y - 1 || {
+                    let s = world.solidity_at(hero_y - 0x18, hero_x);
+                    s & crate::world::solid::WALL == 0 || hero_crouch < 8
+                };
+                if climb {
+                    g.y8 -= g.speed;
+                }
+                g.y = g.y8 >> 9;
+            } else if g.speed > 0 {
+                g.speed -= 1;
+            }
+            g.anim += g.speed;
+        }
+        if let Some(Some(p)) = g.platform.and_then(|i| self.platforms.get_mut(i)) {
+            p.prev_y = p.y;
+            p.y = g.y;
+            p.y16 = g.y << 4;
+        }
+        let g = self.grinder.as_mut().unwrap();
+        let mut hit_hero = false;
+        if g.y - 10 <= hero_y && g.speed > 0xbf {
+            hit_hero = true; // FUN_1088_3c32(0xc0); on a kill also FUN_1090_1a70
+        }
+        let y = g.y - 6;
+        let mut crushed = false;
+        for k in (0..=15).rev() {
+            let x = k * 16 + 0x20 + cam_x;
+            if world.tile_function_at(y, x) == GRINDER_FOOD {
+                crate::effects::explode_tile(self, world, 0x60, 0x80, y, x, rng, fx);
+                crushed = true;
+            }
+        }
+        if crushed {
+            let g = self.grinder.as_mut().unwrap();
+            g.slow_down(rng);
+            // The crunch sound's pitch, drawn when it is audible (always so far: the camera
+            // follows the grinder).
+            rng.random(0x50);
+        }
+        hit_hero
+    }
+}
+
+impl Grinder {
+    /// FUN_1090_1a70.
+    pub fn slow_down(&mut self, rng: &mut crate::rng::PascalRandom) {
+        self.speed -= rng.random(0x10) + 0x60;
+        if self.speed < 0 {
+            self.speed = 0;
         }
     }
 }
