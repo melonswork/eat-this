@@ -93,6 +93,7 @@ def main():
     ap.add_argument("--watch", default="", help="comma-separated globals (names from re/names.csv or 1170:xxxx) to log as i16 at the start of every game frame into watch.tsv")
     ap.add_argument("--dump-mem", action="append", default=[], metavar="SEL:OFF:LEN", help="hex-dump memory into mem_SEL_OFF.bin when the demo starts (DemoLoad), e.g. 1170:07b2:400")
     ap.add_argument("--entry", action="append", default=[], metavar="NAME|SEL:OFF", help="log every entry into this function with the frame and its callers (BP chain) into entries.txt")
+    ap.add_argument("--self", type=lambda v: int(v, 0), default=0, metavar="LEN", help="with --entry: also log the first LEN bytes of the far pointer argument on top of the stack (a method's Self) as signed words")
     ap.add_argument("--dump-groups", action="store_true", help="at DemoLoad, write the sprite group slot table (1170:6188) with the first bytes of each group into groups.txt")
     ap.add_argument("--platforms", action="store_true", help="log the first 0x40 bytes (as i16) of every platform (gPlatforms, 1170:4662) at the start of every game frame into platforms.tsv")
     ap.add_argument("--writes", default="", help="comma-separated globals; log every write to them (frame, CS:IP, function, new value) into writes.tsv")
@@ -278,7 +279,13 @@ def main():
                 ip, cs = e.rw(ss, bp + 2), e.rw(ss, bp + 4)
                 chain.append(syms.name(cs, ip - 5) if 0x1000 <= cs < 0x1170 else syms.name(e["cs"], ip - 3) + "?")
                 bp = e.rw(ss, bp)
-            entries_f.write(f"{st['frame']}\t{spec}\t" + " <- ".join(chain) + "\n")
+            line = f"{st['frame']}\t{spec}\t" + " <- ".join(chain)
+            if o.self:
+                so, sg = e.rw(ss, sp + 4), e.rw(ss, sp + 6)
+                raw = bytes(e.rb(sg, so, o.self))
+                words = [int.from_bytes(raw[i:i + 2], "little", signed=True) for i in range(0, len(raw) - 1, 2)]
+                line += f"\tself={sg:04x}:{so:04x}\t" + " ".join(str(w) for w in words)
+            entries_f.write(line + "\n")
 
         emu.hook(sel, off, on_entry)
 

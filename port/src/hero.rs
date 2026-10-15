@@ -80,6 +80,12 @@ pub struct Hero {
     /// Changes to the camera's resting point (1170:4e34/4e36) made this frame.
     pub cam_nudge: (i32, i32),
     pub gun: Gun,
+    /// gHeroPlatform (4e22): the slope tile's function 2 (its row in 1170:1280, 0x80 mirrored)
+    /// the feet are on, -1 none.
+    slope: i32,
+    collide_flags: i32,
+    /// 1170:511b: on a slope, set by FUN_1088_2f6b; walls are then looked for higher up.
+    on_slope: bool,
 }
 
 /// The pistol (weapon 2's left button; HeroUpdate's end block and HeroFireWeapon 1088:6437).
@@ -142,6 +148,9 @@ impl Hero {
             shakes: Vec::new(),
             cam_nudge: (0, 0),
             gun: Gun::default(),
+            slope: -1,
+            collide_flags: 3,
+            on_slope: false,
         }
     }
 
@@ -394,19 +403,46 @@ impl Hero {
                 if self.ground == 0x17 {
                     vy = (vy << 3) / 7;
                 }
-                self.start_jump(vy, JUMP);
+                // Out of a crouch on a slope marked 1: kind 7 (a roll).
+                let kind = if self.prev_state == CROUCH && self.slope != -1 && slope_word(self.slope, 0x14) & 1 != 0 {
+                    7
+                } else {
+                    JUMP
+                };
+                self.start_jump(vy, kind);
                 self.released[UP] = false;
             }
         }
 
         if self.state == GROUND && (held(LEFT) || held(RIGHT)) {
             self.facing = if held(LEFT) { -1 } else { 1 };
-            self.vx = (self.vx + WALK_STEP * self.facing).clamp(-WALK_LIMIT, WALK_LIMIT);
+            // Up the steep slopes (row word 0x12 == 0xe7) slower.
+            let limit = if self.on_slope && slope_word(self.slope, 0x12) == 0xe7 && self.push_timer < 1 {
+                3 + (self.vx.abs() == 3) as i32
+            } else {
+                WALK_LIMIT
+            };
+            self.vx = (self.vx + WALK_STEP * self.facing).clamp(-limit, limit);
             dx += (self.vx.abs() / 4 + 1) * self.vx.signum();
             if self.vx.signum() == self.facing {
                 friction = false;
             }
             walking = true;
+        }
+
+        if self.slope != -1 {
+            let flags = slope_word(self.slope, 0x14);
+            if flags & 2 != 0 {
+                eprintln!("warning: slippery slopes (HeroUpdate, row flag 2) not ported");
+            }
+            if flags & 1 != 0 {
+                if !walking {
+                    self.vx = 0;
+                }
+                if self.vx == 0 && dx == 0 && ((((self.slope & 0x80) != 0) as i32 + self.x) & 7) != 0 {
+                    dx = self.facing;
+                }
+            }
         }
 
         // Walked off an edge.
@@ -479,7 +515,7 @@ impl Hero {
             (dx, dy) = (ndx, ndy);
             collide_flags = 1;
         }
-        let _ = collide_flags;
+        self.collide_flags = collide_flags;
 
         if self.vx != 0 && friction {
             let s = self.vx.signum();
@@ -680,6 +716,7 @@ impl Hero {
         let (h, hw) = (self.height, self.half_width);
         let (x0, y0, dx_req) = (self.x, self.y, dx);
         let head = (y0 - h) + 1;
+        let prev_slope = std::mem::replace(&mut self.slope, -1); // 1170:4ea4
         let mut step_h = 0;
         let wall = |plane: usize, y: i32, x: i32| {
             let s = w.solidity_in(plane, y, x);
@@ -733,7 +770,9 @@ impl Hero {
         if dx != 0 {
             let s = dx.signum();
             let edge = x0 + dx + s * hw;
-            let mut k = (h + 15) >> 4;
+            // On a slope the feet are below the tile edge: start the wall test higher.
+            let lift = if self.on_slope { dx.abs() + hw } else { 0 };
+            let mut k = (h + 15 - lift) >> 4;
             let mut ly = head;
             let mut hit = false;
             loop {
@@ -741,7 +780,7 @@ impl Hero {
                     hit = true;
                     break;
                 }
-                ly = if k == 1 { y0 } else { ly + 16 };
+                ly = if k == 1 { y0 - lift } else { ly + 16 };
                 if k == 0 {
                     break;
                 }
@@ -800,7 +839,7 @@ impl Hero {
             }
             self.y = y;
         } else {
-            let (floor, carry) = self.find_floor(w, lv, self.x - x0, y0, y0 + dy);
+            let (floor, carry) = self.find_floor(w, lv, self.x - x0, y0, y0 + dy, prev_slope);
             if floor == NONE {
                 self.y = y0 + dy;
             } else {
@@ -813,12 +852,23 @@ impl Hero {
                 }
             }
         }
+        if self.slope == -1 {
+            self.on_slope = false;
+        }
         (blocked, step_h)
     }
 
     /// HeroFindFloor (1088:304c, see re/rng.md): the highest floor in the row under y_new.
     /// Returns (new y or NONE, the carrying platform's dx).
-    fn find_floor(&mut self, w: &World, lv: &Level, dx: i32, y_old: i32, y_new: i32) -> (i32, i32) {
+    fn find_floor(
+        &mut self,
+        w: &World,
+        lv: &Level,
+        dx: i32,
+        y_old: i32,
+        y_new: i32,
+        prev_slope: i32,
+    ) -> (i32, i32) {
         let hw = self.half_width;
         let x = self.x;
         let e = if self.ground <= 9 && self.state <= 0 {
@@ -827,7 +877,6 @@ impl Hero {
             0
         };
         let cols = (hw * 2 + 15) >> 4;
-        let _ = dx; // tolerance |dx| only applies right after riding an object platform (4ea4)
         let mut best = NONE;
         let mut carry = 0;
         let mut ground = self.ground;
@@ -869,7 +918,9 @@ impl Hero {
             }
             found
         };
-        let sy = y_new + 1;
+        // Coming off a slope, look |dx| deeper.
+        let deeper = if self.collide_flags & 2 != 0 && prev_slope != -1 { dx.abs() } else { 1 };
+        let sy = y_new + deeper;
         let (mut sx, mut k) = (x - hw, cols);
         loop {
             let func0 = w.tile_function_at(sy, sx);
@@ -932,7 +983,52 @@ impl Hero {
         if best != NONE {
             self.ground = ground;
         }
+        if self.collide_flags & 2 == 0 {
+            return (best, carry);
+        }
+        // Slopes (solidity 0x20) at the feet - 8 and + 8: they win over a floor while walking.
+        let state = if self.state == -2 { 1 } else { self.state };
+        let adx = dx.abs();
+        let mut ly = y_new - 8;
+        for _ in 0..2 {
+            if w.solidity_at(ly, x) & 0x20 != 0 {
+                let cell = w.cell_at(MAIN_PLANE, ly, x).unwrap_or(0);
+                let (kind, height) = self.slope_probe(w, cell, x, dx);
+                let h = (ly & !15) + height;
+                let ok = if state < 1 {
+                    if self.on_slope && dx != 0 {
+                        h <= y_new && y_old - adx <= h
+                    } else {
+                        y_old - adx + (adx > 0) as i32 <= h && h <= y_new + hw
+                    }
+                } else {
+                    h <= best && y_old - adx <= h && h <= y_new + e
+                };
+                if ok {
+                    self.ground = 1;
+                    self.slope = kind;
+                    return (h, carry);
+                }
+            }
+            ly += 16;
+        }
         (best, carry)
+    }
+
+    /// FUN_1088_2f6b: the slope's height at x (1170:1280 row by function 2, mirrored with 0x80),
+    /// and whether the hero is on it going its way (1170:511b; byte 0x10 of the row is the split).
+    fn slope_probe(&mut self, w: &World, cell: u16, x: i32, dx: i32) -> (i32, i32) {
+        let kind = w.cell_function(cell, 2) as i16 as i32;
+        let row = &crate::world::SLOPES[((kind as u16 & 0xff7f) as usize) * 0x16..];
+        let mut i = x & 0xf;
+        let split = row[0x10] as i32;
+        self.on_slope = if kind & 0x80 != 0 {
+            i = 0xf - i;
+            dx == 0 || ((split > i) != (dx > 0))
+        } else {
+            dx == 0 || ((split > i) != (dx < 0))
+        };
+        (kind, row[i as usize] as i32)
     }
 }
 
@@ -1159,8 +1255,11 @@ impl Hero {
     fn push_out_of_walls(&mut self, w: &World) {
         let (h, hw) = (self.height, self.half_width);
         let cols = (hw * 2 + 15) >> 4;
-        // No platform support yet: gHeroPlatform is always -1 here.
-        let (mut ly, rows) = (self.y, (h + 15) >> 4);
+        let (mut ly, rows) = if self.slope == -1 {
+            (self.y, (h + 15) >> 4)
+        } else {
+            (self.y - hw, (h + 15 - hw) >> 4)
+        };
         for e in 0..=rows {
             let mut lx = self.x - hw;
             for c in 0..=cols {
@@ -1217,4 +1316,11 @@ fn spawn_dust(w: &World, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
         rng.random(0x11);
         rng.random(10);
     }
+}
+
+/// A word of the slope table row (1170:1280 + 0x16 * (kind & 0xff7f)): 0x12 its shape id,
+/// 0x14 flags (1 stop on it, 2 slippery, 8 sliding dust).
+fn slope_word(kind: i32, off: usize) -> i32 {
+    let row = &crate::world::SLOPES[((kind as u16 & 0xff7f) as usize) * 0x16..];
+    i16::from_le_bytes([row[off], row[off + 1]]) as i32
 }
