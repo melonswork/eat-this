@@ -423,7 +423,8 @@ impl Level {
                 1000 => self.teleports.push(rec.clone()),
                 0x4b0 => {
                     let mut o = Obj::new(kind, 0xaec, 0x18);
-                    for (k, &v) in rec.iter().skip(1).take(11).enumerate() {
+                    // LevelInit copies 0x16 bytes from the record's word 2 to +2.
+                    for (k, &v) in rec.iter().skip(2).take(11).enumerate() {
                         o.set(2 + 2 * k, v as i32);
                     }
                     let s = world.sector_at(o.w(4), o.w(2));

@@ -311,6 +311,68 @@ impl Level {
     }
 
     /// FUN_1078_02e5.
+    /// FUN_1088_72f9(dir, y, x): the hero pushes against the wall at (x, y): a pushable block
+    /// (OBJECTS record 0x4b0 in the sector's list +0x66) with room behind it slides one tile as a
+    /// platform; its cell (+0x16) is touched either way.
+    pub fn push_block(&mut self, world: &mut World, hero_y: i32, dir: i32, y: i32, x: i32, fx: &mut Effects) {
+        let wall = |yy| world.solidity_at(yy, x) & 2 != 0;
+        if !((wall(hero_y - 0x10) || wall(hero_y - 0x20))
+            && world.tile_function_at(hero_y - 0x10, x) != func::NOT_CUT
+            && world.tile_function_at(hero_y - 0x20, x) != func::NOT_CUT)
+        {
+            return;
+        }
+        let sector = self.sector.unwrap_or(0);
+        let ids: Vec<usize> = self.lists[sector][crate::objects::list::L66].clone();
+        for &id in ids.iter().rev() {
+            let o = self.objects[id].as_ref().unwrap();
+            if !(o.w(2) <= x && o.w(4) <= y && x <= o.w(6) && y <= o.w(8)) {
+                continue;
+            }
+            if o.w(0x12) != 0 {
+                let (x1, y1, x2, y2, speed, sound) = (o.w(0xa), o.w(0xc), o.w(0xe), o.w(0x10), o.w(0x12), o.w(0x14));
+                // Already sliding?
+                if self.platforms.iter().flatten().any(|p| {
+                    p.start.1 == y1 && p.points.last().is_some_and(|q| q.0 == x1)
+                }) {
+                    return;
+                }
+                let beyond = if dir < 0 { x1 - 1 } else { x2 + 1 };
+                if blocked_behind(world, dir, y2, y1, beyond) {
+                    return;
+                }
+                let step = dir * 0x10;
+                let saved = self.platform_sound;
+                self.platform_sound = sound;
+                let i = self.create_platform(world, 1);
+                self.platform_sound = saved;
+                self.cut_area(world, i, (x1 >> 4, y1 >> 4, x2 >> 4, y2 >> 4));
+                {
+                    let p = self.platforms[i].as_mut().unwrap();
+                    p.start = (x1, y1);
+                    p.points = vec![(x1 + step, y1, speed)];
+                }
+                self.start_platform(world, i, false);
+                let o = self.objects[id].as_mut().unwrap();
+                for off in [2, 6, 0xa, 0xe] {
+                    o.set(off, o.w(off) + step);
+                }
+            }
+            let cell = self.objects[id].as_ref().unwrap().w(0x16);
+            if cell != -1 {
+                let tile = world.main().cells[cell as usize];
+                if tile as i16 > 0 {
+                    let f0 = world.cell_function(tile, 0);
+                    if (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f0) {
+                        self.run_scripts(world, cell as u16, fx);
+                    } else if f0 == 30000 {
+                        eprintln!("warning: a bonus tile uncovered (FUN_1040_6b03) not ported");
+                    }
+                }
+            }
+        }
+    }
+
     fn create_platform(&mut self, world: &mut World, points: usize) -> usize {
         let i = self
             .platforms
@@ -655,4 +717,24 @@ impl Grinder {
             self.speed = 0;
         }
     }
+}
+
+/// FUN_1088_7251: something solid in the column the block would move into.
+fn blocked_behind(world: &World, dir: i32, y2: i32, mut y: i32, x: i32) -> bool {
+    while y < y2 {
+        let f = world.tile_function_at(y, x);
+        if f == func::NOT_CUT || world.tile_function_at(y, x - dir) == func::NOT_CUT {
+            let mut lx = x - dir;
+            while world.tile_function_at(y, lx) == func::NOT_CUT {
+                lx -= dir * 0x10;
+            }
+            if world.cell_at(crate::world::MAIN_PLANE, y, lx).unwrap_or(0) != 0 {
+                return true;
+            }
+        } else if world.solidity_at(y, x) & 0x22 != 0 || f == 0xec54 {
+            return true;
+        }
+        y += 0x10;
+    }
+    false
 }

@@ -693,6 +693,9 @@ impl Level {
     ) {
         let width = world.main().width;
         let idx = ((y / 16) * width + x / 16) as usize;
+        if std::env::var_os("ET_DEBUG").is_some() {
+            eprintln!("WALL {} at ({x},{y}) strength {strength}", self.particles.now);
+        }
         let left = {
             let p2 = world.planes[2].as_mut().expect("plane 2");
             let v = p2.cells[idx] as i16 as i32;

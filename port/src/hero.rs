@@ -86,6 +86,8 @@ pub struct Hero {
     collide_flags: i32,
     /// gHeroPrevX/Y: where this frame's move started.
     prev: (i32, i32),
+    /// FUN_1088_72f9's call this frame: (dir, y, x) of the wall pushed.
+    pub push: Option<(i32, i32, i32)>,
     /// 1170:511b: on a slope, set by FUN_1088_2f6b; walls are then looked for higher up.
     on_slope: bool,
 }
@@ -153,6 +155,7 @@ impl Hero {
             slope: -1,
             collide_flags: 3,
             prev: (x, y),
+            push: None,
             on_slope: false,
         }
     }
@@ -265,6 +268,7 @@ impl Hero {
     ) {
         // ReadGameInput: moving the mouse raises the gun.
         self.gun.shot = None;
+        self.push = None;
         if mouse != self.gun.mouse {
             self.gun.shooting = true;
         }
@@ -668,7 +672,8 @@ impl Hero {
         }
         if walking && (blocked == 0 || step_h > 0x13) {
             if blocked != 0 && blocked.signum() == self.facing {
-                // Pushing against a wall.
+                // Pushing against a wall (a block may give way).
+                self.push = Some((self.facing, self.y - step_h, (self.half_width + 1) * self.facing + self.x));
                 if self.push_timer == 0 {
                     self.anim = 0x1c;
                 }

@@ -134,7 +134,11 @@ def main():
     watch_f = open(out / "watch.tsv", "w") if watch else None
     if watch_f:
         watch_f.write("frame\t" + "\t".join(w for w, _ in watch) + "\n")
-    writes = [(w, int((names.get(w) or w).split(":")[1], 16)) for w in o.writes.split(",") if w]
+    # (name, linear address): selector s has linear base (s >> 3) << 16 (see win16.py).
+    writes = []
+    for w in (w for w in o.writes.split(",") if w):
+        sel, off = (int(v, 16) for v in (names.get(w) or w).split(":"))
+        writes.append((w, ((sel >> 3) << 16) + off))
     writes_f = open(out / "writes.tsv", "w") if writes else None
     calls_f = open(out / "calls.tsv", "w")
     calls_f.write("window\tframe\tcaller\tsite\tkind\tn\tresult\tseed\n")
@@ -243,8 +247,7 @@ def main():
         from unicorn.x86_const import UC_X86_REG_CS, UC_X86_REG_IP
 
         writes_f.write("frame\tvar\tsite\tcaller\tvalue\n")
-        base = (DS >> 3) << 16
-        by_addr = {base + a: w for w, a in writes}
+        by_addr = {a: w for w, a in writes}
 
         def on_write(uc, access, address, size, value, data):
             if not st["started"]:
@@ -257,7 +260,7 @@ def main():
             writes_f.write(f"{st['frame']}\t{w}\t{cs:04x}:{ip:04x}\t{syms.name(cs, ip)}\t{v - 0x10000 if v & 0x8000 else v}\n")
 
         for _, a in writes:
-            emu.uc.hook_add(UC_HOOK_MEM_WRITE, on_write, begin=base + a, end=base + a + 1)
+            emu.uc.hook_add(UC_HOOK_MEM_WRITE, on_write, begin=a, end=a + 1)
 
     entries_f = open(out / "entries.txt", "w") if o.entry else None
     for spec in o.entry:

@@ -253,6 +253,10 @@ impl Game {
             noise = 2;
         }
         let mut fx = Effects::default();
+        if let Some((dir, y, x)) = self.hero.push {
+            let hy = self.hero.y;
+            self.level.push_block(&mut self.world, hy, dir, y, x, &mut fx);
+        }
         for (ty, tx) in std::mem::take(&mut self.hero.touched) {
             self.level
                 .touch_sensitive(&mut self.world, ty, tx, &mut self.rng, &mut fx);
