@@ -383,6 +383,15 @@ impl Game {
         if std::mem::take(&mut fx.hero_bounce) {
             self.hero.bounce(-0x32, 10);
         }
+        if let Some((vy, kind, y, release)) = fx.hero_spring.take() {
+            self.hero.spring(vy, kind, y, release);
+        }
+        if let Some(v) = fx.hero_lim.0.take() {
+            self.hero.lim.0 = v;
+        }
+        if let Some(v) = fx.hero_lim.1.take() {
+            self.hero.lim.1 = v;
+        }
         // FUN_1088_9d34: the drone follows the hero and shoots.
         self.level.drone_update(&self.world, &self.hero, self.frame);
         // FUN_1050_4ca5(1): the hero's shots and their sparks.

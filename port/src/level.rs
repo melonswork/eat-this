@@ -42,6 +42,10 @@ pub struct Effects {
     pub shakes: Vec<(i32, i32)>,
     /// FUN_1088_3a81: the hero bounced off an enemy's head (HeroStartJump(0, -50, 10)).
     pub hero_bounce: bool,
+    /// A springboard under him: (vy, jump kind or -1 for none, y, whether the Up key is used up).
+    pub hero_spring: Option<(i32, i32, i32, bool)>,
+    /// What stops him walking on (1170:4e16 / 4e18 for the next frame).
+    pub hero_lim: (Option<i32>, Option<i32>),
     /// 1170:4e26: the hero stands by an enemy he can kick (1, or 2 with the pointer on it).
     pub hero_by_enemy: i32,
     /// Enemies killed (1170:4eb0).

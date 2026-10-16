@@ -31,6 +31,8 @@ pub struct HeroView {
     pub state: i32,
     pub vy: i32,
     pub fall: i32,
+    pub facing: i32,
+    pub half_width: i32,
     pub up: bool,
     /// 1170:4e2a: the hero's invulnerability frames.
     pub hurt: i32,
@@ -114,6 +116,95 @@ impl Level {
         }
     }
 
+    /// FUN_1070_d23b (0x148c): a springboard. Shots push it sideways, the hero walking into it
+    /// shoves it along, and landing on it throws him up (harder from higher up).
+    fn springboard(&mut self, id: usize, env: &mut Env) {
+        let h = env.h;
+        let (x, y, frame) = (self.o(id).w(0xe), self.o(id).w(0x10), self.o(id).w(10));
+        let open = |env: &Env, dir: i32| {
+            env.world.solidity_at(y, dir * 0xb + x) & 10 == 0 && env.world.solidity_at(y - 0x10, dir * 0xf + x) & 10 == 0
+        };
+        let mut push = 0;
+        self.particles.p.aim_level = -1;
+        self.particles.p.aim_level2 = -1;
+        let d = match crate::sprites::hit_rect(0x7556 + frame, y, x, false) {
+            Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x11fb),
+            None => 0,
+        };
+        self.particles.p.aim_level = 0x100;
+        self.particles.p.aim_level2 = 0x100;
+        if d > 0 && self.particles.hit_mask & 0x48 == 0 {
+            push = self.particles.hit_direction();
+            if !open(env, push) {
+                push = 0;
+            }
+            env.fx.shakes.push((0xc, 5));
+        }
+        {
+            let o = self.o(id);
+            o.set(2, x - 0x20);
+            o.set(4, y - 0x2e);
+            o.set(6, x + 0x20);
+            o.set(8, y + 0x10);
+        }
+        self.actor_physics(id, env, 0x1e, 10, 6);
+        if self.o(id).w(0x1a) < 1 {
+            let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
+            if y - 0x1a < h.y && h.y - 0x20 < y {
+                if h.facing < 1 {
+                    let edge = x + 0x10;
+                    if edge <= h.prev_x && h.x <= edge && open(env, -1) {
+                        push = (h.x - 0x10) - x;
+                        env.fx.hero_lim.0 = Some((env.frame as i32 & 1) - 1);
+                    }
+                } else {
+                    let edge = x - 0x10;
+                    if h.prev_x <= edge && edge <= h.x && open(env, 1) {
+                        push = (h.x + 0x10) - x;
+                        env.fx.hero_lim.1 = Some(1 - (env.frame as i32 & 1));
+                    }
+                }
+            }
+            let o = self.o(id);
+            if push != 0 {
+                o.set(0xe, o.w(0xe) + push);
+            }
+            if o.w(0x20) > 0 {
+                o.set(0x20, o.w(0x20) - 1);
+            }
+            let x = o.w(0xe);
+            if (x - 0xb) - h.half_width <= h.x && h.x <= x + 0xc + h.half_width {
+                let top = y - 0x1a;
+                let ok = if h.state < 1 { matches!(h.state, 0 | -40) } else { h.vy >= 0 };
+                if ok && h.prev_y <= top {
+                    if y - 0x1e <= h.y {
+                        self.o(id).set(0x20, 6);
+                    }
+                    if top <= h.y {
+                        let mut power = ((h.fall << 2) / 3).min(0x5a);
+                        let mut release = false;
+                        if power < 0x46 && h.up {
+                            power = 0x46;
+                            release = true;
+                        }
+                        let kind = if power < 0x2d {
+                            0
+                        } else if power < 0x46 {
+                            5
+                        } else {
+                            env.fx.shakes.push((0xc, 3));
+                            7
+                        };
+                        env.fx.hero_spring = Some((-power, kind, top, release));
+                    }
+                }
+            }
+            if self.o(id).w(0x1c) == 5 {
+                eprintln!("warning: springboard sliding on a slope (FUN_1068_17d6) not ported");
+            }
+        }
+    }
+
     fn update_object(&mut self, id: usize, env: &mut Env) {
         let kind = self.objects[id].as_ref().unwrap().kind;
         match kind {
@@ -125,6 +216,7 @@ impl Level {
             0x1428 => self.alien(id, env),
             0x1432 => self.bigali(id, env),
             0x14aa => {} // FUN_1070_a06a: draws a sprite
+            0x148c => self.springboard(id, env),
             0x13c4 => {} // FUN_1068_315a: plain sound emitters (kinds < 10000) don't draw Random
             k => eprintln!("warning: object kind {k:#x} not ported"),
         }

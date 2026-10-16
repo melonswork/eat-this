@@ -74,6 +74,7 @@ pub struct Hero {
     nudge: i32,
     hang_x: i32,       // 1170:4e52
     hang_y: i32,       // 1170:4e54
+    pub lim: (i32, i32),   // 1170:4e16 / 4e18
     prev_ground: i32,  // 1170:4e2e
     belt_dir: i32,     // 1170:4e08
     belt: i32,         // 1170:4ea0: the conveyor's speed under him
@@ -210,6 +211,7 @@ impl Hero {
             hang_y: 0x7fff,
             belt: 0,
             prev_ground: 0,
+            lim: (-0x7fff, 0x7fff),
             belt_dir: 0,
             climb: 0,
             push_timer: 0,
@@ -317,10 +319,24 @@ impl Hero {
             state: self.state,
             vy: self.vy,
             fall: self.fall,
+            facing: self.facing,
+            half_width: self.half_width,
             up,
             hurt: self.hurt,
             hit_mask: self.hit_mask,
         }
+    }
+
+    /// A springboard (FUN_1070_d23b) under him: the jump (kind <= 0: none), standing on it.
+    pub fn spring(&mut self, vy: i32, kind: i32, y: i32, release: bool) {
+        if release {
+            self.released[UP] = false;
+        }
+        if kind > 0 {
+            self.start_jump(vy, kind);
+        }
+        self.ground = 0x17;
+        self.y = y;
     }
 
     /// HeroStartJump(0, vy, kind) from outside HeroUpdate.
@@ -386,6 +402,14 @@ impl Hero {
         let mut friction = true;
         let mut walking = false;
         let (mut dx, mut dy) = (std::mem::take(&mut self.nudge), 0);
+        // Something solid beside him (a springboard he walked into) caps the carry.
+        if dx < self.lim.0 {
+            dx = self.lim.0;
+            self.lim.0 = -1;
+        } else if self.lim.1 < dx {
+            dx = self.lim.1;
+            self.lim.0 = 1;
+        }
         for (r, &v) in self.released.iter_mut().zip(&input) {
             if v < 1 {
                 *r = true;
@@ -812,6 +836,7 @@ impl Hero {
             self.belt_dir = self.belt;
         }
         let posed = self.end_of_frame(walking, blocked, step_h, rng);
+        self.lim = (-0x7fff, 0x7fff);
         self.gun_end(posed, &input, rng, ps.now);
         self.pick_up(w);
         self.take_hits(ps, rng);
@@ -1155,8 +1180,13 @@ impl Hero {
                 return false;
             }
         }
+        let (dir, step_h) = if self.lim.0 == self.facing {
+            (self.facing, 0x14)
+        } else {
+            (blocked.signum(), step_h)
+        };
         if walking && (blocked == 0 || step_h > 0x13) {
-            if blocked != 0 && blocked.signum() == self.facing {
+            if dir == self.facing {
                 // Pushing against a wall (a block may give way).
                 self.push = Some((self.facing, self.y - step_h, (self.half_width + 1) * self.facing + self.x));
                 if self.push_timer == 0 {
