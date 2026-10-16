@@ -74,6 +74,8 @@ pub struct Hero {
     nudge: i32,
     hang_x: i32,       // 1170:4e52
     hang_y: i32,       // 1170:4e54
+    prev_ground: i32,  // 1170:4e2e
+    belt_dir: i32,     // 1170:4e08
     belt: i32,         // 1170:4ea0: the conveyor's speed under him
     climb: i32,        // 1170:4e0e: 0 hanging, 1..0x1b pulling up
     push_timer: i32,   // 1170:4e12 (gHeroShootWalkTimer): frames since pushing a wall
@@ -207,6 +209,8 @@ impl Hero {
             hang_x: 0,
             hang_y: 0x7fff,
             belt: 0,
+            prev_ground: 0,
+            belt_dir: 0,
             climb: 0,
             push_timer: 0,
             prev_blocked: 0,
@@ -403,7 +407,8 @@ impl Hero {
                 self.hurt_blink -= 1;
             }
         }
-        let held = |k: usize| input[k] > 0;
+        let cleared = std::cell::Cell::new(usize::MAX);
+        let held = |k: usize| input[k] > 0 && cleared.get() != k;
 
         // A ceiling right above the head forces a crouch.
         if w.solidity_at(self.y - 0x2b, self.x) & solid::WALL != 0 {
@@ -671,6 +676,11 @@ impl Hero {
         // Walked off an edge.
         if self.ground == 0 && self.state < 1 && matches!(self.state, GROUND | CROUCH) {
             self.start_jump(1, FALL);
+            if self.prev_ground == 5 {
+                // Off the end of a conveyor belt: thrown along its way.
+                self.vx = if self.belt_dir < 0 { -0x17 } else { 0x17 };
+                cleared.set(if self.belt_dir < 0 { RIGHT } else { LEFT });
+            }
         }
 
         if self.state == USE {
@@ -789,6 +799,7 @@ impl Hero {
             };
         }
 
+        self.prev_ground = self.ground;
         self.ground = 0;
         self.head_blocked = 0;
         self.lever_reach &= 1;
@@ -798,6 +809,7 @@ impl Hero {
         if self.ground == 5 {
             // A conveyor belt (tile function 11000) carries him next frame (1170:4e06).
             self.nudge = self.belt;
+            self.belt_dir = self.belt;
         }
         let posed = self.end_of_frame(walking, blocked, step_h, rng);
         self.gun_end(posed, &input, rng, ps.now);
