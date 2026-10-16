@@ -14,15 +14,16 @@ pub const DROP: u16 = 0xbb0;
 pub const SHELL: u16 = 0xbc4;
 pub const SPLAT: u16 = 0x976;
 
-/// FUN_1058_016f(y, x): the 2x3 tiles at (x - 8 ..) are all wall (flag 0x800) or back-wall
-/// tiles (kind 4 in plane 0).
+/// FUN_1058_016f(y, x): the 2x3 tiles at (x - 8 ..) are all wall (flag 0x800), or have a back
+/// wall behind (plane 0 solid 0x800) and a main-plane tile whose record starts with 4 (the cell
+/// is the one TileSolidityAt looked up first).
 fn wall_behind(world: &World, mut y: i32, x: i32) -> bool {
     for _ in 0..3 {
         for col in 0..2 {
             let a = x - 8 + 16 * col;
             if world.solidity_at(y, a) & 0x800 == 0 {
                 let back = world.solidity_in(0, y, a);
-                if back & 0x800 == 0 || world.cell_byte0(0, y, a) != Some(4) {
+                if back & 0x800 == 0 || world.cell_byte0(MAIN_PLANE, y, a) != Some(4) {
                     return false;
                 }
             }
@@ -56,7 +57,11 @@ impl Level {
 
     /// FUN_1058_0218(sprite, y, x): a blood splat on the wall behind.
     pub fn blood_splat(&mut self, world: &World, sprite: i32, y: i32, x: i32) -> bool {
-        if !wall_behind(world, y, x) {
+        let ok = wall_behind(world, y, x);
+        if std::env::var("ET_SPLAT").is_ok() {
+            eprintln!("SPLAT {} sprite {sprite:#x} at ({x},{y}) wall {ok}", self.particles.now);
+        }
+        if !ok {
             return false;
         }
         let mut o = Obj::new(SPLAT, SPLAT, 0x14);
@@ -143,6 +148,9 @@ impl Level {
             (o.w(10), o.w(0xc), o.w(0xe), o.l(0x10) as u32)
         };
         let ps = &mut self.particles;
+        if std::env::var("ET_SPLAT").is_ok() {
+            eprintln!("SPLAT update {} at ({x},{y}) wall {}", ps.now, wall_behind(env.world, y, x));
+        }
         if !wall_behind(env.world, y, x) {
             ps.p.group = 0;
             ps.spawn_seq(sprite & 0xff00, 4, 5, y + 0xe, x, 1);

@@ -120,7 +120,7 @@ impl World {
     /// The first byte of the TILE INFOS record of the tile at (y, x) in a plane.
     pub fn cell_byte0(&self, plane: usize, y: i32, x: i32) -> Option<u8> {
         let c = self.cell_at(plane, y, x)?;
-        if c == 0 || c & 0x8000 != 0 {
+        if c & 0x8000 != 0 {
             return None;
         }
         let g = self.groups[(c >> 8) as usize & 15].as_ref()?;
