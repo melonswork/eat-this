@@ -91,7 +91,7 @@ pub struct Hero {
     released: [bool; 9],
     input_cache: [i8; 9],
     pub height: i32,
-    half_width: i32,
+    pub half_width: i32,
     /// ScreenShake calls made this frame, in order: (strength, amplitude).
     pub shakes: Vec<(i32, i32)>,
     /// Changes to the camera's resting point (1170:4e34/4e36) made this frame.
@@ -174,6 +174,8 @@ pub struct Gun {
     pub shell7: Option<(i32, i32, i32)>,
     /// FUN_1088_69d8's bullet: (y, x, angle, parity).
     pub rapid: Option<(i32, i32, i32, i32)>,
+    /// FUN_1088_6cf0's three rockets: (y, x, angle).
+    pub rockets: Option<(i32, i32, i32)>,
 }
 
 /// A weapon record (1170:1656 + 0xd * id).
@@ -420,6 +422,7 @@ impl Hero {
         self.gun.charge = None;
         self.gun.shell7 = None;
         self.gun.rapid = None;
+        self.gun.rockets = None;
         self.push = None;
         if mouse != self.gun.mouse {
             self.gun.shooting = true;
@@ -432,6 +435,14 @@ impl Hero {
             self.gun.shooting = true;
         }
         let mut input = *input;
+        if input[8] == 1 {
+            // ReadGameInput: the switch-weapon key selects the next weapon by digit key.
+            let at = (0..10).rev().find(|&d| WEAPON_FOR_DIGIT[d] == self.weapon).unwrap_or(0);
+            self.select_weapon(WEAPON_FOR_DIGIT[(at + 1) % 10]);
+        }
+        if std::env::var("ET_W").is_ok() {
+            eprintln!("WEAPON {} {} sw {}", ps.now, self.weapon, input[8]);
+        }
         let prev_facing = self.facing;
         self.frame = NONE;
         self.prev_state = self.state;
@@ -1329,6 +1340,22 @@ impl Hero {
                     self.gun.charge = Some((y, x, a));
                     self.gun.pose = 4;
                     self.gun.shooting = true;
+                    self.released[RIGHT_SHOOT] = false;
+                }
+            }
+            // FUN_1088_6cf0: three homing rockets.
+            8 => {
+                if std::env::var("ET_W").is_ok() {
+                    let w = &self.weapons[8];
+                    eprintln!("W8 {} ammo {} armed {} rs {} rel {} next {} now {}", self.weapon, w.ammo, self.gun.armed, input[RIGHT_SHOOT], self.released[RIGHT_SHOOT], w.next, now);
+                }
+                if self.use_ammo(8, input, now) {
+                    let g = &mut self.gun;
+                    let (y, x) = (self.y + g.muzzle.1 - 0x16, self.x + g.muzzle.0);
+                    g.rockets = Some((y, x, g.aim));
+                    rng.random(0x30); // the sound's pitch
+                    g.pose = 4;
+                    g.shooting = true;
                     self.released[RIGHT_SHOOT] = false;
                 }
             }

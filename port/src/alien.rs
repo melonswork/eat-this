@@ -64,7 +64,7 @@ impl Level {
             if self.o(id).w(0x36) > 0 {
                 env.fx.kills += 1;
             }
-            self.drop_bonus(id);
+            self.drop_bonus(id, env.world);
             env.fx.shakes.push((0x20, 0x10));
             let (x, y) = self.xy(id);
             self.gibs(y - 0x19, x, env);
@@ -284,7 +284,7 @@ impl Level {
                         }
                     } else {
                         self.o(id).set(0x28, -0xd2);
-                        self.drop_bonus(id);
+                        self.drop_bonus(id, env.world);
                     }
                     self.o(id).set(0x36, 0);
                     env.fx.shakes.push((0xc, 6));
@@ -304,10 +304,10 @@ impl Level {
     }
 
     /// FUN_1068_10f3: let go of the bonus it carries.
-    fn drop_bonus(&mut self, id: usize) {
-        let b = self.o(id).w(0x12);
+    fn drop_bonus(&mut self, id: usize, world: &crate::world::World) {
+        let (b, y, x) = (self.o(id).w(0x12), self.o(id).w(0x10), self.o(id).w(0xe));
         if b != 0 {
-            eprintln!("warning: a bonus {b:#x} dropped (FUN_1040_6b03) not ported");
+            self.bonus(world, b, y, x);
             self.o(id).set(0x12, 0);
         }
     }
@@ -878,7 +878,7 @@ impl Level {
         if self.o(id).w(0x12) == 0 && env.rng.random(2) == 0 && self.o(id).w(0x46) != -1 {
             self.o(id).set(0x12, 0xd10);
         }
-        self.drop_bonus(id);
+        self.drop_bonus(id, env.world);
     }
 
     /// FUN_1088_3a81(sprite, y, x): the hero standing on the corpse (4e26), or landing on its
@@ -912,7 +912,7 @@ impl Level {
 
     /// FUN_1070_5fda(y): torn apart by an explosion.
     fn blown_apart(&mut self, id: usize, y: i32, env: &mut Env) {
-        self.drop_bonus(id);
+        self.drop_bonus(id, env.world);
         let mask = self.particles.hit_mask;
         if mask & 0x400 == 0 {
             let x = self.o(id).w(0xe);

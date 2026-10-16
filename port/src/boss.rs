@@ -225,7 +225,7 @@ impl Level {
     fn boss_wreck_blows(&mut self, id: usize, env: &mut Env) {
         let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
         if env.rng.random(2) == 0 {
-            eprintln!("warning: a bonus 0xd10 dropped (FUN_1040_6b03) not ported");
+            self.bonus(env.world, 0xd10, y, x);
         }
         crate::alien::smoke_sprite(&mut self.particles, y, x);
         let ps = &mut self.particles;

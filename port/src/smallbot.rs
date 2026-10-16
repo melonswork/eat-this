@@ -34,7 +34,7 @@ impl Level {
             if self.o(id).w(0x2c) > 0 {
                 env.fx.kills += 1;
             }
-            self.bot_drop_bonus(id);
+            self.bot_drop_bonus(id, env.world);
             self.bot_explode(id, env);
             return;
         }
@@ -154,7 +154,7 @@ impl Level {
                     o.set(0x2c, o.w(0x2c) - damage);
                     if o.w(0x2c) < -0x7f {
                         if env.rng.random(2) == 0 {
-                            eprintln!("warning: a bonus from a smallbot (FUN_1040_6b03) not ported");
+                            { let (y, x) = (self.o(id).w(0x10), self.o(id).w(0xe)); self.bonus(env.world, 0xd10, y, x); }
                         }
                         self.bot_explode(id, env);
                         return;
@@ -241,7 +241,7 @@ impl Level {
             let o = self.o(id);
             o.set(0x2c, o.w(0x2c) - damage);
             if o.w(0x2c) < 1 {
-                self.bot_drop_bonus(id);
+                self.bot_drop_bonus(id, env.world);
                 let o = self.o(id);
                 o.set(0x24, 2);
                 o.set(0x28, 0);
@@ -284,10 +284,10 @@ impl Level {
         }
     }
 
-    fn bot_drop_bonus(&mut self, id: usize) {
-        let b = self.o(id).w(0x12);
+    fn bot_drop_bonus(&mut self, id: usize, world: &crate::world::World) {
+        let (b, y, x) = (self.o(id).w(0x12), self.o(id).w(0x10), self.o(id).w(0xe));
         if b != 0 {
-            eprintln!("warning: a bonus {b:#x} dropped (FUN_1040_6b03) not ported");
+            self.bonus(world, b, y, x);
             self.o(id).set(0x12, 0);
         }
     }

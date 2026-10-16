@@ -148,7 +148,7 @@ impl Level {
                     self.o(id).set(0x2c, hp);
                     if hp < -0x3f {
                         if env.rng.random(3) == 0 {
-                            eprintln!("warning: a bonus 0xd10 dropped (FUN_1040_6b03) not ported");
+                            { let (y, x) = (self.o(id).w(0x10), self.o(id).w(0xe)); self.bonus(env.world, 0xd10, y, x); }
                         }
                         self.turret_explodes(id, env);
                         return;

@@ -58,7 +58,7 @@ impl Level {
                 let y = self.o(id).w(0x10);
                 self.bigali_explode(id, y - 0x1e, env);
             }
-            self.big_drop_bonus(id);
+            self.big_drop_bonus(id, env.world);
             self.remove_current(id);
             return;
         }
@@ -313,7 +313,7 @@ impl Level {
                         o.set(0x2e, 0);
                         self.big_bleed(id, env, y - 0x14, x);
                     } else {
-                        self.big_drop_bonus(id);
+                        self.big_drop_bonus(id, env.world);
                         self.o(id).set(0x28, -0x140);
                     }
                     env.fx.shakes.push((0xc, 6));
@@ -348,10 +348,10 @@ impl Level {
         (o.w(0xe), o.w(0x10))
     }
 
-    fn big_drop_bonus(&mut self, id: usize) {
-        let b = self.o(id).w(0x12);
+    fn big_drop_bonus(&mut self, id: usize, world: &crate::world::World) {
+        let (b, y, x) = (self.o(id).w(0x12), self.o(id).w(0x10), self.o(id).w(0xe));
         if b != 0 {
-            eprintln!("warning: a bonus {b:#x} dropped (FUN_1040_6b03) not ported");
+            self.bonus(world, b, y, x);
             self.o(id).set(0x12, 0);
         }
     }
@@ -595,7 +595,7 @@ impl Level {
                     if self.o(id).w(0x12) == 0 && env.rng.random(2) == 0 {
                         self.o(id).set(0x12, 0xd10);
                     }
-                    self.big_drop_bonus(id);
+                    self.big_drop_bonus(id, env.world);
                 }
             }
             if env.frame & 1 == 0 {
@@ -654,7 +654,7 @@ impl Level {
             }
             let mask = self.particles.hit_mask;
             if mask & 0x14 != 0 && damage > 0x30 {
-                self.big_drop_bonus(id);
+                self.big_drop_bonus(id, env.world);
                 if mask & 0x400 == 0 {
                     let y = self.o(id).w(0x10);
                     self.bigali_explode(id, y - 8, env);

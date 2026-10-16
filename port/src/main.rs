@@ -221,6 +221,26 @@ impl Game {
         self.demo.as_ref().is_some_and(|d| self.frame >= d.frames)
     }
 
+    /// A pick-up's effect (function 4 of its tile).
+    fn pick_effect(&mut self, effect: u16, f3: u16, y: i32, x: i32) {
+        if effect == hero::WEAPON_PICKUP {
+            self.hero.weapon_pickup(f3);
+            self.level.particles.weapon_pickup(f3 as i32, y, x);
+        } else if effect == 6 {
+            self.level.particles.drone.pickup(y, x);
+        } else if effect == 1 {
+            // FUN_1040_014a: health +10 (1170:4e6c, a heart), a counter 4ea8 += 1, sparks.
+            self.hero.health += 10;
+            self.level.particles.bonus_pickup(y, x);
+        } else if effect == 70 {
+            // FUN_1040_043c: a key (1170:5104 + f3), sparks like a weapon's.
+            self.hero.keys[(f3 as usize) & 0xf] = true;
+            self.level.particles.weapon_pickup(f3 as i32, y, x);
+        } else if effect != 0 && effect < 30000 {
+            eprintln!("warning: pick-up effect {effect} not ported");
+        }
+    }
+
     fn flush_spawns(&mut self, fx: &mut Effects) {
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.flush_spawns(&mut self.world, &mut cx, fx);
@@ -333,6 +353,10 @@ impl Game {
             self.level.particles.hero_fire(y, x, aim, parity);
             noise = 2;
         }
+        if let Some((y, x, a)) = self.hero.gun.rockets {
+            self.level.particles.rockets(a, y, x);
+            noise = 2;
+        }
         if let Some((y, x, a, parity)) = self.hero.gun.rapid {
             self.level.particles.rapid(y, x, a, parity);
             noise = 2;
@@ -352,22 +376,7 @@ impl Game {
         for ((tx, ty), effect, f3, y, x) in std::mem::take(&mut self.hero.pickups) {
             // FUN_1088_5551: the pick-up leaves plane 2, then its effect (FUN_1040_60bb).
             self.world.planes[2].as_mut().unwrap().set(tx, ty, 0);
-            if effect == hero::WEAPON_PICKUP {
-                self.hero.weapon_pickup(f3);
-                self.level.particles.weapon_pickup(f3 as i32, y, x);
-            } else if effect == 6 {
-                self.level.particles.drone.pickup(y, x);
-            } else if effect == 1 {
-                // FUN_1040_014a: health +10 (1170:4e6c, a heart), a counter 4ea8 += 1, sparks.
-                self.hero.health += 10;
-                self.level.particles.bonus_pickup(y, x);
-            } else if effect == 70 {
-                // FUN_1040_043c: a key (1170:5104 + f3), sparks like a weapon's.
-                self.hero.keys[(f3 as usize) & 0xf] = true;
-                self.level.particles.weapon_pickup(f3 as i32, y, x);
-            } else if effect != 0 && effect < 30000 {
-                eprintln!("warning: pick-up effect {effect} not ported");
-            }
+            self.pick_effect(effect, f3, y, x);
         }
         for cell in std::mem::take(&mut self.hero.script_cells) {
             self.level.run_scripts(&mut self.world, cell, &mut fx);
@@ -420,6 +429,10 @@ impl Game {
             self.camera.y + 199,
         );
         self.world_update(&mut fx, noise, input[hero::UP] > 0, window);
+        for (tile, y, x) in std::mem::take(&mut fx.bonus_pickups) {
+            let (effect, f3) = (self.world.cell_function(tile, 4), self.world.cell_function(tile, 3));
+            self.pick_effect(effect, f3, y, x);
+        }
         for &(a, b) in &fx.shakes {
             self.camera.shake(a, b);
         }
@@ -460,6 +473,7 @@ impl Game {
             rng: &mut self.rng,
             fx,
             camera: cam,
+            hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
         };
         self.level.update_particles(0, &mut pf);
         let mut env = actors::Env {
@@ -497,6 +511,7 @@ impl Game {
             rng: &mut self.rng,
             fx,
             camera: cam,
+            hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
         };
         self.level.update_particles(1, &mut pf);
         // The level's foreground procedure ((*DAT_1170_4c36)()) runs last: the grinder in GRINDER.

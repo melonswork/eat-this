@@ -196,3 +196,31 @@ pub fn splat_sprite(rng: &mut PascalRandom) -> i32 {
 
 #[allow(dead_code)]
 const _: usize = MAIN_PLANE;
+
+impl Level {
+    /// FUN_1040_6b03(tile, y, x): a bonus flies out of (y, x) if the plane-2 cell there is free
+    /// (or holds a pick-up it may replace); it lands as that tile (effect 66, FUN_1040_1137) unless
+    /// the hero catches it first (callback FUN_1050_2588).
+    pub fn bonus(&mut self, world: &World, tile: i32, y: i32, x: i32) {
+        let Some(cur) = world.cell_at(2, y, x) else {
+            return;
+        };
+        let cur = cur as i16 as i32;
+        let free = cur == 0
+            || (cur > 0
+                && world.cell_function(cur as u16, 0) == 30000
+                && world.cell_function(cur as u16, 4) != 0x46
+                && (world.cell_function(tile as u16, 4) == 0x46 || cur == 0xd00 || cur == 0xd10));
+        if !free {
+            return;
+        }
+        let ps = &mut self.particles;
+        ps.p.on_death = 0x42;
+        ps.p.callback = 0x2588;
+        ps.spawn_seq(0x7fff, 0x1c, 1, y & !15, x & !15, 1);
+        ps.throw(9, 0x30, 0x5a0);
+        ps.last_mut().m.set(0x40, tile);
+        ps.p.callback = 0;
+        ps.p.on_death = 0;
+    }
+}

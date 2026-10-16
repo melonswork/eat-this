@@ -54,7 +54,7 @@ fn explosion(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut Pascal
     } else {
         crate::alien::smoke_sprite(ps, y2 + 0xf, cx);
         if rng.random(3) == 0 {
-            eprintln!("warning: a wall's bonus 0xd10 (FUN_1040_6b03) not ported");
+            lv.bonus(world, 0xd10, y2, cx);
         }
     }
     lv.falling_critter_at(world, rng, y2 + 0xf, cx);

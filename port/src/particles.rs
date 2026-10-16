@@ -469,6 +469,30 @@ impl Particles {
         self.spawn_seq(0x190a, 2, 2, y, x, 1);
     }
 
+    /// FUN_1088_6cf0: weapon 8's three homing rockets (effect 57 where they burst).
+    pub fn rockets(&mut self, aim: i32, y: i32, x: i32) {
+        self.p.hits = 0x10;
+        self.p.damage = 0x60;
+        self.p.homing = 0x10;
+        self.p.tiles = 0x143;
+        self.p.on_death = 0x39;
+        self.p.callback = 0x7bf;
+        let (mut ly, mut lx) = (y, x);
+        for a in [(aim + 0x1560) % 0x1680, (aim + 0x120) % 0x1680, aim] {
+            lx = x + (0x17 * trig::cos(a)) / 0x4000;
+            ly = y - (0x17 * trig::sin(a)) / 0x4000;
+            self.spawn_seq(0x186e, 1, 0x100, ly, lx, 0);
+            self.rocket(0x40, a);
+        }
+        self.p.callback = 0;
+        self.p.on_death = 0;
+        self.p.tiles = 0x43;
+        self.p.homing = 0;
+        self.p.damage = 0x10;
+        self.p.hits = 0;
+        self.spawn_seq(0x190a, 2, 2, ly, lx, 1);
+    }
+
     /// FUN_1088_69d8: weapon 2's bullet (effect 81 where it lands).
     pub fn rapid(&mut self, y: i32, x: i32, aim: i32, parity: i32) {
         self.p.hits = 0x3000;
@@ -654,6 +678,8 @@ pub struct Frame<'a> {
     pub rng: &'a mut PascalRandom,
     pub fx: &'a mut Effects,
     pub camera: (i32, i32),
+    /// The hero's x, y, height and half width.
+    pub hero: (i32, i32, i32, i32),
 }
 
 impl Level {
@@ -1012,6 +1038,54 @@ impl Level {
                     m.set(0x24, m.w(0x22));
                 }
             }
+            0x2588 => {
+                // FUN_1050_2588: the hero catches a bonus flying out of a wall or an enemy.
+                let (x, y, tile) = (m.w(8), m.w(0xa), m.w(0x40));
+                let (hx, hy, hh, hw) = f.hero;
+                if x <= hx + hw - 2 && (hx - hw) + 2 <= x + 0xf && y <= hy - 4 && (hy - hh) + 5 <= y + 0xf {
+                    f.fx.bonus_pickups.push((tile as u16, y + 7, x + 7));
+                    m.set(0x24, m.w(0x22));
+                    m.set(0x2a, 0);
+                }
+            }
+            0x7bf => {
+                // FUN_1050_07bf: a rocket of the hero's: turns (at most 0x40) towards its target,
+                // smokes, and blows up at the end of its fuel.
+                let seeking = self.particles.list[i].v.w(0x18) != 0x140;
+                let p = &mut self.particles.list[i];
+                let (m, v) = (&mut p.m, &mut p.v);
+                if seeking {
+                    let a = trig::atan2(v.w(0x16), v.w(0x14));
+                    if v.w(0x10) != a {
+                        let d = ((a - v.w(0x10)) + 0x21c0) % 0x1680;
+                        let na = if d < 0xb40 {
+                            ((v.w(0x10) + 0x1680) - 0x40.min(0xb40 - d)) % 0x1680
+                        } else {
+                            (0x40.min(d - 0xb40) + v.w(0x10)) % 0x1680
+                        };
+                        v.set(0x10, na);
+                        v.set_l(8, (trig::cos(na) * v.w(0x12)) / 4);
+                        v.set_l(0xc, (trig::sin(na) * v.w(0x12)) / -4);
+                    }
+                    v.set(0x18, 0x140);
+                    v.set(0x1a, 0);
+                }
+                let (x, y, age, life, state) = (m.w(8), m.w(0xa), m.w(0x24), m.w(0x22), m.w(0x3e));
+                if age % 4 == 3 {
+                    let ps = &mut self.particles;
+                    ps.p.delay = 4;
+                    ps.p.group = 0;
+                    ps.spawn_seq(0x5111, 2, 9, y, x, 1);
+                    ps.p.group = 1;
+                    ps.p.delay = 0;
+                }
+                if life <= age && state > -10 {
+                    let m = &mut self.particles.list[i].m;
+                    m.set(0x3e, -1);
+                    m.set(0x10, x);
+                    m.set(0x12, y);
+                }
+            }
             0xb2a => {
                 // FUN_1050_0b2a: the rocket turns (at most 0x20) towards the target last found,
                 // smokes, and blows up at the end of its fuel.
@@ -1236,6 +1310,35 @@ impl Level {
                 self.bounce_off(f);
             }
             44 => self.shell7_hit(f),
+            66 => {
+                // FUN_1040_1137: the bonus lands as a pick-up tile in plane 2.
+                let m = &self.particles.list[self.particles.current].m;
+                let (cy, cx, tile) = (m.w(0xa), m.w(8), m.w(0x40));
+                if let Some(cur) = f.world.cell_at(2, cy, cx) {
+                    let cur = cur as i16 as i32;
+                    let ok = cur == 0
+                        || (cur > 0 && f.world.cell_function(cur as u16, 0) == 30000 && f.world.cell_function(cur as u16, 4) != 0x46);
+                    if ok {
+                        let w = f.world.main().width;
+                        let idx = ((cy >> 4) * w + (cx >> 4)) as usize;
+                        f.world.planes[2].as_mut().unwrap().cells[idx] = tile as u16;
+                    }
+                }
+            }
+            57 => {
+                // FUN_1040_556e: a rocket bursts.
+                f.fx.shakes.push((0x12, 4));
+                let ps = &mut self.particles;
+                ps.spawn_seq(0x6900, 2, 0x19, y, x, 1); // effect 23
+                let r = f.rng.random(0x40);
+                let m = &mut ps.last_mut().m;
+                m.set(0x1c, r + 0x1cc);
+                m.set(0x1e, r + 0x180);
+                m.set(0x42, 0x2148);
+                self.explode_area(f.world, 0x60, 4, y + 0x20, x + 0x20, y - 0x20, x - 0x20, f.rng, f.fx);
+                let n = f.rng.random(4);
+                crate::hero::spawn_dust_pub(f.world, n, y - 7, x, f.rng);
+            }
             81 => {
                 // FUN_1040_07e0: sparks thrown back from the bullet's line.
                 let v = &self.particles.list[self.particles.current].v;

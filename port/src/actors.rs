@@ -404,7 +404,8 @@ impl Level {
         };
         // FUN_1068_10f3: the bonus inside.
         if self.o(id).w(0x12) != 0 {
-            eprintln!("warning: a crate's bonus {:#x} (FUN_1040_6b03) not ported", self.o(id).w(0x12));
+            let b = self.o(id).w(0x12);
+            self.bonus(env.world, b, y, x);
             self.o(id).set(0x12, 0);
         }
         if t < 1 {
