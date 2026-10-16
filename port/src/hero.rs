@@ -27,6 +27,9 @@ pub const LEDGE: i32 = -4;
 /// Pulling a lever (HeroUseObject).
 pub const USE: i32 = -30;
 pub const LADDER: i32 = -5;
+/// Hanging from a ceiling pipe (60800) and climbing up out of a pipe (60600).
+pub const PIPE_HANG: i32 = -1;
+pub const PIPE_CLIMB: i32 = -2;
 /// Walking into an exit (function 9000 tiles).
 pub const EXIT: i32 = -100;
 /// Tile function of exits (doors to another place, paired by the teleport records).
@@ -994,6 +997,50 @@ impl Hero {
             }
         }
 
+        if self.state == PIPE_CLIMB {
+            self.frame = self.crouch / 3 + 0x254;
+            self.height = HEIGHT - self.crouch / 3;
+            if self.crouch < 0x36 {
+                if self.crouch < 0x12 {
+                    if w.tile_function_at(self.y - 0x2f, self.x) & 1 == 1 {
+                        dx += if self.x & 0xf < 8 { -1 } else { 1 };
+                    }
+                } else if self.crouch % 3 == 0 {
+                    dy -= 4;
+                    self.cam_nudge.1 -= 3;
+                }
+                self.crouch += 1;
+            } else {
+                self.crouch_down();
+                self.crouch = 8;
+                self.frame = 0xa8;
+                self.shakes.push((8, 4));
+                let n = rng.random(6) + 1;
+                spawn_dust(w, n, self.y, self.x, rng);
+            }
+        }
+        if self.state == PIPE_HANG {
+            self.height = 0x20;
+            let t = self.anim / 4 % 20;
+            self.frame = 10 - (t - 10).abs() + 0x21;
+            self.anim += 1;
+            dy += (self.anim > 0x117) as i32 + ((self.hang_y - self.y) + 0x1d).signum();
+            dx += ((self.hang_x - self.facing * 9) - self.x).signum();
+            if (!held(DOWN) || held(UP))
+                && w.tile_function_at(self.hang_y, self.hang_x) == 60800
+                && self.anim < 0x140
+            {
+                if (held(UP) && self.released[UP]) || input[LEFT] == 1 || input[RIGHT] == 1 {
+                    self.released[UP] = false;
+                    self.start_jump(-0x32, 6);
+                    dx += self.facing * 4;
+                    self.shakes.push((0xe, 4));
+                }
+            } else {
+                self.start_jump(1, FALL);
+                self.state_before_jump = 5;
+            }
+        }
         if self.state > 0 {
             if held(LEFT) {
                 dx -= 2;
@@ -1060,6 +1107,29 @@ impl Hero {
                 self.fall += self.vy / 10;
                 let (ndx, ndy) = self.grab_ledge(w, lv, self.y - 0x20, dx, dy);
                 (dx, dy) = (ndx, ndy);
+                if held(UP) {
+                    // Reaching up to a pipe.
+                    let hx = self.facing * 4 + self.x;
+                    let row = ((self.y - 0x20) & !15) + 7;
+                    if (self.state != 1 || self.prev.1 - 0x20 < row) && w.tile_function_at(row, hx) == 60800 {
+                        self.state = PIPE_HANG;
+                        self.anim = 0x28;
+                        self.hang_x = (hx & !15) + 7;
+                        self.released[UP] = false;
+                        self.hang_y = row;
+                        self.shakes.push((0xc, 6));
+                        return;
+                    }
+                    if (self.prev.1 - 0x2f) >> 4 < (self.y - 0x2f) >> 4
+                        && w.tile_function_at(self.y - 0x2f, self.x) & 0xfffe == 60600
+                    {
+                        self.state = PIPE_CLIMB;
+                        self.crouch = 0;
+                        dy = (((self.y - 0x2f) & !15) + 0x2f) - self.y;
+                        self.released[UP] = false;
+                        self.shakes.push((8, 3));
+                    }
+                }
             }
             self.vy = self.vy.min(0x32);
         }
