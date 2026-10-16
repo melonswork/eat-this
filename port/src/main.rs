@@ -219,10 +219,24 @@ impl Game {
     fn step(&mut self, keys: [i8; 9]) {
         self.rng.log = std::env::var("ET_RNG").ok().and_then(|v| v.parse::<u32>().ok()) == Some(self.frame);
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
+        let mut fx = Effects::default();
         self.level.update_platforms(&mut self.world);
+        for cell in std::mem::take(&mut self.level.pasted) {
+            self.level.run_scripts(&mut self.world, cell, &mut fx);
+        }
         // FUN_10a0_023f: delayed particles due this frame.
         self.level.particles.now = self.frame;
         self.level.particles.release_due();
+        self.level.now = self.frame;
+        {
+            let mut fx = Effects::default();
+            self.level.release_tile_events(&mut self.world, &mut fx, self.hero.x);
+            for &(a, b) in &fx.shakes {
+                self.camera.shake(a, b);
+            }
+            // (465e is set afterwards, forgetting the door's.)
+            self.level.door_noise = false;
+        }
         // 1170:465e: a screen shake just started (or the hero fires, below).
         let mut noise = self.camera.shake_started() as i32;
         let mut mouse_now = self.hero.gun_mouse();
@@ -304,7 +318,6 @@ impl Game {
                 eprintln!("warning: pick-up effect {effect} not ported");
             }
         }
-        let mut fx = Effects::default();
         for (idx, y, x, pull) in std::mem::take(&mut self.hero.levers) {
             self.level.work_lever(&mut self.world, idx, y, x, pull, &mut self.rng, &mut fx);
         }
@@ -328,6 +341,9 @@ impl Game {
         // FUN_10a8_1311 (doors opening by themselves), then after the level's background
         // procedure FUN_10a8_0dab (the moving doors).
         let hero_at = (self.hero.x, self.hero.y);
+        if std::env::var("ET_DOOR").is_ok() && self.frame >= 16490 && self.frame < 16508 {
+            eprintln!("DOORS frame {} hero {:?}", self.frame + 1, hero_at);
+        }
         self.level.doors_near_hero(&mut self.world, hero_at, false);
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, false, &mut cx);

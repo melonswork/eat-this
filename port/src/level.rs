@@ -68,6 +68,11 @@ pub struct Level {
     pub doors: Vec<crate::doors::Door>,
     /// A door started moving this frame (1170:465e = 3).
     pub door_noise: bool,
+    /// FUN_10a0_009b's event queue: (due frame, cell, tile, plane), a later one after an equal due.
+    /// Cells a finished platform pasted that may be levers (FUN_1088_12f9), for their scripts.
+    pub pasted: Vec<u16>,
+    pub tile_events: Vec<(u32, u16, u16, usize)>,
+    pub now: u32,
     /// gHeroX as the objects and effects see it this frame.
     pub hero_x: i32,
     /// FUN_1058_008f's position in the collection being walked (1170:45d6).
@@ -124,6 +129,9 @@ impl Level {
             teleports: Vec::new(),
             doors: Vec::new(),
             door_noise: false,
+            pasted: Vec::new(),
+            tile_events: Vec::new(),
+            now: 0,
             hero_x: 0,
             walk_index: 0,
             walking: (0, 0),
@@ -169,6 +177,22 @@ impl Level {
         let f = world.cell_function(tile, 0);
         if (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f) {
             self.run_scripts(world, cell, fx);
+        }
+    }
+
+    /// FUN_10a0_023f's tile events that are due (FUN_10a0_00eb).
+    pub fn release_tile_events(&mut self, world: &mut World, fx: &mut Effects, hero_x: i32) {
+        while self.tile_events.first().is_some_and(|e| e.0 <= self.now) {
+            let (_, cell, tile, plane) = self.tile_events.remove(0);
+            let width = world.main().width;
+            let (cy, cx) = ((cell as i32 / width) << 4, (cell as i32 % width) << 4);
+            if world.tile_function_at(cy, cx) == crate::doors::DOOR {
+                self.door_set(world, false, (tile == 1) as i32, cy, cx, false, hero_x);
+            } else if plane == MAIN_PLANE {
+                self.set_cell(world, tile, cell, fx);
+            } else if let Some(p) = world.planes[plane].as_mut() {
+                p.cells[cell as usize] = tile;
+            }
         }
     }
 
@@ -319,8 +343,18 @@ impl Level {
                     fx.grinder_slow = true;
                     lc += 1;
                 }
+                0x0a => {
+                    // FUN_10a0_009b(delay, tile, cell): the tile changes (or the door moves) later.
+                    let due = self.now.wrapping_add(arg(3) as u32);
+                    if std::env::var("ET_DOOR").is_ok() {
+                        eprintln!("EVENT at {} due {due} cell {} tile {:x}", self.now, arg(1), arg(2));
+                    }
+                    let at = self.tile_events.iter().position(|e| due < e.0).unwrap_or(self.tile_events.len());
+                    self.tile_events.insert(at, (due, arg(1), arg(2), plane));
+                    lc += 4;
+                }
                 // Not ported yet; skipped with their sizes (tools/scripts.py COMMANDS).
-                0x01 | 0x02 | 0x0a | 0x0e => lc += 4,
+                0x01 | 0x02 | 0x0e => lc += 4,
                 0x0f => lc += 5,
                 0x0c | 0x10 | 0x11 | 0x15 | 0x17 | 0x19 => lc += 3,
                 0x12 | 0x14 | 0x1a => lc += 2,
@@ -621,6 +655,20 @@ impl Level {
                     let c = src.get(tx - x0, ty - y0);
                     if c != 0 {
                         world.main_mut().cells[(ty * mw + tx) as usize] = c;
+                    }
+                }
+            }
+            // FUN_1088_12f9 on each cell of the rectangle: levers run their scripts.
+            for ty in lo.1..=hi.1 {
+                for tx in lo.0..=hi.0 {
+                    if tx < 0 || ty < 0 || tx >= mw || ty >= mh {
+                        continue;
+                    }
+                    let cell = (ty * mw + tx) as usize;
+                    let t = world.main().cells[cell];
+                    let f = world.cell_function(t, 0);
+                    if (t as i16) > 0 && (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f) {
+                        self.pasted.push(cell as u16);
                     }
                 }
             }

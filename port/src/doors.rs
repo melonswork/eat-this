@@ -196,6 +196,9 @@ impl Level {
         while i < self.doors.len() {
             let d = &mut self.doors[i];
             let (full, _, _, speed) = TYPES[d.kind];
+            if std::env::var("ET_DOOR").is_ok() {
+                eprintln!("DOOR {:?}", (d.kind, d.auto, d.open, d.progress, d.monster, d.x, d.y, d.w, d.h));
+            }
             if d.auto {
                 let (a, b) = (d.x - 5, d.x + d.w + 4);
                 let (c, e) = (d.y + d.h - 4, d.y + d.h);
