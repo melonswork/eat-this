@@ -30,6 +30,7 @@ mod smallbot;
 mod sprites;
 mod tileanim;
 mod trig;
+mod walker;
 mod world;
 
 use camera::Camera;
@@ -437,6 +438,9 @@ impl Game {
         self.level.update_actors(&mut env, window);
         if std::mem::take(&mut fx.hero_bounce) {
             self.hero.bounce(-0x32, 10);
+        }
+        if let Some(y) = fx.hero_stand.take() {
+            self.hero.stand_on(y);
         }
         if let Some((vy, kind, y, release)) = fx.hero_spring.take() {
             self.hero.spring(vy, kind, y, release);

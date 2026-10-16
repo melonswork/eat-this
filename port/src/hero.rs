@@ -308,6 +308,12 @@ impl Hero {
         }
     }
 
+    /// FUN_1070_00b6: lifted onto a moving top.
+    pub fn stand_on(&mut self, y: i32) {
+        self.y = y;
+        self.ground = 0x16;
+    }
+
     /// HeroStand (1088:0432).
     fn stand(&mut self) {
         self.state = GROUND;

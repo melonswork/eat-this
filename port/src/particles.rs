@@ -898,7 +898,7 @@ impl Level {
                 let m = &mut self.particles.list[i].m;
                 m.set(0x16, if t < 5 { (m.w(0x24) / 6) % 6 + 0x5215 } else { 0x5218 });
             }
-            0x2d2 | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
+            0x2d2 | 0x1da7 | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
             0x2299 => {
                 // FUN_1050_2299: a burning bit trails smoke.
                 if m.w(0x24) % 4 == 3 {
@@ -1141,6 +1141,27 @@ impl Level {
             62 => self.bullet_hit(y, x, f),
             16 => {
                 self.bounce_off(f);
+            }
+            7 => {
+                // FUN_1040_0897: a puff that drifts up.
+                self.particles.spawn_seq(0x6400, 2, 0x24, y, x, 1);
+                self.particles.line(2, 0x5a0);
+            }
+            29 => {
+                // FUN_1040_3117: like 17, a heavy bit that bounces and puffs smoke.
+                let v = self.bounce_off(f);
+                if v >= 0 && v < 0x2aaab && self.particles.hit_side != 2 {
+                    crate::alien::smoke_sprite(&mut self.particles, y, x);
+                    let ps = &mut self.particles;
+                    puff_at(ps, y - 2, x - 2);
+                    ps.p.delay = 0xc;
+                    puff_at(ps, y - 0xc, x + 3);
+                    ps.p.delay = 0x12;
+                    puff_at(ps, y - 0x18, x - 10);
+                    ps.p.delay = 0;
+                    f.rng.random(0x14);
+                    f.fx.shakes.push((0x18, 8));
+                }
             }
             17 => {
                 // FUN_1040_0fcc: a heavy bit bounces; landing slowly it puffs smoke.
@@ -1940,4 +1961,8 @@ fn critter_gibs(ps: &mut Particles, rng: &mut PascalRandom, y: i32, x: i32) {
         ps.spawn_seq(0x5300, 4, 5, y + dy, x + dx, 1); // FUN_1040_62b7
     }
     ps.p.delay = 0;
+}
+
+fn puff_at(ps: &mut Particles, y: i32, x: i32) {
+    ps.spawn_seq(0x6800, 2, 0xf, y, x, 1);
 }

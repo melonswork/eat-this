@@ -219,6 +219,7 @@ impl Level {
             0x1432 => self.bigali(id, env),
             0x14aa => {} // FUN_1070_a06a: draws a sprite
             0x148c => self.springboard(id, env),
+            0x140a => self.walker(id, env),
             crate::decals::DROP => self.drop_decal(id, env),
             crate::decals::SHELL => self.shell_decal(id, env),
             crate::decals::SPLAT => self.splat(id, env),

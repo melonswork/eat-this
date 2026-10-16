@@ -52,6 +52,8 @@ pub struct Effects {
     pub kills: i32,
     /// Object tiles a script placed (FUN_1088_0d5a): (tile, cell), spawned by `Level::flush_spawns`.
     pub spawns: Vec<(u16, u16)>,
+    /// FUN_1070_00b6: the hero stands on a moving top at this y (gHeroGround = 0x16).
+    pub hero_stand: Option<i32>,
 }
 
 pub struct Level {
