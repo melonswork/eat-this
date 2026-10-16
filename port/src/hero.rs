@@ -219,8 +219,9 @@ impl Hero {
             turn: NO_TURN,
             turn_kind: 0,
             stand_frame: 0x84,
-            idle_timer: -0x10 - 3,
-            idle_next: 0xd2 + 0x1a4 / 2,
+            // HeroReset's Random(8) = 4 and Random(0x1a4) = 380 (the boot seed is the same in every run).
+            idle_timer: -0x10 - 4,
+            idle_next: 0xd2 + 380,
             ground: FLAT_FLOOR,
             nudge: 0,
             hang_x: 0,
