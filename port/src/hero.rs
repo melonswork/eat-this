@@ -96,6 +96,12 @@ pub struct Hero {
     prev: (i32, i32),
     /// FUN_1088_72f9's call this frame: (dir, y, x) of the wall pushed.
     pub push: Option<(i32, i32, i32)>,
+    /// 1170:4dec: the right button's weapon (-1 none yet; its procedure 4dee is table 188a).
+    pub weapon: i32,
+    /// 1170:1656: the weapons.
+    pub weapons: [Weapon; 10],
+    /// Pick-ups taken this frame: (plane-2 cell (tx, ty), effect, its function 3, y, x).
+    pub pickups: Vec<((i32, i32), u16, u16, i32, i32)>,
     /// 1170:5123: 3 while a lever is in reach this frame (then 1: Up jumps again).
     lever_reach: i32,
     /// 1170:4e5a: frames the use pose has been held (to 2); the lever moves at 1.
@@ -136,7 +142,29 @@ pub struct Gun {
     cam: (i32, i32),        // gCameraX/Y this frame (before the camera moves)
     /// HeroFireWeapon's call this frame: (y, x, angle, sprite parity).
     pub shot: Option<(i32, i32, i32, i32)>,
+    /// FUN_1088_64fe's grenade this frame: (y, x, angle) for FUN_1040_621f.
+    pub grenade: Option<(i32, i32, i32)>,
 }
+
+/// A weapon record (1170:1656 + 0xd * id).
+#[derive(Clone, Copy, Debug)]
+pub struct Weapon {
+    pub pickup: i32, // +0: ammo per pick-up
+    pub max: i32,    // +2
+    pub next: u32,   // +6: the frame (1170:617e) it may fire again
+    pub ammo: i32,   // +0xa
+    pub owned: bool, // +0xc
+}
+
+/// The weapons' (ammo per pick-up, max) at load.
+const WEAPON_AMMO: [(i32, i32); 10] =
+    [(6, 99), (400, 799), (50, 249), (10, 99), (10, 99), (10, 99), (50, 249), (5, 99), (10, 99), (5, 99)];
+/// 1170:162c: the weapon for each digit key.
+const WEAPON_FOR_DIGIT: [i32; 10] = [2, 6, 1, 5, 3, 8, 0, 4, 7, 9];
+/// Tile function of the pick-ups (in plane 2).
+const PICKUP: u16 = 30000;
+/// The effect of a weapon pick-up (FUN_1040_0312).
+pub const WEAPON_PICKUP: u16 = 67;
 
 impl Hero {
     /// HeroReset (1088:0442) followed by the level's placement. HeroReset's four Random() calls
@@ -181,6 +209,9 @@ impl Hero {
             shakes: Vec::new(),
             cam_nudge: (0, 0),
             gun: Gun::default(),
+            weapon: -1,
+            weapons: WEAPON_AMMO.map(|(pickup, max)| Weapon { pickup, max, next: 0, ammo: 0, owned: false }),
+            pickups: Vec::new(),
             slope: -1,
             collide_flags: 3,
             prev: (x, y),
@@ -312,6 +343,7 @@ impl Hero {
     ) {
         // ReadGameInput: moving the mouse raises the gun.
         self.gun.shot = None;
+        self.gun.grenade = None;
         self.push = None;
         if mouse != self.gun.mouse {
             self.gun.shooting = true;
@@ -696,7 +728,8 @@ impl Hero {
         self.prev_blocked = blocked;
         self.push_out_of_walls(w);
         let posed = self.end_of_frame(walking, blocked, step_h, rng);
-        self.gun_end(posed, &input);
+        self.gun_end(posed, &input, rng, ps.now);
+        self.pick_up(w);
         self.take_hits(ps, rng);
     }
 
@@ -774,7 +807,7 @@ impl Hero {
     }
 
     /// The end of HeroUpdate: the aiming pose, the left button's shot, the recoil.
-    fn gun_end(&mut self, posed: bool, input: &[i8; 9]) {
+    fn gun_end(&mut self, posed: bool, input: &[i8; 9], rng: &mut PascalRandom, now: u32) {
         if posed && self.gun.shooting {
             if self.frame < 0x81 || self.frame > 0x94 {
                 let l = self.gun.pose / 4;
@@ -806,13 +839,112 @@ impl Hero {
             g.shots += 1;
             g.shooting = true;
         }
-        // (*1170:4dee)(): the right button's weapon (table 1170:188a). With no ammo (FUN_1088_5914),
-        // as at the start of a level, it does nothing; ammo pick-ups aren't ported.
+        // (*1170:4dee)(): the right button's weapon (table 1170:188a).
+        self.right_weapon(input, rng, now);
+        let g = &mut self.gun;
         if g.cooldown > 0 {
             g.muzzle.0 -= (g.cooldown * c) / 0xc000;
             g.muzzle.1 += (g.cooldown * s) / 0xc000;
             g.cooldown -= 1;
         }
+    }
+
+    /// (*1170:4dee)(): the selected weapon's procedure.
+    fn right_weapon(&mut self, input: &[i8; 9], rng: &mut PascalRandom, now: u32) {
+        match self.weapon {
+            -1 => {}
+            // FUN_1088_64fe: a grenade, thrown 0x50 either side of the aim.
+            0 => {
+                if self.use_ammo(0xc, input, now) {
+                    let (y, x) = (self.y - 0x1a, self.x);
+                    let a = (self.gun.aim + 0x1680 - 0x50 + rng.random(0xa1)) % 0x1680;
+                    self.gun.grenade = Some((y, x, a));
+                    self.gun.pose = 4;
+                    self.gun.shooting = true;
+                    self.released[RIGHT_SHOOT] = false;
+                }
+            }
+            w => eprintln!("warning: weapon {w} (1088:{:04x}) not ported", [0x64fe, 0x678b, 0x69d8, 0x6b1f, 0x6f4d, 0x6deb, 0x70b8, 0x655f, 0x6cf0, 0x6649][w as usize]),
+        }
+    }
+
+    /// FUN_1088_5914(delay): the selected weapon may fire (ammo, armed, the right button
+    /// pressed anew, its pause over); takes one round and sets the pause.
+    fn use_ammo(&mut self, delay: u32, input: &[i8; 9], now: u32) -> bool {
+        let w = &mut self.weapons[self.weapon as usize];
+        if w.ammo < 1 || !self.gun.armed || input[RIGHT_SHOOT] < 1 || !self.released[RIGHT_SHOOT] {
+            return false;
+        }
+        if w.next > now {
+            return false;
+        }
+        w.next = now.wrapping_add(delay);
+        w.ammo -= 1;
+        if w.ammo < 1 {
+            self.next_weapon();
+        }
+        true
+    }
+
+    /// FUN_1088_58c1: out of ammo, the next weapon by digit key that has some.
+    fn next_weapon(&mut self) {
+        let mut d = (0..10).rev().find(|&d| WEAPON_FOR_DIGIT[d] == self.weapon).unwrap_or(0);
+        for _ in 0..10 {
+            d = (d + 1) % 10;
+            if self.weapons[WEAPON_FOR_DIGIT[d] as usize].ammo > 0 {
+                self.select_weapon(WEAPON_FOR_DIGIT[d]);
+                self.released[RIGHT_SHOOT] = false;
+                return;
+            }
+        }
+    }
+
+    /// SelectWeapon (1088:71ef). (4e32 = -14 starts the weapon display, 4e4a keeps the aim.)
+    pub fn select_weapon(&mut self, w: i32) {
+        self.weapon = w;
+    }
+
+    /// The start of FUN_1088_55f0: pick-ups (function 30000 in plane 2) under the hero's two
+    /// columns (x-4, x+4) from his feet to his head (FUN_1088_5551). Each is cleared and its
+    /// effect (function 4) runs at the tile's centre; main applies both.
+    fn pick_up(&mut self, w: &World) {
+        let rows = (self.height + 7) >> 4;
+        let (feet, head) = (self.y - 4, (self.y - self.height) + 5);
+        let mut y = feet;
+        for r in (0..=rows).rev() {
+            for x in [self.x - 4, self.x + 4] {
+                if (8000..8100).contains(&w.tile_function_at(y, x)) {
+                    eprintln!("warning: FUN_1088_55bd (tile functions 8000..8099) not ported");
+                }
+                let Some(cell) = w.cell_at(2, y, x) else {
+                    continue;
+                };
+                let t = (x >> 4, y >> 4);
+                if self.pickups.iter().any(|p| p.0 == t) || w.cell_function(cell, 0) != PICKUP {
+                    continue;
+                }
+                let (fx, f3) = (w.cell_function(cell, 4), w.cell_function(cell, 3));
+                self.pickups.push((t, fx, f3, (y & !15) + 7, (x & !15) + 7));
+            }
+            y = if r != 1 { y - 0x10 } else { head };
+        }
+    }
+
+    /// FUN_1040_0312 (effect 67) for the hero's side: a weapon (function 3 - 0x1e) and its ammo.
+    pub fn weapon_pickup(&mut self, f3: u16) {
+        let i = f3 as i32 - 0x1e;
+        let w = &mut self.weapons[i as usize];
+        let select = if !w.owned {
+            w.owned = true; // and HeroDamage(f3 - 0x3f): score
+            true
+        } else {
+            w.ammo == 0
+        };
+        if select {
+            self.select_weapon(i);
+        }
+        let w = &mut self.weapons[i as usize];
+        w.ammo = (w.ammo + w.pickup).min(w.max);
     }
 
     /// The landing block at the top of HeroUpdate.

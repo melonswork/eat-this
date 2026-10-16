@@ -274,6 +274,44 @@ impl Particles {
         p.m.set(0x3c, p.m.w(0x3c) | 0x200);
     }
 
+    /// FUN_1040_621f(speed, angle, y, x): the hero's grenade (effect 21 when it hits or its
+    /// fuse of 0x78 frames runs out).
+    pub fn grenade(&mut self, speed: i32, angle: i32, y: i32, x: i32, rng: &mut PascalRandom) {
+        self.p.hits = 0x8000;
+        self.p.flags = 0x80;
+        self.p.damage = 0xc0;
+        self.p.callback = 0x12f6;
+        self.p.on_death = 0x15;
+        self.p.draw = (0x5a0..=0x10df).contains(&angle) as i32;
+        let s = 0x195a + rng.random(2) * 4;
+        self.spawn_seq(s, 1, 0x78, y, x, 0);
+        self.bounce(7, speed, angle);
+        // FUN_1050_44ae: the water line of its sector (none in the levels ported so far).
+        self.p.draw = 0;
+        self.p.on_death = 0;
+        self.p.callback = 0;
+        self.p.damage = 0x10;
+        self.p.flags = 0x84;
+        self.p.hits = 0;
+    }
+
+    /// The particles of FUN_1040_0312 (a weapon picked up, `f3` its tile's function 3): two
+    /// sparkles and the weapon's icon flying up.
+    pub fn weapon_pickup(&mut self, f3: i32, y: i32, x: i32) {
+        self.p.group = 0;
+        self.spawn_seq(0x2106, 6, 5, y - 1, x - 2, 1);
+        self.throw(0x1c, 0x10, 0x6e0);
+        self.spawn_seq(0x2106, 6, 5, y + 1, x + 2, 1);
+        self.throw(0x1c, 0x10, 0x460);
+        self.p.group = 1;
+        self.p.colour = 4;
+        self.p.callback = 0x253f;
+        self.spawn_seq(f3 + 0x2100, 0x1a, 1, y, x, 1);
+        self.line(0x10, 0x5a0);
+        self.p.callback = 0;
+        self.p.colour = 0;
+    }
+
     /// FUN_1050_457e(gravity, speed, angle): a bouncing throw (FUN_1050_2d37).
     pub fn bounce(&mut self, gravity: i32, speed: i32, angle: i32) {
         self.throw(gravity, speed, angle);
@@ -545,7 +583,7 @@ impl Level {
                 m.set(0xc, m.w(8));
                 m.set(0xe, m.w(0xa));
             }
-            self.move_particle(i, f.camera);
+            self.move_particle(i, f.camera, f.world);
             let hit = self.particles.list[i].m.w(0x34) != 0 && self.collide(i, f);
             if !hit {
                 self.particle_callback(i, f);
@@ -574,7 +612,7 @@ impl Level {
     }
 
     /// The mover at +0x4a.
-    fn move_particle(&mut self, i: usize, cam: (i32, i32)) {
+    fn move_particle(&mut self, i: usize, cam: (i32, i32), w: &World) {
         let p = &mut self.particles.list[i];
         if p.m.uw(0x4a) == MOVE_AGE {
             p.m.set(0x24, p.m.w(0x24) + 1);
@@ -618,6 +656,55 @@ impl Level {
                     m.set(0x3e, -10);
                 } else {
                     m.set(0x24, m.w(0x24) + 1);
+                }
+            }
+            MOVE_BOUNCE => {
+                let t = v.w(8);
+                m.set(8, m.w(4) + v.l(0).wrapping_mul(t) / 0x40000);
+                let fall = (t * t) / v.w(0xa);
+                m.set(0xa, fall + (m.w(6) - v.l(4).wrapping_mul(t) / 0x40000));
+                v.set(8, t + 1);
+                if off_screen(m, -0x200) {
+                    m.set(0x24, m.w(0x22));
+                    m.set(0x3e, -10);
+                    return;
+                }
+                m.set(0x24, m.w(0x24) + 1);
+                if m.w(0x4e) != 0x7fff {
+                    eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+                }
+                // Rolling down a slope: on it with no vertical speed, it speeds up downhill
+                // (by half its speed, at least 1/2 px), at most 16 px per frame; else it bounces.
+                let (x, y) = (m.w(8), m.w(0xa));
+                if w.solidity_at(y - 1, x) & 0x20 != 0 {
+                    let cell = w.cell_at(crate::world::MAIN_PLANE, y - 1, x).unwrap_or(0);
+                    let ground = ((y - 1) & 0xfff0) + crate::actors::slope_height(w, x, cell);
+                    if ground < y {
+                        if v.l(4) == 0 {
+                            let a = (v.l(0).wrapping_abs() >> 1).max(0x8000);
+                            if w.cell_function(cell, 2) & 0x80 == 0 {
+                                v.set_l(0, v.l(0).wrapping_sub(a).max(-0x100000));
+                            } else {
+                                v.set_l(0, v.l(0).wrapping_add(a).min(0x100000));
+                            }
+                        } else {
+                            let t1 = v.w(8);
+                            let t0 = t1 - 1;
+                            let fall = ((t1 * t1) - (t0 * t0) as i16 as i32) / v.w(0xa);
+                            let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
+                            v.set_l(4, if vy < 0x20000 { 0 } else { vy });
+                        }
+                        v.set(8, 1);
+                        m.set(4, m.w(8));
+                        m.set(6, ground);
+                        m.set(0xa, ground);
+                        m.set(0xe, ground);
+                    }
+                }
+                let (x, y) = (m.w(8), m.w(0xa));
+                if w.tile_function_at(y + 1, x) == 11000 {
+                    let cell = w.cell_at(crate::world::MAIN_PLANE, y + 1, x).unwrap_or(0);
+                    m.set(4, m.w(4) + w.cell_function(cell, 3) as i16 as i32);
                 }
             }
             MOVE_CRITTER => {
@@ -764,7 +851,7 @@ impl Level {
                 m.set(0x30, x + 3);
                 m.set(0x32, y + 3);
             }
-            CB_CRITTER | 0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 => {} // drawing only
+            CB_CRITTER | 0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f => {} // drawing only
             0xb2a => {
                 // FUN_1050_0b2a: the rocket turns (at most 0x20) towards the target last found,
                 // smokes, and blows up at the end of its fuel.
@@ -963,6 +1050,7 @@ impl Level {
                 }
             }
             14 => self.rocket_blast(y, x, f),
+            21 => self.grenade_hit(f),
             23 => {
                 // FUN_1040_2af4: a flash of fire.
                 self.particles.spawn_seq(0x6900, 2, 0x19, y, x, 1);
@@ -1068,6 +1156,80 @@ impl Level {
             self.particles.keep_dying = false;
         }
         vy
+    }
+
+    /// Effect 21, FUN_1040_1481: a grenade bounces off what it hit (walls reverse it; floors and
+    /// ceilings lose speed, and it skids to a halt) until its fuse (0x22) runs out, then explodes.
+    fn grenade_hit(&mut self, f: &mut Frame) {
+        let i = self.particles.current;
+        let side = self.particles.hit_side;
+        let p = &mut self.particles.list[i];
+        let (m, v) = (&mut p.m, &mut p.v);
+        if m.w(0x3e) == -10 {
+            return;
+        }
+        if m.w(0x24) < m.w(0x22) {
+            m.set(8, m.w(0x10));
+            m.set(0xa, m.w(0x12));
+            if side < 2 {
+                m.set(0x3e, 0);
+                m.set(4, m.w(0x10) - (m.w(4) - m.w(0x10)));
+                v.set_l(0, v.l(0).wrapping_neg());
+            } else {
+                if v.l(4) == 0 && v.w(8) < 5 {
+                    v.set_l(0, v.l(0) / 2);
+                } else {
+                    let t = v.w(8);
+                    let fall = (t * t - (t - 1) * (t - 1)) / v.w(0xa);
+                    let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
+                    v.set_l(4, if side == 2 || vy >= 0x20000 { vy } else { 0 });
+                }
+                m.set(0x3e, 0);
+                v.set(8, 1);
+                if f.world.solidity_at(m.w(0xe), m.w(8)) & 0x40 == 0 {
+                    m.set(0xc, m.w(8));
+                } else {
+                    m.set(8, m.w(0xc));
+                }
+                m.set(4, m.w(0xc));
+                m.set(6, m.w(0xa));
+            }
+            m.set(0x24, m.w(0x24) + 1);
+            self.particles.keep_dying = false;
+            return;
+        }
+        if m.w(0x3e) == -1 {
+            m.set(8, m.w(0x10));
+            m.set(0xa, m.w(0x12));
+        }
+        let (y, x, damage, big) = (m.w(0xa), m.w(8), m.w(0x38), m.w(0x14) == 0x1818);
+        let ps = &mut self.particles;
+        crate::alien::smoke_sprite(ps, y, x);
+        ps.spawn_seq(0x6400, 2, 0x24, y - 0xc, x, 1);
+        ps.line(8, 0x5a0);
+        f.fx.shakes.push((0x2a, 0x10));
+        self.explode_area(f.world, damage, 4, y + 0xe, x + 0x2e, y - 0x3e, x - 0x2e, f.rng, f.fx);
+        let ps = &mut self.particles;
+        ps.blast(2, damage, if big { 7 } else { 5 }, 0x1e, 0x3e, -0x4e, -0x3e, y, x);
+        ps.p.group = 0;
+        ps.p.hits = 0x8000;
+        ps.p.on_death = 0x10;
+        ps.spawn(-0xb, y - 1, x);
+        let a = f.rng.random(0xc0) + 0x5c0;
+        ps.throw(9, 0x80, a);
+        ps.spawn(-0xb, y - 1, x);
+        let a = 0x580 - f.rng.random(0xc0);
+        ps.throw(9, 0x80, a);
+        if f.rng.random(2) == 0 {
+            ps.spawn(-0xb, y - 1, x);
+            let a = f.rng.random(0xd0) + 0x540;
+            ps.throw(9, 0x80, a);
+        }
+        ps.p.on_death = 0;
+        ps.p.hits = 0;
+        ps.p.group = 1;
+        let n = f.rng.random(6) + 1;
+        crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
     }
 
     /// Effect 14, FUN_1040_09d4(y, x): a rocket explodes.

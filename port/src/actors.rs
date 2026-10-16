@@ -497,7 +497,7 @@ impl Level {
 }
 
 /// FUN_1088_2c17: the height of a slope tile at x (table at 1170:1280).
-fn slope_height(w: &World, x: i32, cell: u16) -> i32 {
+pub(crate) fn slope_height(w: &World, x: i32, cell: u16) -> i32 {
     let p = w.cell_function(cell, 2);
     let mut i = x & 0xf;
     if p & 0x80 != 0 {

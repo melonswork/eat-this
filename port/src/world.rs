@@ -46,6 +46,10 @@ impl Plane {
     pub fn get(&self, tx: i32, ty: i32) -> u16 {
         self.cells[(ty * self.width + tx) as usize]
     }
+
+    pub fn set(&mut self, tx: i32, ty: i32, v: u16) {
+        self.cells[(ty * self.width + tx) as usize] = v;
+    }
 }
 
 /// A sector (FUN_1068_0002): the rectangle between STOP tiles that the camera and the level logic

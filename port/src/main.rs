@@ -255,6 +255,20 @@ impl Game {
             self.level.particles.hero_fire(y, x, aim, parity);
             noise = 2;
         }
+        if let Some((y, x, a)) = self.hero.gun.grenade {
+            self.level.particles.grenade(0x40, a, y, x, &mut self.rng);
+            noise = 2;
+        }
+        for ((tx, ty), effect, f3, y, x) in std::mem::take(&mut self.hero.pickups) {
+            // FUN_1088_5551: the pick-up leaves plane 2, then its effect (FUN_1040_60bb).
+            self.world.planes[2].as_mut().unwrap().set(tx, ty, 0);
+            if effect == hero::WEAPON_PICKUP {
+                self.hero.weapon_pickup(f3);
+                self.level.particles.weapon_pickup(f3 as i32, y, x);
+            } else if effect != 0 && effect < 30000 {
+                eprintln!("warning: pick-up effect {effect} not ported");
+            }
+        }
         let mut fx = Effects::default();
         for (idx, y, x, pull) in std::mem::take(&mut self.hero.levers) {
             self.level.work_lever(&mut self.world, idx, y, x, pull, &mut self.rng, &mut fx);

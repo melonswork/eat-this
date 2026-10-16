@@ -14,6 +14,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# Call sites inside drawing code that saves and restores RandSeed (no effect on the game).
+IGNORE = {"1070:8c72"}  # the big alien's shield (FUN_1070_7eb2)
 
 
 def main():
@@ -28,7 +30,7 @@ def main():
     for line in (ROOT / "work/tracer" / name / "calls.tsv").read_text().splitlines()[1:]:
         f = line.split("\t")
         fr = int(f[1])
-        if a <= fr <= b:
+        if a <= fr <= b and f[3] not in IGNORE:
             orig[fr] += 1
             callers[fr].append(f"{f[2]}({f[5]})")
     demo = ROOT / "work/cd/BIN/USERMAPS" / f"{name}.DMO"
@@ -46,7 +48,7 @@ def main():
     for fr in range(a, b + 1):
         if orig[fr] != port[fr] or orig[fr]:
             mark = "<--" if orig[fr] != port[fr] else ""
-            print(f"{fr:6}  original {orig[fr]:3}  port {port[fr]:3}  {mark:3} {' '.join(callers[fr])}")
+            print(f"{fr:6}  original {orig[fr]:3}  port {port[fr]:3}  {mark:3} {' '.join(callers[fr])[:200]}")
 
 
 main()
