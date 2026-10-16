@@ -67,6 +67,7 @@ impl Drone {
     }
 
     /// The drone part of FUN_1050_568b / 51aa: a box the target may be.
+    #[track_caller]
     pub fn consider(&mut self, bottom: i32, right: i32, top: i32, left: i32, level: i32) {
         if self.active <= 0 {
             return;
@@ -75,7 +76,7 @@ impl Drone {
         let (dx, dy) = (cx - self.x, cy - self.y);
         let dist = ((dx as f64).powi(2) + (dy as f64).powi(2)).sqrt().round_ties_even() as i32;
         if std::env::var("ET_DRONE").is_ok() {
-            eprintln!("CAND box l{left} t{top} r{right} b{bottom} level {level} dist {dist}");
+            eprintln!("CAND box l{left} t{top} r{right} b{bottom} level {level} dist {dist} {}", std::panic::Location::caller());
         }
         self.cands.push(Candidate { cx, cy, x: self.x, y: self.y, dist, level });
     }

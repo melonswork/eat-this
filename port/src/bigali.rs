@@ -636,10 +636,13 @@ impl Level {
             o.set(0x10, o.w(0x10) - 3);
             env.fx.shakes.push((5, 2));
         }
+        // FUN_1070_7eb2 leaves 093e alone here: the drone still shoots at the dying.
+        self.particles.p.aim_level = 0;
         let damage = match sprites::hit_rect(sprite, y, x, mirror) {
-            Some((b, r, t, l)) => self.particles.hit_test_low(b, r, t, l, 0x11fb),
+            Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x11fb),
             None => 0,
         };
+        self.particles.p.aim_level = 0x100;
         if damage > 0 {
             let o = self.o(id);
             if o.w(0x2e) > 0x34 && o.w(0x32) < 1 {
