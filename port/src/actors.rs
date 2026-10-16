@@ -753,6 +753,31 @@ impl Level {
                     unbounded(o);
                 }
             }
+            crate::boss::WRECK => {
+                // FUN_1070_36e7: falling it counts; landing hard it goes off.
+                let o = self.o(id);
+                if o.w(0x1c) == 0 {
+                    if o.w(0x1a) == 0 {
+                        o.set(0x18, o.w(0x10));
+                        o.set(0x14, -0x7fff);
+                        o.set(0x16, 0x7fff);
+                    }
+                    o.set(0x1a, o.w(0x1a) + 1);
+                    unbounded(o);
+                    o.set(2, -0x7fff);
+                } else if o.w(0x1a) > 0 {
+                    if o.w(0x20) > 0x100 {
+                        let (x, y) = (o.w(0xe), o.w(0x10));
+                        self.particles.spawn_seq(0x6900, 2, 0x19, y - 9, x - 2, 1); // effect 23
+                        self.explode_area(env.world, 0x60, 4, y + 0xe, x + 0xe, y - 0xe, x - 0xe, env.rng, env.fx);
+                        env.fx.shakes.push((0x2a, 0x10));
+                        let o = self.o(id);
+                        o.set(0x22, 0x5027);
+                        o.set(0x20, 0x100);
+                    }
+                    self.o(id).set(0x1a, 0);
+                }
+            }
             0x1428 => self.alien_after_move(id),
             crate::gunship::WRECK => self.wreck_after_move(id),
             0x1432 => self.bigali_after_move(id, env),

@@ -66,29 +66,41 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
   teleport records 1000; after a teleport LevelFirstFrame runs a frame without the hero
   (`world_update`). Doors: `doors.rs` (segment 10a8).
 
-## State (2026-10-17, later)
+## State (2026-10-17, end)
 
-CITY01 exact for 721 windows (800/847 total), GRINDER 113/113. Done since the 610 mark:
-ladders (HeroUpdate state -5: detection loop before the exits, grab before the Down-crouch, the -5 block before
-the levers; collision already knew -5), the hero's hit boxes are ALWAYS mirrored (the rec word is gHeroFacing =
-+-1 and FUN_10f0_2240 only tests != 0; mirrored rects swap their edges), platform camera lock (script command
-0x14 = platform w20, 4e36 = (w20 + 0x7d) - platform.y + camY every frame while it is in the hero's sector),
-script commands that spawn enemies (command 0 with an object tile and command 0x10 = 0d5a at the row above the
-camera; `Effects.spawns` + `Level::flush_spawns`), decals (`decals.rs`: blood drops 0xbb0, shell casings 0xbc4,
-wall splats 0x976 in sector list L5A, updated by FUN_1070_fb30 BEFORE particle group 0; eviction FUN_1068_04d0 at
-> 0x1f; FUN_1058_016f takes the byte0 of the MAIN-plane cell looked up first, not plane 0's).
-Debug aids added: `ET_CAM` (camera per frame, compare with tracer `--watch gCameraX,gCameraY`), `ET_AIM`,
-`ET_CMD` (script commands / SETCELL / SCRIPT), `ET_FACT` (unported factory kinds), `ET_SPLAT`.
-Tracer: `--entry` works with SEL:OFF (`--entry 1068:182c`) but hooking EnemyFactory aborts the run; `--particles`
-tsv frame N ~ port ET_PART frame N-1 (the tracer samples before the update).
-Earlier aids (still valid): `ET_RNG=<frame-1>`, `ET_RNG_TSV=file` + `tools/rngdiff.py`, `ET_DRONE=1` +
-`tools/dronediff.py`, `ET_PART=F` (+`ET_ALLPART=1`), `ET_HERO=F`, `ET_OBJ=1`, `ET_DEBUG=1`, `ET_HIT=1`,
-`ET_DOOR=1`, `ET_AREA=1`, `ET_CORPSE=1`, `ET_SPARK=1`.
+CITY01 (LEVEL1_2.DMO) is exact for ALL 847 windows, GRINDER 113/113. The other demos match only partly
+(2026-10-17): LEVEL1_1 199/679, LEVEL2_1 358/616, LEVEL2_2 249/770, LEVEL3_1 186/352, LEVEL3_2 17/173: each needs
+its own `windiff` loop (trace with `mise run trace -- work/cd/BIN/USERMAPS/<DEMO>.DMO --windows N`).
+A matching RandSeed does not prove the hero is in the right place: also compare `--dump` with the tracer's
+`--watch gHeroX,gHeroY,gHeroState` (a wrong position hid for 40 windows once).
 
-Next: window 722. Frame 25257: object kind 0x140a (walker with a turret rider; update FUN_1070_4051, constructor in
-`factory.rs`, port prints `object kind 0x140a not ported`; helpers 1765, 3d4c, 3d85, 3f4d, 0dd8, 00b6, 3a81).
-Also unported and seen in CITY01: kind 0x13f6 (stationary boss-like object, update FUN_1070_30b6, 790 updates),
-the hero riding a smallbot (FUN_1070_a18e), the hero's death (FUN_1068_186c splats), objects of VMT 0xc84
-(kind 0x14be, icon 61600, FUN_1070_0cce), kinds 0x14d2/0x14f0 icons, effects 23/53/54, bonus 0xd10 (6b03),
-levers needing a key, other weapons (1..3, 5..9), sideways shake 5c7d, frozen/burnt deaths, barrels >= 0xb,
-level-leaving teleports, hero on the big alien's shield (00b6), wall chunks 60308/60304 (45db).
+Ported since the 610 mark: ladders (HeroUpdate state -5: detection loop before the exits, grab before the
+Down-crouch, the -5 block before the levers); the hero's hit boxes are ALWAYS mirrored (the rec word is gHeroFacing
+= +-1 and FUN_10f0_2240 only tests != 0; mirrored rects swap their edges); platform camera lock (script command 0x14 =
+platform w20: 4e36 = (w20 + 0x7d) - platform.y + camY each frame while it is in the hero's sector); script commands
+that spawn enemies (command 0 with an object tile, command 0x10 = 0d5a at the row above the camera;
+`Effects.spawns` + `Level::flush_spawns`); decals (`decals.rs`: blood drops 0xbb0, shell casings 0xbc4, wall splats
+0x976 in sector list L5A, updated by FUN_1070_fb30 BEFORE particle group 0; eviction at > 0x1f; FUN_1058_016f takes
+byte 0 of the MAIN-plane cell looked up first); the walker with a gunner (0x140a, `walker.rs`); the hovering machine
+(0x13f6) and its wreck (VMT 0xcdc, move hook FUN_1070_36e7) in `boss.rs`; effects 7, 9, 28, 29; crouch-slide down
+slopes (4e20 = `down_timer`, 4e24 = `sliding`, 4f03 = `released[DOWN]`, FUN_1088_29c8 = `slope_run`) and the
+knocked-down hero sliding too; `Env.hero_obj` lets objects hurt the hero on the spot (`Hero::hurt`),
+`Effects.hero_stand` = FUN_1070_00b6 (hero carried on a moving top, gHeroGround 0x16).
+Facts: gHeroDX set by objects after HeroUpdate is lost (4e06 resets it next frame); the 1168:1381 set test at
+DS:160a is "-state in 1..5" (hero hanging/climbing ignores platforms); Pascal calls push left to right, so Ghidra's
+param_1 is the LAST source argument (3de2(sprite, steps, frames, y, x, animate)); a long divisor with CX=0, BX=8 is
+0x80000 (BX is the high word). Particle spawn globals that a caller forgets to reset stay set (FUN_1058_0301 leaves
+091c = its last Random(4)).
+Debug aids added: `ET_CAM`, `ET_AIM`, `ET_CMD`, `ET_FACT`, `ET_SPLAT`, `ET_BOSS`. Tracer `--entry SEL:OFF` works for
+plain functions (`--entry 1050:5c4a` finds who shakes the screen) but hooking EnemyFactory aborts the run;
+`--particles` tsv frame N ~ port ET_PART frame N-1. windiff IGNOREs the draw-time Randoms under a saved seed
+(1070:8c72, 1070:34db). Earlier aids: `ET_RNG=<frame-1>`, `ET_RNG_TSV` + `tools/rngdiff.py`, `ET_DRONE` +
+`tools/dronediff.py`, `ET_PART=F` (+`ET_ALLPART=1`), `ET_HERO=F`, `ET_OBJ=1`, `ET_DEBUG=1`, `ET_HIT=1`, `ET_DOOR=1`,
+`ET_AREA=1`, `ET_CORPSE=1`, `ET_SPARK=1`.
+
+Still unported (warnings in the port run): the hero riding a smallbot (FUN_1070_a18e), the hero's death
+(FUN_1068_186c splats), objects of VMT 0xc84 (kind 0x14be, icon 61600, FUN_1070_0cce), kinds 0x14d2/0x14f0 icons,
+effects 23 (FUN_1050_4a29 part)/53/54, bonus 0xd10 (6b03), levers needing a key, other weapons (1..3, 5..9), sideways
+shake 5c7d, frozen/burnt deaths, barrels >= 0xb, level-leaving teleports, hero on the big alien's shield (00b6 is
+now `Level::stand_on`, wire it there), wall chunks 60308/60304 (45db), 30070 particle spawn.
+Next: pick the demo with the most windows left (LEVEL2_1/LEVEL2_2) and run the daily loop on it.
