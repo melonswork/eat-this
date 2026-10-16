@@ -1711,6 +1711,17 @@ impl Level {
         rng: &mut PascalRandom,
         fx: &mut Effects,
     ) {
+        if std::env::var("ET_AREA").is_ok() {
+            let mut ty = bottom;
+            while (top & !15) <= ty {
+                let mut tx = right;
+                while (left & !15) <= tx {
+                    eprintln!("AREA {} tile ({tx},{ty}) solid {:x} func {} cell {:x}", self.particles.now, world.solidity_at(ty, tx), world.tile_function_at(ty, tx), world.cell_at(1, ty, tx).unwrap_or(0));
+                    tx -= 0x10;
+                }
+                ty -= 0x10;
+            }
+        }
         let mut ty = bottom;
         while (top & !15) <= ty {
             let mut tx = right;

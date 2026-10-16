@@ -11,6 +11,7 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
     match id {
         0 => {}
         34 => explosion(lv, world, y, x, rng, fx),
+        43 => wall_chunks(lv, world, y, x, rng, fx),
         72 => rubble(rng),
         // Seen in GRINDER with no Random() calls in the tracer.
         76 => {}
@@ -57,6 +58,60 @@ fn explosion(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut Pascal
     ps.p.on_death = 0;
     ps.p.hits = 0;
     ps.p.group = 1;
+    fx.shakes.push((0x18, 0xe));
+}
+
+/// Effect 43, FUN_1040_45db(y, x): a wall tile bursts into chunks (what flies depends on the
+/// function of the tile that took its place); the block it belonged to goes with it.
+fn wall_chunks(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+    let f = world.tile_function_at(y, x);
+    let (mut y, mut x) = (y, x);
+    if f == 0 {
+        // (The plane-2 cell is cleared; FUN_10f0_3f68.)
+        if let Some(p) = world.planes[2].as_mut() {
+            let w = p.width;
+            let (tx, ty) = (x >> 4, y >> 4);
+            if tx >= 0 && ty >= 0 && tx < w && ty < p.height {
+                p.cells[(ty * w + tx) as usize] = 0;
+            }
+        }
+    } else {
+        let (x1, y1, x2, y2) = clear_block(world, y, x);
+        x = ((x1 + x2 + 0xf) as u16 >> 1) as i32;
+        y = ((y1 + y2 + 0xf) as u16 >> 1) as i32;
+    }
+    let ps = &mut lv.particles;
+    ps.p.group = 0;
+    ps.p.hits = 0x8000;
+    ps.p.on_death = 0x10;
+    match f as i16 {
+        -0x146c | -0x1470 => eprintln!("warning: wall chunks of tile function {f} (FUN_1040_45db) not ported"),
+        _ => {
+            for i in 0..2 {
+                ps.spawn(29999, y, x - 4 + i * 8);
+                let a = i * -0x80 + 0x5c0 + rng.random(0x41);
+                let speed = rng.random(0x10) + 0x40;
+                ps.throw(9, speed, a);
+            }
+        }
+    }
+    if f as i16 == -0x146b {
+        for i in 0..5 {
+            ps.p.on_death = 0x16;
+            ps.p.callback = 0x23b7;
+            ps.spawn(0x5409, y, x - 4 + i * 2);
+            let a = i * -0x10 + 0x5a0 + rng.random(0x41);
+            let speed = rng.random(0x20) + 0x40;
+            ps.throw(0xb, speed, a);
+            ps.p.callback = 0;
+        }
+    }
+    ps.p.on_death = 0;
+    ps.p.hits = 0;
+    ps.p.group = 1;
+    if rng.random(3) == 0 {
+        eprintln!("warning: a wall's bonus 0xd10 (FUN_1040_6b03) not ported");
+    }
     fx.shakes.push((0x18, 0xe));
 }
 
