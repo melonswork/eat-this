@@ -817,6 +817,9 @@ impl Level {
             if hidden {
                 self.particles.p.aim_level2 = -1;
             }
+            if std::env::var("ET_CORPSE").is_ok() {
+                eprintln!("CORPSE {} sprite {:x} at {x},{y} mirror {} rect {:?}", env.frame + 1, sprite, *mirror, sprites::hit_rect(sprite, y, x, *mirror));
+            }
             let damage = match sprites::hit_rect(sprite, y, x, *mirror) {
                 Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x11fb),
                 None => 0,

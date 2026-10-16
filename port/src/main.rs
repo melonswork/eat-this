@@ -217,6 +217,7 @@ impl Game {
 
     /// One game frame. `keys` is ignored while a demo plays.
     fn step(&mut self, keys: [i8; 9]) {
+        self.rng.frame = self.frame + 1;
         self.rng.log = std::env::var("ET_RNG").ok().and_then(|v| v.parse::<u32>().ok()) == Some(self.frame);
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
         self.level.now = self.frame;

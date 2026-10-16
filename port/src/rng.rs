@@ -7,11 +7,20 @@ pub struct PascalRandom {
     calls: u32,
     /// Debug (env ET_RNG=frame): print every call with its Rust caller.
     pub log: bool,
+    /// Debug (env ET_RNG_TSV=file): every call as `frame<TAB>n<TAB>result<TAB>caller`.
+    pub dump: Option<std::io::BufWriter<std::fs::File>>,
+    pub frame: u32,
 }
 
 impl PascalRandom {
     pub fn new(seed: u32) -> Self {
-        PascalRandom { seed, calls: 0, log: false }
+        PascalRandom {
+            seed,
+            calls: 0,
+            log: false,
+            dump: std::env::var("ET_RNG_TSV").ok().map(|p| std::io::BufWriter::new(std::fs::File::create(p).expect("ET_RNG_TSV"))),
+            frame: 0,
+        }
     }
 
     fn next(&mut self) -> u32 {
@@ -23,6 +32,17 @@ impl PascalRandom {
     /// Random(n): 0 <= result < n.
     pub fn random(&mut self, n: u16) -> i32 {
         let r = ((self.next() as u64 * n as u64) >> 32) as i32;
+        if let Some(w) = self.dump.as_mut() {
+            use std::io::Write;
+            let bt = std::backtrace::Backtrace::force_capture().to_string();
+            let caller = bt
+                .lines()
+                .filter(|l| l.contains("eatthis::") && !l.contains("eatthis::rng::"))
+                .map(|l| l.trim().trim_start_matches(|c: char| c.is_ascii_digit() || c == ':' || c == ' '))
+                .nth(0)
+                .unwrap_or("");
+            let _ = writeln!(w, "{}\t{n}\t{r}\t{caller}", self.frame);
+        }
         if self.log {
             let bt = std::backtrace::Backtrace::force_capture().to_string();
             let caller = bt

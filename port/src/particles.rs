@@ -996,8 +996,8 @@ impl Level {
                     m.set(0x12, y);
                 }
             }
-            0x1a3 => {
-                // FUN_1050_01a3: a 9x9 box.
+            0x1a3 | 0x229 => {
+                // FUN_1050_01a3 / 0229: a 9x9 box.
                 let (x, y) = (m.w(8), m.w(0xa));
                 m.set(0x2c, x - 4);
                 m.set(0x2e, y - 4);
@@ -1193,6 +1193,7 @@ impl Level {
             }
             21 => self.grenade_hit(f, false),
             0x4d => self.grenade_hit(f, true),
+            0x4e => self.spark_bounce(f),
             94 => self.critter_hits(f),
             23 => {
                 // FUN_1040_2af4: a flash of fire.
@@ -1299,6 +1300,64 @@ impl Level {
             self.particles.keep_dying = false;
         }
         vy
+    }
+
+    /// Effect 78, FUN_1040_0cf8: a spark of the charge's blast bounces (and then only hits walls).
+    fn spark_bounce(&mut self, f: &mut Frame) {
+        let i = self.particles.current;
+        {
+            let m = &mut self.particles.list[i].m;
+            m.set(8, m.w(0x10));
+            m.set(0xa, m.w(0x12));
+        }
+        self.particle_callback(i, f); // FUN_1050_4acb
+        let side = self.particles.hit_side;
+        let p = &mut self.particles.list[i];
+        let (m, v) = (&mut p.m, &mut p.v);
+        if side < 2 {
+            m.set(0x24, 0);
+            m.set(0x3e, 0);
+            m.set(0x34, -0x8000);
+            let a = ((m.w(4) - m.w(0x10)).wrapping_mul(v.w(0xc)) as i16 as i32) / 0x10;
+            m.set(4, m.w(0x10) - a);
+            let nv = (v.l(0).wrapping_neg() as i64 * v.w(0xc) as i64 / 0x10) as i32;
+            if std::env::var("ET_SPARK").is_ok() {
+                eprintln!("SPARK now {} vx {:x} nv {:x} bounce {}", self.particles.now, v.l(0), nv, v.w(0xc));
+            }
+            v.set_l(0, nv);
+            if (nv as i64).abs() >> 16 >= 12 && f.rng.random(10) == 0 {
+                f.rng.random(0x40); // the sound's pitch
+            }
+            self.particles.keep_dying = false;
+            return;
+        }
+        let t = v.w(8);
+        let t1 = t - 1;
+        let fall = (t.wrapping_mul(t) - t1.wrapping_mul(t1)) / v.w(0xa);
+        let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
+        v.set_l(4, vy);
+        let hi = vy >> 16;
+        if hi >= 2 {
+            if hi < 12 || f.rng.random(10) != 0 {
+                f.rng.random(4); // (a clink 1 time in 4)
+            } else {
+                f.rng.random(0x40); // the sound's pitch
+            }
+        }
+        if side == 2 || hi > 2 || (hi == 2 && (vy as u32 & 0xffff) > 0xaaaa) {
+            m.set(0x24, 0);
+            m.set(0x3e, 0);
+            v.set(8, 1);
+            m.set(0x34, -0x8000);
+            if f.world.solidity_at(m.w(0xe), m.w(8)) & 0x40 == 0 {
+                m.set(0xc, m.w(8));
+            } else {
+                m.set(8, m.w(0xc));
+            }
+            m.set(4, m.w(0xc));
+            m.set(6, m.w(0xa));
+            self.particles.keep_dying = false;
+        }
     }
 
     /// FUN_1050_36a9: a critter runs: a throw that lands (running on along slopes, hopping up
