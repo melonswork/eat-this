@@ -26,6 +26,10 @@ pub const CROUCH: i32 = -40;
 pub const LEDGE: i32 = -4;
 /// Pulling a lever (HeroUseObject).
 pub const USE: i32 = -30;
+/// Walking into an exit (function 9000 tiles).
+pub const EXIT: i32 = -100;
+/// Tile function of exits (doors to another place, paired by the teleport records).
+const EXIT_TILE: u16 = 9000;
 /// Thrown back by a hit (FUN_1088_3bee).
 pub const KNOCKED_BACK: i32 = 0x10;
 /// Dead (FUN_1088_3c32).
@@ -102,6 +106,10 @@ pub struct Hero {
     pub weapons: [Weapon; 10],
     /// Pick-ups taken this frame: (plane-2 cell (tx, ty), effect, its function 3, y, x).
     pub pickups: Vec<((i32, i32), u16, u16, i32, i32)>,
+    /// 1170:4e62: counts down to the teleport (FUN_1088_517a) at the end of the frame it hits 0.
+    pub exit_timer: i32,
+    /// 1170:4e1e: the exit's kind (its function 2, low byte): 0 a door, 1 a hatch.
+    exit_kind: i32,
     /// 1170:5123: 3 while a lever is in reach this frame (then 1: Up jumps again).
     lever_reach: i32,
     /// 1170:4e5a: frames the use pose has been held (to 2); the lever moves at 1.
@@ -212,6 +220,8 @@ impl Hero {
             weapon: -1,
             weapons: WEAPON_AMMO.map(|(pickup, max)| Weapon { pickup, max, next: 0, ammo: 0, owned: false }),
             pickups: Vec::new(),
+            exit_timer: 0,
+            exit_kind: 0,
             slope: -1,
             collide_flags: 3,
             prev: (x, y),
@@ -539,6 +549,55 @@ impl Hero {
             self.held_lever = -1;
         }
 
+        // Exits: function 2's high byte 0x10 leaves at once; 0 when Up is held standing (the
+        // use pose first, walking to the exit's middle, then into it).
+        let e = exit_at(w, true, self.y, self.x);
+        if (e >> 8) & 0xff == 0x10 && self.exit_timer < 1 {
+            self.exit_timer = 2;
+        } else if (e >> 8) & 0xff == 0
+            && held(UP)
+            && (self.state == GROUND || self.state == USE)
+            && lv.door_state(w, self.y, self.x) != 0
+        {
+            if self.use_count == 1 {
+                self.state = EXIT;
+                self.anim = 0;
+                self.exit_kind = e & 0xff;
+            } else {
+                self.lever_reach = 2;
+            }
+            if self.state == USE {
+                self.x += (exit_middle(w, self.y, self.x) + (self.facing == -1) as i32 - self.x).signum();
+            }
+        }
+        if self.state == EXIT {
+            let len = match self.exit_kind {
+                0 => {
+                    if self.anim < 0x28 {
+                        self.frame = self.anim / 5 + 0x300;
+                    }
+                    0x28
+                }
+                1 => {
+                    if self.anim < 0x20 {
+                        self.frame = self.anim / 4 + 0x30e;
+                    }
+                    self.facing = 1;
+                    self.height = 0x18;
+                    0x20
+                }
+                _ => 0,
+            };
+            if len - 1 == self.anim {
+                self.exit_timer = 2;
+            }
+            // (len - anim == 0x1d: 1170:536a = -0x1e starts the fade.)
+            self.turn = NO_TURN;
+            self.anim += 1;
+            self.x += (exit_middle(w, self.y, self.x) + (self.facing == -1) as i32 - self.x).signum();
+            self.hurt = 1;
+        }
+
         if held(UP) && self.released[UP] && self.lever_reach >= 2 {
             // HeroUseObject(0, 5123).
             let kind = self.lever_reach & 0xfe;
@@ -846,6 +905,52 @@ impl Hero {
             g.muzzle.0 -= (g.cooldown * c) / 0xc000;
             g.muzzle.1 += (g.cooldown * s) / 0xc000;
             g.cooldown -= 1;
+        }
+    }
+
+    /// FUN_1088_517a, the hero's part: from the exit's left end to the other end of its
+    /// teleport record (records 1000: byte 2 two-way, byte 3 leaves the level, words 2 and 3
+    /// the cells). Returns true when he moved (LevelFirstFrame follows).
+    pub fn teleport(&mut self, w: &World, teleports: &[Vec<i16>]) -> bool {
+        while exit_at(w, false, self.y, self.x - 0x10) != -1 {
+            self.x -= 0x10;
+        }
+        let width = w.main().width;
+        let cell = (self.y / 16) * width + self.x / 16;
+        let mut moved = false;
+        for r in teleports.iter().rev() {
+            let (two_way, leave) = (r[1] & 0xff != 0, (r[1] >> 8) & 0xff);
+            let (a, b) = (r[2] as u16 as i32, r.get(3).map_or(0, |&v| v as u16 as i32));
+            if cell != a && !(two_way && cell == b) {
+                continue;
+            }
+            if leave != 0 {
+                eprintln!("warning: a level exit (teleport record leaving the level) not ported");
+                continue;
+            }
+            let to = if cell == a { b } else { a };
+            self.y = (to / width) * 0x10 + 0xf;
+            self.x = exit_middle(w, self.y, (to % width) << 4) + (self.facing == -1) as i32;
+            // FUN_1088_0c20: there, with the camera snapped (LevelFirstFrame redoes it).
+            self.prev = (self.x, self.y);
+            self.stand();
+            self.frame = 0x26f;
+            self.gun.shooting = false;
+            if w.solidity_at(self.y - 0x20, self.x) & 2 != 0 {
+                self.crouch_down();
+                self.crouch = 8;
+                self.frame = 0xa8;
+            }
+            moved = true;
+        }
+        moved
+    }
+
+    /// The start of FUN_10a8_0dab: walking into an exit, the door module draws him.
+    pub fn hide_in_exit(&mut self) {
+        if self.state == EXIT && self.frame != NONE {
+            self.frame = NONE;
+            self.gun.frame2 = NONE;
         }
     }
 
@@ -1697,6 +1802,41 @@ fn spawn_dust(w: &World, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
         rng.random(0x11);
         rng.random(10);
     }
+}
+
+/// FUN_1088_5082(door, y, x): an exit's function 2 (main plane, else plane 2), -1 for none or
+/// (with `door`) a closed door (function 7050 whose function 2 isn't 1) in front of it.
+fn exit_at(w: &World, door: bool, y: i32, x: i32) -> i32 {
+    if w.tile_function_at(y, x) == EXIT_TILE {
+        let cell = w.cell_at(MAIN_PLANE, y, x).unwrap_or(0);
+        return w.cell_function(cell, 2) as i32;
+    }
+    if w.tile_function_in(2, y, x) != EXIT_TILE {
+        return -1;
+    }
+    let cell = w.cell_at(2, y, x).unwrap_or(0);
+    let mut r = w.cell_function(cell, 2) as i32;
+    if door && w.tile_function_at(y, x) == 7050 {
+        let main = w.cell_at(MAIN_PLANE, y, x).unwrap_or(0);
+        if w.cell_function(main, 2) != 1 {
+            r = -1;
+        }
+    }
+    r
+}
+
+/// FUN_1088_510f(y, x): the middle of the exit around x (its 16 px cells left and right).
+fn exit_middle(w: &World, y: i32, x: i32) -> i32 {
+    let mut x0 = x & 0xfff0;
+    let mut width: i8 = 0x10;
+    while exit_at(w, false, y, width as i32 + x0) != -1 {
+        width = width.wrapping_add(0x10);
+    }
+    while exit_at(w, false, y, x0 - 0x10) != -1 {
+        x0 -= 0x10;
+        width = width.wrapping_add(0x10);
+    }
+    (x0 - 1) + width as i32 / 2
 }
 
 /// A word of the slope table row (1170:1280 + 0x16 * (kind & 0xff7f)): 0x12 its shape id,

@@ -12,6 +12,7 @@ mod archive;
 mod bg;
 mod camera;
 mod data;
+mod doors;
 mod demo;
 mod effects;
 mod factory;
@@ -290,6 +291,16 @@ impl Game {
         let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
         self.camera
             .update(&self.world, (self.hero.x, self.hero.y), true, grinder);
+        // FUN_10a8_1311 (doors opening by themselves), then after the level's background
+        // procedure FUN_10a8_0dab (the moving doors).
+        let hero_at = (self.hero.x, self.hero.y);
+        self.level.doors_near_hero(&mut self.world, hero_at, false);
+        let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
+        self.level.update_doors(&mut self.world, hero_at, false, &mut cx);
+        self.hero.hide_in_exit();
+        if std::mem::take(&mut self.level.door_noise) {
+            noise = 3;
+        }
         // FUN_1070_faec: the actors whose box meets the camera.
         let window = (
             self.camera.x,
@@ -297,22 +308,39 @@ impl Game {
             self.camera.x + 0x13f,
             self.camera.y + 199,
         );
+        self.world_update(&mut fx, noise, input[hero::UP] > 0, window);
+        for &(a, b) in &fx.shakes {
+            self.camera.shake(a, b);
+        }
+        // The end of GameFrameInGame: 1170:4e62 counts down to the teleport.
+        if self.hero.exit_timer > 0 {
+            self.hero.exit_timer -= 1;
+            if self.hero.exit_timer == 0 {
+                self.teleport();
+            }
+        }
+        self.frame += 1;
+    }
+
+    /// GameFrameInGame from the particles of group 0 on (also LevelFirstFrame's): group 0,
+    /// the actors (FUN_1070_faec), group 1, the level's foreground procedure.
+    fn world_update(&mut self, fx: &mut Effects, noise: i32, up: bool, window: (i32, i32, i32, i32)) {
         // FUN_1050_4ca5(0): debris and critters, before the actors.
         let cam = (self.camera.x, self.camera.y);
         let mut pf = particles::Frame {
             world: &mut self.world,
             rng: &mut self.rng,
-            fx: &mut fx,
+            fx,
             camera: cam,
         };
         self.level.update_particles(0, &mut pf);
         let mut env = actors::Env {
             world: &mut self.world,
             rng: &mut self.rng,
-            fx: &mut fx,
+            fx,
             hero: (self.hero.x, self.hero.y, self.hero.height),
             frame: self.frame,
-            h: self.hero.view(input[hero::UP] > 0),
+            h: self.hero.view(up),
             noise,
             camera: cam,
         };
@@ -324,7 +352,7 @@ impl Game {
         let mut pf = particles::Frame {
             world: &mut self.world,
             rng: &mut self.rng,
-            fx: &mut fx,
+            fx,
             camera: cam,
         };
         self.level.update_particles(1, &mut pf);
@@ -333,11 +361,46 @@ impl Game {
         let hero = (h.x, h.y, h.crouch_level(), false);
         let cam_x = self.camera.x;
         self.level
-            .update_grinder(&mut self.world, hero, cam_x, &mut self.rng, &mut fx);
+            .update_grinder(&mut self.world, hero, cam_x, &mut self.rng, fx);
+    }
+
+    /// FUN_1088_517a: through the exit to the other end of its teleport record, then
+    /// LevelFirstFrame(0) there.
+    fn teleport(&mut self) {
+        let old = self.level.sector.unwrap_or(0);
+        if !self.hero.teleport(&self.world, &self.level.teleports) {
+            return;
+        }
+        let mut fx = Effects::default();
+        // FUN_1068_08ff: the old sector's triggers see him go.
+        self.level
+            .run_triggers(old, &mut self.world, &mut fx, self.hero.x, self.hero.y);
+        // LevelFirstFrame: enter the sector (FUN_1088_1280), face its far side, the camera,
+        // then a frame without the hero.
+        let mut noise = self.camera.shake_started() as i32;
+        let sector = self.world.sector_at(self.hero.y, self.hero.x);
+        self.level.enter_sector(&mut self.world, sector, &mut fx);
+        let cam = self.world.sectors[sector].cam;
+        self.hero.facing = if self.hero.x - cam.0 < cam.2 - self.hero.x { 1 } else { -1 };
+        let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
+        self.camera
+            .first_frame(&self.world, (self.hero.x, self.hero.y), grinder);
+        let hero_at = (self.hero.x, self.hero.y);
+        self.level.doors_near_hero(&mut self.world, hero_at, true);
+        let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
+        self.level.update_doors(&mut self.world, hero_at, true, &mut cx);
+        if std::mem::take(&mut self.level.door_noise) {
+            noise = 3;
+        }
+        let window = (self.camera.x, self.camera.y, self.camera.x + 0x13f, self.camera.y + 199);
+        self.world_update(&mut fx, noise, false, window);
+        if self.world.solidity_at(self.hero.y - 0x10, self.hero.x) & 0x80 != 0 {
+            let (y, x) = (self.hero.y - 0x10, self.hero.x);
+            crate::effects::explode_tile(&mut self.level, &mut self.world, 0x60, 0x104, y, x, &mut self.rng, &mut fx);
+        }
         for &(a, b) in &fx.shakes {
             self.camera.shake(a, b);
         }
-        self.frame += 1;
     }
 
     fn check(&mut self, k: u32) {

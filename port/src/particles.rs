@@ -774,8 +774,8 @@ impl Level {
             let func = w.tile_function_at(y, x);
             if (6000..=0x1779).contains(&func) {
                 eprintln!("warning: a shot lever (FUN_1088_14a3) not ported");
-            } else if func == 0x1b8a {
-                eprintln!("warning: FUN_10a8_1369 (shot tile 7050) not ported");
+            } else if func == crate::doors::DOOR {
+                self.door_hit(f.world, strength, y, x, 0, f.fx);
             }
             if s & 0x80 != 0 {
                 effects::explode_tile(self, f.world, strength, 3, y, x, f.rng, f.fx);
@@ -1276,8 +1276,8 @@ impl Level {
                 if world.solidity_at(ty, tx) & 0x80 != 0 {
                     effects::explode_tile(self, world, strength, mask, ty, tx, rng, fx);
                 }
-                if world.tile_function_at(ty, tx) == 0x1b8a {
-                    eprintln!("warning: FUN_10a8_1369 (blown tile 7050) not ported");
+                if world.tile_function_at(ty, tx) == crate::doors::DOOR {
+                    self.door_hit(world, strength, ty, tx, 0, fx);
                 }
                 tx -= 0x10;
             }

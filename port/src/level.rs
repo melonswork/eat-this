@@ -60,6 +60,10 @@ pub struct Level {
     pub lists: Vec<[Vec<usize>; crate::objects::list::COUNT]>,
     /// OBJECTS records type 1000 (teleport destinations, the 1170:5130 collection).
     pub teleports: Vec<Vec<i16>>,
+    /// The moving doors (1170:53d2).
+    pub doors: Vec<crate::doors::Door>,
+    /// A door started moving this frame (1170:465e = 3).
+    pub door_noise: bool,
     /// FUN_1058_008f's position in the collection being walked (1170:45d6).
     pub walk_index: i32,
     /// The (sector, list) being walked, for FUN_1070_0002.
@@ -112,6 +116,8 @@ impl Level {
             objects: Vec::new(),
             lists: vec![Default::default(); world.sectors.len()],
             teleports: Vec::new(),
+            doors: Vec::new(),
+            door_noise: false,
             walk_index: 0,
             walking: (0, 0),
             particles: Default::default(),
@@ -202,7 +208,14 @@ impl Level {
             let arg = |k: usize| w[lc + 1 + k];
             match op {
                 0x00 => {
-                    if plane == MAIN_PLANE {
+                    let (cell, v) = (arg(1) as i32, arg(2));
+                    let (cy, cx) = ((cell / width) << 4, (cell % width) << 4);
+                    if plane == MAIN_PLANE && world.tile_function_at(cy, cx) == crate::doors::DOOR {
+                        // FUN_10a8_0975(0, v == 1, ...): a door opens (1) or shuts.
+                        self.door_set(world, false, (v == 1) as i32, cy, cx, false, 0);
+                    } else if (v as i16) > 0 && world.cell_function(v, 0) >= 61000 {
+                        eprintln!("warning: a script placing object tile {} (FUN_1088_0d5a) not ported", world.cell_function(v, 0));
+                    } else if plane == MAIN_PLANE {
                         self.set_cell(world, arg(2), arg(1), fx);
                     } else if let Some(p) = world.planes[plane].as_mut() {
                         p.cells[arg(1) as usize] = arg(2);

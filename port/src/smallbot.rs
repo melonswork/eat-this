@@ -373,8 +373,8 @@ impl Level {
                 if env.world.solidity_at(ty, tx) & 0x80 != 0 {
                     crate::effects::explode_tile(self, env.world, 0x60, 4, ty, tx, env.rng, env.fx);
                 }
-                if env.world.tile_function_at(ty, tx) == 0x1b8a {
-                    eprintln!("warning: FUN_10a8_1369 (blown tile 7050) not ported");
+                if env.world.tile_function_at(ty, tx) == crate::doors::DOOR {
+                    self.door_hit(env.world, 0x60, ty, tx, 0, env.fx);
                 }
                 tx -= 0x10;
             }
