@@ -158,6 +158,8 @@ pub struct Gun {
     pub shot: Option<(i32, i32, i32, i32)>,
     /// FUN_1088_64fe's grenade this frame: (y, x, angle) for FUN_1040_621f.
     pub grenade: Option<(i32, i32, i32)>,
+    /// FUN_1088_6f4d's charge: (y, x, angle).
+    pub charge: Option<(i32, i32, i32)>,
 }
 
 /// A weapon record (1170:1656 + 0xd * id).
@@ -379,6 +381,7 @@ impl Hero {
         // ReadGameInput: moving the mouse raises the gun.
         self.gun.shot = None;
         self.gun.grenade = None;
+        self.gun.charge = None;
         self.push = None;
         if mouse != self.gun.mouse {
             self.gun.shooting = true;
@@ -1032,6 +1035,17 @@ impl Hero {
                     let (y, x) = (self.y - 0x1a, self.x);
                     let a = (self.gun.aim + 0x1680 - 0x50 + rng.random(0xa1)) % 0x1680;
                     self.gun.grenade = Some((y, x, a));
+                    self.gun.pose = 4;
+                    self.gun.shooting = true;
+                    self.released[RIGHT_SHOOT] = false;
+                }
+            }
+            // FUN_1088_6f4d: like the grenade, a bouncing charge.
+            4 => {
+                if self.use_ammo(0xc, input, now) {
+                    let (y, x) = (self.y - 0x1a, self.x);
+                    let a = (self.gun.aim + 0x1680 - 0x50 + rng.random(0xa1)) % 0x1680;
+                    self.gun.charge = Some((y, x, a));
                     self.gun.pose = 4;
                     self.gun.shooting = true;
                     self.released[RIGHT_SHOOT] = false;

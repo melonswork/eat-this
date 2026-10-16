@@ -297,6 +297,22 @@ impl Particles {
         self.p.hits = 0;
     }
 
+    /// FUN_1088_6f4d: weapon 4's bouncing charge (effect 77 when it hits or its fuse runs out).
+    pub fn mine(&mut self, angle: i32, y: i32, x: i32) {
+        self.p.hits = 0x8000;
+        self.p.flags = 0x80;
+        self.p.callback = 0x137a;
+        self.p.on_death = 0x4d;
+        self.p.draw = (0x5a0..=0x10df).contains(&angle) as i32;
+        self.spawn_seq(0x1964, 1, 0x78, y, x, 0);
+        self.bounce(6, 0x50, angle);
+        self.p.draw = 0;
+        self.p.on_death = 0;
+        self.p.callback = 0;
+        self.p.flags = 0x84;
+        self.p.hits = 0;
+    }
+
     /// The particles of FUN_1040_0312 (a weapon picked up, `f3` its tile's function 3): two
     /// sparkles and the weapon's icon flying up.
     pub fn weapon_pickup(&mut self, f3: i32, y: i32, x: i32) {
@@ -884,7 +900,7 @@ impl Level {
                 let m = &mut self.particles.list[i].m;
                 m.set(0x16, if t < 5 { (m.w(0x24) / 6) % 6 + 0x5215 } else { 0x5218 });
             }
-            0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
+            0x2d2 | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
             0x2299 => {
                 // FUN_1050_2299: a burning bit trails smoke.
                 if m.w(0x24) % 4 == 3 {
@@ -1175,7 +1191,8 @@ impl Level {
                 f.rng.random(0x14);
                 f.fx.shakes.push((0x12, 6));
             }
-            21 => self.grenade_hit(f),
+            21 => self.grenade_hit(f, false),
+            0x4d => self.grenade_hit(f, true),
             94 => self.critter_hits(f),
             23 => {
                 // FUN_1040_2af4: a flash of fire.
@@ -1423,7 +1440,7 @@ impl Level {
 
     /// Effect 21, FUN_1040_1481: a grenade bounces off what it hit (walls reverse it; floors and
     /// ceilings lose speed, and it skids to a halt) until its fuse (0x22) runs out, then explodes.
-    fn grenade_hit(&mut self, f: &mut Frame) {
+    fn grenade_hit(&mut self, f: &mut Frame, mine: bool) {
         let i = self.particles.current;
         let side = self.particles.hit_side;
         let p = &mut self.particles.list[i];
@@ -1466,6 +1483,10 @@ impl Level {
             m.set(0xa, m.w(0x12));
         }
         let (y, x, damage, big) = (m.w(0xa), m.w(8), m.w(0x38), m.w(0x14) == 0x1818);
+        if mine {
+            self.mine_blast(y, x, f);
+            return;
+        }
         let ps = &mut self.particles;
         crate::alien::smoke_sprite(ps, y, x);
         ps.spawn_seq(0x6400, 2, 0x24, y - 0xc, x, 1);
@@ -1492,6 +1513,67 @@ impl Level {
         ps.p.hits = 0;
         ps.p.group = 1;
         let n = f.rng.random(6) + 1;
+        crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
+    }
+
+    /// The explosion half of effect 77, FUN_1040_188c: a fireball, a big blast, three chunks and
+    /// 48 sparks flying.
+    fn mine_blast(&mut self, y: i32, x: i32, f: &mut Frame) {
+        let ps = &mut self.particles;
+        ps.p.colour = 0x10;
+        ps.spawn_seq(0x6e00, 3, 0x13, y, x, 1); // FUN_1040_690b
+        let r = f.rng.random(0x20);
+        let m = &mut ps.last_mut().m; // FUN_1050_4a29
+        m.set(0x1c, r + 500);
+        m.set(0x1e, r + 400);
+        m.set(0x42, 0x2148);
+        f.rng.random(0x14); // the sound's pitch
+        f.fx.shakes.push((0x20, 0xe));
+        ps.p.colour = 0;
+        self.explode_area(f.world, 0xc0, 4, y + 6, x + 0xe, y - 0x1e, x - 0xe, f.rng, f.fx);
+        let ps = &mut self.particles;
+        ps.blast(2, 0xc0, 5, 0xe, 0x16, -0x26, -0x16, y, x);
+        ps.p.group = 0;
+        ps.p.hits = 0x8000;
+        ps.p.on_death = 0x10;
+        ps.p.callback = 0x177a;
+        for (i, (dy, base)) in [(-1, 0x5c0), (-1, 0x580), (-2, 0x540)].into_iter().enumerate() {
+            if i == 2 && f.rng.random(2) != 0 {
+                break;
+            }
+            ps.spawn(0x1824, y + dy, x);
+            let steps = f.rng.random(4) + 2;
+            ps.last_mut().m.set(0x26, steps);
+            let a = match i {
+                0 => f.rng.random(0xc0) + base,
+                1 => base - f.rng.random(0xc0),
+                _ => f.rng.random(0xd0) + base,
+            };
+            ps.throw(9, 0x80, a);
+        }
+        ps.p.hits = 1;
+        ps.p.damage = 0x20;
+        ps.p.flags = 0x94;
+        ps.p.on_death = 0x4e;
+        ps.p.callback = 0x229;
+        for i in 0..0x30 {
+            ps.p.delay = f.rng.random(3);
+            let px = x - 2 + f.rng.random(5);
+            let steps = f.rng.random(5) + 1;
+            ps.spawn(0x1965, y - 3, px);
+            ps.last_mut().m.set(0x26, steps);
+            let a = (i * 0x3b + 0x1670 + f.rng.random(0x61)) % 0x1680;
+            let speed = f.rng.random(0x11) + 0xa0;
+            ps.throw(9, speed, a);
+        }
+        ps.p.delay = 0;
+        ps.p.callback = 0;
+        ps.p.flags = 0x84;
+        ps.p.damage = 0x10;
+        ps.p.on_death = 0;
+        ps.p.hits = 0;
+        ps.p.group = 1;
+        let n = f.rng.random(5) + 1;
         crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
     }
 
