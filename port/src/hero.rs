@@ -172,6 +172,8 @@ pub struct Gun {
     pub charge: Option<(i32, i32, i32)>,
     /// FUN_1088_655f's shell: (y, x, angle).
     pub shell7: Option<(i32, i32, i32)>,
+    /// FUN_1088_69d8's bullet: (y, x, angle, parity).
+    pub rapid: Option<(i32, i32, i32, i32)>,
 }
 
 /// A weapon record (1170:1656 + 0xd * id).
@@ -416,6 +418,7 @@ impl Hero {
         self.gun.grenade = None;
         self.gun.charge = None;
         self.gun.shell7 = None;
+        self.gun.rapid = None;
         self.push = None;
         if mouse != self.gun.mouse {
             self.gun.shooting = true;
@@ -1326,6 +1329,18 @@ impl Hero {
                     self.gun.pose = 4;
                     self.gun.shooting = true;
                     self.released[RIGHT_SHOOT] = false;
+                }
+            }
+            // FUN_1088_69d8: a rapid-fire bullet.
+            2 => {
+                if self.use_ammo(0xd, input, now) {
+                    let g = &mut self.gun;
+                    let (c, s) = (crate::trig::cos(g.aim), crate::trig::sin(g.aim));
+                    let x = self.x + g.muzzle.0 + (0x17 * c) / 0x4000;
+                    let y = self.y + g.muzzle.1 - 0x16 - (0x17 * s) / 0x4000;
+                    g.rapid = Some((y, x, g.aim, g.shots & 1));
+                    g.shots += 1;
+                    g.shooting = true;
                 }
             }
             // FUN_1088_655f: a shell that goes off on a slow impact.

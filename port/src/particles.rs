@@ -469,6 +469,38 @@ impl Particles {
         self.spawn_seq(0x190a, 2, 2, y, x, 1);
     }
 
+    /// FUN_1088_69d8: weapon 2's bullet (effect 81 where it lands).
+    pub fn rapid(&mut self, y: i32, x: i32, aim: i32, parity: i32) {
+        self.p.hits = 0x3000;
+        self.p.damage = 0x10;
+        self.p.flags = 0x95;
+        self.p.on_death = 0x51;
+        self.p.callback = 0x1a3;
+        // FUN_1088_63c9: which of the ten pictures for the angle.
+        if (aim + 0x5a0) % 0x1680 > 0xb3f {
+            self.p.draw = 1;
+        }
+        if aim > 0xb3f {
+            self.p.draw2 = 1;
+        }
+        let q = (aim % 0x5a0 + 0x50) / 0xa0;
+        let idx = if self.p.draw == self.p.draw2 { q } else { 9 - q };
+        self.spawn(0x1852 + idx, y, x);
+        self.last_mut().m.set(0x40, parity);
+        self.line(0xa0, aim);
+        self.p.callback = 0;
+        self.p.on_death = 0;
+        self.p.flags = 0x84;
+        self.p.damage = 0x10;
+        self.p.hits = 0;
+        self.p.draw = 0;
+        self.p.draw2 = 0;
+        self.p.colour = 0x28;
+        self.spawn_seq(0x1b04, 4, 2, y, x, 1);
+        self.p.colour = 0;
+        self.spawn_seq(0x1952, 2, 2, y, x, 1);
+    }
+
     /// `hit_test` with the homing priority 1170:093c at 0 (wrecks, corpses, crates: rockets
     /// only steer at them when nothing better is around) and the drone's 093e at -1 (it never
     /// picks them), restored to 0x100 after.
@@ -1204,6 +1236,19 @@ impl Level {
                 self.bounce_off(f);
             }
             44 => self.shell7_hit(f),
+            81 => {
+                // FUN_1040_07e0: sparks thrown back from the bullet's line.
+                let v = &self.particles.list[self.particles.current].v;
+                let side = if v.l(0) <= 0 { -1 } else { 1 };
+                let angle = v.w(8);
+                let ps = &mut self.particles;
+                ps.p.colour = 0x10;
+                ps.spawn_seq(0x1918, 4, 3, y, x, 1);
+                ps.throw(0xe, 0x30, (angle + 0xb40 - side * 0x1e0) % 0x1680);
+                ps.spawn_seq(0x1918, 5, 3, y, x, 1);
+                ps.throw(0xe, 0x18, (angle + 0xb40 + side * 0x1e0) % 0x1680);
+                ps.p.colour = 0;
+            }
             9 => {
                 self.particles.spawn_seq(0x6500, 2, 0x14, y, x, 1);
             }
