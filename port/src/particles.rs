@@ -583,7 +583,7 @@ impl Level {
                 m.set(0xc, m.w(8));
                 m.set(0xe, m.w(0xa));
             }
-            self.move_particle(i, f.camera, f.world);
+            self.move_particle(i, f.camera, f.world, f.rng);
             let hit = self.particles.list[i].m.w(0x34) != 0 && self.collide(i, f);
             if !hit {
                 self.particle_callback(i, f);
@@ -612,13 +612,18 @@ impl Level {
     }
 
     /// The mover at +0x4a.
-    fn move_particle(&mut self, i: usize, cam: (i32, i32), w: &World) {
+    fn move_particle(&mut self, i: usize, cam: (i32, i32), w: &World, rng: &mut PascalRandom) {
         let p = &mut self.particles.list[i];
         if p.m.uw(0x4a) == MOVE_AGE {
             p.m.set(0x24, p.m.w(0x24) + 1);
             return;
         }
         sprite_frame(&mut p.m);
+        if p.m.uw(0x4a) == MOVE_CRITTER {
+            self.move_critter(i, cam, w, rng);
+            return;
+        }
+        let p = &mut self.particles.list[i];
         let (m, v) = (&mut p.m, &mut p.v);
         let mover = m.uw(0x4a);
         let off_screen = |m: &Obj, top: i32| {
@@ -706,9 +711,6 @@ impl Level {
                     let cell = w.cell_at(crate::world::MAIN_PLANE, y + 1, x).unwrap_or(0);
                     m.set(4, m.w(4) + w.cell_function(cell, 3) as i16 as i32);
                 }
-            }
-            MOVE_CRITTER => {
-                m.set(0x24, m.w(0x24) + 1);
             }
             MOVE_ROCKET => {
                 m.set(8, v.l(0) >> 16);
@@ -851,7 +853,13 @@ impl Level {
                 m.set(0x30, x + 3);
                 m.set(0x32, y + 3);
             }
-            CB_CRITTER | 0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
+            CB_CRITTER => {
+                // FUN_1050_1656 (drawing): its frame, which the shots' hit test uses.
+                let t = self.particles.list[i].v.w(8);
+                let m = &mut self.particles.list[i].m;
+                m.set(0x16, if t < 5 { (m.w(0x24) / 6) % 6 + 0x5215 } else { 0x5218 });
+            }
+            0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
             0x2299 => {
                 // FUN_1050_2299: a burning bit trails smoke.
                 if m.w(0x24) % 4 == 3 {
@@ -1092,6 +1100,7 @@ impl Level {
                 f.fx.shakes.push((0x12, 6));
             }
             21 => self.grenade_hit(f),
+            94 => self.critter_hits(f),
             23 => {
                 // FUN_1040_2af4: a flash of fire.
                 self.particles.spawn_seq(0x6900, 2, 0x19, y, x, 1);
@@ -1197,6 +1206,143 @@ impl Level {
             self.particles.keep_dying = false;
         }
         vy
+    }
+
+    /// FUN_1050_36a9: a critter runs: a throw that lands (running on along slopes, hopping up
+    /// single steps) until a shot kills it (after 0x12 frames) or it leaves the screen.
+    fn move_critter(&mut self, i: usize, cam: (i32, i32), w: &World, rng: &mut PascalRandom) {
+        {
+            let p = &mut self.particles.list[i];
+            let (m, v) = (&mut p.m, &mut p.v);
+            let t = v.w(8);
+            m.set(8, m.w(4) + v.l(0).wrapping_mul(t) / 0x40000);
+            let fall = (t.wrapping_mul(t) as i16 as i32) / v.w(0xa);
+            m.set(0xa, fall + (m.w(6) - v.l(4).wrapping_mul(t) / 0x40000));
+            v.set(8, t + 1);
+        }
+        if self.particles.list[i].m.w(0x24) > 0x12 {
+            let m = &self.particles.list[i].m;
+            let (x, y, s, flip) = (m.w(8), m.w(0xa), m.w(0x16), m.w(0x18) != 0);
+            self.particles.p.aim_level = -1;
+            self.particles.p.aim_level2 = 0;
+            let d = match crate::sprites::hit_rect(s, y, x, flip) {
+                Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x105b),
+                None => 0,
+            };
+            if d > 0 {
+                // (1170:093c/093e stay at -1/0 until something resets them.)
+                critter_gibs(&mut self.particles, rng, y - 4, x);
+                let m = &mut self.particles.list[i].m;
+                m.set(0x24, m.w(0x22));
+                m.set(0x3e, -10);
+                return;
+            }
+            self.particles.p.aim_level = 0x100;
+            self.particles.p.aim_level2 = 0x100;
+        }
+        let p = &mut self.particles.list[i];
+        let (m, v) = (&mut p.m, &mut p.v);
+        let (dx, dy) = ((m.w(8) - cam.0) as i16, (m.w(0xa) - cam.1) as i16);
+        if dx < -0x100 || dy < -0x200 || dx > 0x23f || dy > 0x1c7 {
+            m.set(0x24, m.w(0x22));
+            m.set(0x3e, -10);
+            return;
+        }
+        m.set(0x24, m.w(0x24) + 1);
+        if m.w(0x4e) != 0x7fff {
+            eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+        }
+        let (x, y) = (m.w(8), m.w(0xa));
+        let mut steep = false;
+        if w.solidity_at(y, x) & 0x20 != 0 {
+            let cell = w.cell_at(crate::world::MAIN_PLANE, y, x).unwrap_or(0);
+            let kind = w.cell_function(cell, 2) as usize & 0xff7f;
+            let row = &crate::world::SLOPES[kind * 0x16..];
+            steep = i16::from_le_bytes([row[0x14], row[0x15]]) & 4 == 0;
+            let ground = (y & 0xfff0) + crate::actors::slope_height(w, x, cell) - 1;
+            if ground < y + 1 {
+                if v.l(4) == 0 {
+                    v.set_l(0, if v.w(2) < 0 { -0x40000 } else { 0x40000 });
+                } else {
+                    let t1 = v.w(8);
+                    let t0 = t1 - 1;
+                    let fall = (t1 * t1 - t0 * t0) / v.w(0xa);
+                    let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
+                    v.set_l(4, if vy < 0x20000 { 0 } else { vy });
+                }
+                v.set(8, 1);
+                m.set(4, m.w(8));
+                m.set(6, ground);
+                m.set(0xa, ground);
+                m.set(0xe, ground);
+            }
+        }
+        let (x, y) = (m.w(8), m.w(0xa));
+        if w.tile_function_at(y + 1, x) == 11000 {
+            let cell = w.cell_at(crate::world::MAIN_PLANE, y + 1, x).unwrap_or(0);
+            m.set(4, m.w(4) + w.cell_function(cell, 3) as i16 as i32);
+        }
+        if v.w(8) < 5 {
+            m.set(0x2c, x);
+            m.set(0x2e, y - 0x14);
+            m.set(0x30, x);
+            m.set(0x32, y);
+            if v.l(4) == 0 && !steep {
+                let lx = if v.w(2) < 0 { x - 0x10 } else { x + 0x10 };
+                if w.solidity_at(y - 1, lx) & 2 != 0 && w.solidity_at(y - 0x11, lx) & 2 == 0 {
+                    if w.solidity_at(y, x) & 2 != 0 {
+                        m.set(0xa, y - 1);
+                    }
+                    m.set(4, m.w(8));
+                    m.set(6, m.w(0xa));
+                    v.set(8, 1);
+                    v.set_l(4, 0xe0000);
+                }
+            }
+        }
+    }
+
+    /// Effect 94, FUN_1040_26fd: a critter meets a wall (turns, unless it hit low) or the floor.
+    fn critter_hits(&mut self, f: &mut Frame) {
+        let i = self.particles.current;
+        let side = self.particles.hit_side;
+        let p = &mut self.particles.list[i];
+        let (m, v) = (&mut p.m, &mut p.v);
+        if m.w(0x3e) == -10 || m.w(0x24) >= m.w(0x22) {
+            return;
+        }
+        m.set(0xa, m.w(0x12));
+        m.set(0x16, (m.w(0x24) / 6) % 6 + 0x5215);
+        if side < 2 {
+            if m.w(6) <= m.w(0xa) || v.l(4) == 0 {
+                return;
+            }
+            m.set(4, m.w(0x10) - (m.w(4) - m.w(0x10)));
+            v.set_l(0, v.l(0).wrapping_neg());
+            m.set(0x18, m.w(0x18) ^ 1);
+            m.set(0x3e, 0);
+        } else {
+            m.set(8, m.w(0x10));
+            if v.l(4) == 0 && v.w(8) < 5 {
+                v.set_l(0, if v.w(2) < 0 { -0x80000 } else { 0x80000 });
+            } else {
+                let t = v.w(8);
+                let fall = (t * t - (t - 1) * (t - 1)) / v.w(0xa);
+                let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
+                v.set_l(4, if side != 2 && vy < 0x20000 { 0 } else { vy });
+            }
+            m.set(0x3e, 0);
+            v.set(8, 1);
+            if f.world.solidity_at(m.w(0xe), m.w(8)) & 0x40 == 0 {
+                m.set(0xc, m.w(8));
+            } else {
+                m.set(8, m.w(0xc));
+            }
+            m.set(4, m.w(0xc));
+            m.set(6, m.w(0xa));
+        }
+        m.set(0x24, m.w(0x24) + 1);
+        self.particles.keep_dying = false;
     }
 
     /// Effect 21, FUN_1040_1481: a grenade bounces off what it hit (walls reverse it; floors and
@@ -1517,4 +1663,47 @@ fn aim_at(p: &mut Particle, level: i32, dx: i32, dy: i32) {
         v.set(0x16, dy);
         v.set(0x1a, level);
     }
+}
+
+/// FUN_1050_3422(y, x): a critter bursts: twelve bits of it, four bones, four drops of blood.
+fn critter_gibs(ps: &mut Particles, rng: &mut PascalRandom, y: i32, x: i32) {
+    let left = |r: &mut PascalRandom, spread: i32| (r.random(0x80) + 0x960) - spread;
+    let right = |r: &mut PascalRandom, spread: i32| ((0x1860 - r.random(0x80)) + spread) % 0x1680;
+    ps.p.hits = 0x8000;
+    ps.p.on_death = 0x16;
+    ps.p.callback = 0x23b7;
+    ps.p.flags = 0x8c;
+    for i in 1..=6 {
+        let (speed, spread) = ((i << 6) / 6 + 0x10, (i * 0x3c0) / 6);
+        ps.p.delay = rng.random(8);
+        let s = (rng.random(4) == 0) as i32 + 0x5307;
+        ps.spawn(s, y, x);
+        let a = left(rng, spread);
+        ps.throw(0xb, speed, a);
+        ps.p.delay = rng.random(8);
+        let s = (rng.random(4) == 0) as i32 * 2 + 0x5306;
+        ps.spawn(s, y, x);
+        let a = right(rng, spread);
+        ps.throw(0xb, speed, a);
+    }
+    ps.p.callback = 0;
+    ps.p.flags = 0x84;
+    ps.p.on_death = 0x30;
+    for i in 1..=2 {
+        let (speed, spread) = ((i << 5) / 2 + 0x10, (i * 0x3c0) / 2);
+        for side in 0..2 {
+            ps.p.delay = rng.random(8) + 8;
+            let s = rng.random(5) + 0x530f;
+            ps.spawn(s, y, x);
+            let a = if side == 0 { left(rng, spread) } else { right(rng, spread) };
+            ps.throw(0xe, speed, a);
+        }
+    }
+    ps.p.on_death = 0;
+    ps.p.hits = 0;
+    for (d, dy, dx) in [(0x1e, 6, 1), (0x19, 0xc, 4), (0x14, -5, -5), (0xf, 5, 0)] {
+        ps.p.delay = d;
+        ps.spawn_seq(0x5300, 4, 5, y + dy, x + dx, 1); // FUN_1040_62b7
+    }
+    ps.p.delay = 0;
 }
