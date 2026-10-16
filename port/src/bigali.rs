@@ -270,7 +270,9 @@ impl Level {
                     o.set(8, 0x7fff);
                     o.set(0x3c, o.w(0x3c) - 1);
                 }
+                self.particles.p.aim_level2 = -1;
                 let r = self.particles.hit_test(y + 6, x + 0x20, y - 0x3a, x - 0x20, 0x1fb);
+                self.particles.p.aim_level2 = 0x100;
                 let h = env.h;
                 if r > 0 || (x - 0x10 <= h.x && y - 0x40 <= h.y && h.x <= x + 0x10 && h.y <= y + 0x20) {
                     self.o(id).set(0x3c, 0x69);
@@ -522,6 +524,8 @@ impl Level {
     /// FUN_1070_77dd(angle, y, x): a homing rocket.
     fn big_rocket(&mut self, id: usize, env: &mut Env, angle: i32, y: i32, x: i32) {
         let dir = self.o(id).w(0x20);
+        // Facing left, the angle is mirrored.
+        let angle = if dir < 0 { 0xb40 - angle } else { angle };
         let ps = &mut self.particles;
         ps.p.colour = 0x28;
         ps.spawn_seq(0x1b04, 2, 2, y, x, 1);
@@ -632,12 +636,10 @@ impl Level {
             o.set(0x10, o.w(0x10) - 3);
             env.fx.shakes.push((5, 2));
         }
-        self.particles.p.aim_level = 0;
         let damage = match sprites::hit_rect(sprite, y, x, mirror) {
-            Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x11fb),
+            Some((b, r, t, l)) => self.particles.hit_test_low(b, r, t, l, 0x11fb),
             None => 0,
         };
-        self.particles.p.aim_level = 0x100;
         if damage > 0 {
             let o = self.o(id);
             if o.w(0x2e) > 0x34 && o.w(0x32) < 1 {

@@ -128,6 +128,8 @@ pub struct Particles {
     /// 1170:25aa / 25ac: what FUN_1050_568b last found.
     pub hit_mask: i32,
     pub hit_index: i32,
+    /// The hero's drone (FUN_1088_03a3).
+    pub drone: crate::drone::Drone,
 }
 
 impl Default for Particle {
@@ -312,6 +314,18 @@ impl Particles {
         self.p.colour = 0;
     }
 
+    /// The particles of FUN_1040_014a (a bonus picked up): sparks flying off.
+    pub fn bonus_pickup(&mut self, y: i32, x: i32) {
+        self.p.group = 0;
+        for i in 0..2 {
+            self.spawn_seq(0x2100, 9, 4, y, x, 1);
+            self.throw(0x1c, 0x10, i * 0x200 + 0x4a0);
+            self.spawn_seq(0x2100, 7, 4, y, x, 1);
+            self.throw(0x1c, 8, i * 0xb40);
+        }
+        self.p.group = 1;
+    }
+
     /// FUN_1050_457e(gravity, speed, angle): a bouncing throw (FUN_1050_2d37).
     pub fn bounce(&mut self, gravity: i32, speed: i32, angle: i32) {
         self.throw(gravity, speed, angle);
@@ -420,11 +434,14 @@ impl Particles {
     }
 
     /// `hit_test` with the homing priority 1170:093c at 0 (wrecks, corpses, crates: rockets
-    /// only steer at them when nothing better is around), restored to 0x100 after.
+    /// only steer at them when nothing better is around) and the drone's 093e at -1 (it never
+    /// picks them), restored to 0x100 after.
     pub fn hit_test_low(&mut self, bottom: i32, right: i32, top: i32, left: i32, mask: i32) -> i32 {
         self.p.aim_level = 0;
+        self.p.aim_level2 = -1;
         let d = self.hit_test(bottom, right, top, left, mask);
         self.p.aim_level = 0x100;
+        self.p.aim_level2 = 0x100;
         d
     }
 
@@ -463,6 +480,9 @@ impl Particles {
                 let dy = (top + bottom) / 2 - p.m.w(0xa);
                 aim_at(p, level, dx, dy);
             }
+        }
+        if mask & 0x59 != 0 {
+            self.drone.consider(bottom, right, top, left, self.p.aim_level2);
         }
         damage
     }
@@ -883,9 +903,16 @@ impl Level {
             0xb2a => {
                 // FUN_1050_0b2a: the rocket turns (at most 0x20) towards the target last found,
                 // smokes, and blows up at the end of its fuel.
+                let (seeking, level) = {
+                    let v = &self.particles.list[i].v;
+                    (v.w(0x18) != 0x140, v.w(0x1a))
+                };
+                if seeking && level == 0x100 && self.particles.drone.flare_due() {
+                    self.particles.drone_flare(f.rng);
+                }
                 let p = &mut self.particles.list[i];
                 let (m, v) = (&mut p.m, &mut p.v);
-                if v.w(0x18) != 0x140 {
+                if seeking {
                     let a = trig::atan2(v.w(0x16), v.w(0x14));
                     if v.w(0x10) != a {
                         let d = ((a - v.w(0x10)) + 0x21c0) % 0x1680;
@@ -916,6 +943,36 @@ impl Level {
                     ps.p.colour = 0;
                     ps.p.group = 1;
                     ps.p.delay = 0;
+                }
+            }
+            0x274f => {
+                // FUN_1050_274f: a flare sputters smoke and draws rockets to itself.
+                let age = self.particles.list[i].m.w(0x24);
+                if age % 8 == 0 && f.rng.random(4) == 0 {
+                    let (x, y) = (self.particles.list[i].m.w(8), self.particles.list[i].m.w(0xa));
+                    let ps = &mut self.particles;
+                    ps.p.delay = 4;
+                    ps.p.group = 0;
+                    ps.p.colour = 0x28;
+                    let r = f.rng.random(3);
+                    let steps = f.rng.random(6) + 8;
+                    ps.spawn_seq(0x1b1e + r, steps, 5 - r, y + 4, x, 1);
+                    ps.throw(0x38, 0, 0);
+                    ps.p.colour = 0;
+                    ps.p.group = 1;
+                    ps.p.delay = 0;
+                }
+                let (x, y) = (self.particles.list[i].m.w(8), self.particles.list[i].m.w(0xa));
+                self.particles.p.aim_level = 0x200;
+                let d = self.particles.hit_test(y + 3, x + 3, y - 3, x - 3, 0x200);
+                self.particles.p.aim_level = 0x100;
+                let m = &mut self.particles.list[i].m;
+                if d > 0 {
+                    m.set(0x24, m.w(0x22));
+                }
+                if m.w(0x22) <= m.w(0x24) {
+                    m.set(0x10, x);
+                    m.set(0x12, y);
                 }
             }
             0x1a3 => {
@@ -1093,6 +1150,20 @@ impl Level {
                 }
             }
             14 => self.rocket_blast(y, x, f),
+            64 => {
+                // FUN_1040_602a: the flare burns out in five trails of smoke (the group stays 0).
+                let ps = &mut self.particles;
+                ps.p.group = 0;
+                ps.p.colour = 0x28;
+                for i in 0..5 {
+                    let r = f.rng.random(3);
+                    ps.spawn_seq(0x1b1e + r, 0x10, 5 - r, y, x, 1);
+                    let angle = (0x2180 - i * 0x2d0 + f.rng.random(0x81)) % 0x1680;
+                    let speed = f.rng.random(8) + 8;
+                    ps.throw(0x38, speed, angle);
+                }
+                ps.p.colour = 0;
+            }
             42 => {
                 // FUN_1040_45a3: a burning bit goes out.
                 crate::alien::smoke_sprite(&mut self.particles, y, x);

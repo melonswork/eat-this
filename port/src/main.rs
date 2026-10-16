@@ -13,6 +13,7 @@ mod bg;
 mod camera;
 mod data;
 mod doors;
+mod drone;
 mod demo;
 mod effects;
 mod factory;
@@ -249,6 +250,13 @@ impl Game {
             }
             None => keys,
         };
+        if std::env::var("ET_PART").ok().and_then(|v| v.parse::<u32>().ok()).is_some_and(|f| self.frame >= f && self.frame < f + 12) {
+            for p in &self.level.particles.list {
+                if p.m.w(0x4a) == particles::MOVE_ROCKET as i32 {
+                    eprintln!("PART frame {} rocket pos {},{} age {} life {} state {} hits34 {:x}", self.frame, p.m.w(8), p.m.w(0xa), p.m.w(0x24), p.m.w(0x22), p.m.w(0x3e), p.m.w(0x34));
+                }
+            }
+        }
         let cam = (self.camera.x, self.camera.y);
         let mut ps = std::mem::take(&mut self.level.particles);
         self.hero
@@ -268,6 +276,15 @@ impl Game {
             self.world.planes[2].as_mut().unwrap().set(tx, ty, 0);
             if effect == hero::WEAPON_PICKUP {
                 self.hero.weapon_pickup(f3);
+                self.level.particles.weapon_pickup(f3 as i32, y, x);
+            } else if effect == 6 {
+                self.level.particles.drone.pickup(y, x);
+            } else if effect == 1 {
+                // FUN_1040_014a: a bonus (score 4e6c += 10, 4ea8 += 1) bursts into sparks.
+                self.level.particles.bonus_pickup(y, x);
+            } else if effect == 70 {
+                // FUN_1040_043c: a key (1170:5104 + f3), sparks like a weapon's.
+                self.hero.keys[(f3 as usize) & 0xf] = true;
                 self.level.particles.weapon_pickup(f3 as i32, y, x);
             } else if effect != 0 && effect < 30000 {
                 eprintln!("warning: pick-up effect {effect} not ported");
@@ -352,6 +369,8 @@ impl Game {
         if std::mem::take(&mut fx.hero_bounce) {
             self.hero.bounce(-0x32, 10);
         }
+        // FUN_1088_9d34: the drone follows the hero and shoots.
+        self.level.drone_update(&self.world, &self.hero, self.frame);
         // FUN_1050_4ca5(1): the hero's shots and their sparks.
         let mut pf = particles::Frame {
             world: &mut self.world,

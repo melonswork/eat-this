@@ -100,10 +100,14 @@ impl Level {
         }
         // The shots hitting it (FUN_1050_5960 with its gun's or its body's sprite).
         let (x, y) = (self.o(id).w(0x16), self.o(id).w(0x18));
+        if self.o(id).w(0x1c) == 2 {
+            self.particles.p.aim_level2 = 0xf6;
+        }
         let d = match sprites::hit_rect(sprite, y, x, false) {
             Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x1059),
             None => 0,
         };
+        self.particles.p.aim_level2 = 0x100;
         if d <= 0 {
             return;
         }

@@ -122,6 +122,8 @@ pub struct Hero {
     pub levers: Vec<(i32, i32, i32, bool)>,
     /// 1170:4e6c.
     pub health: i32,
+    /// 1170:5104..: the keys picked up (pick-up effect 70).
+    pub keys: [bool; 16],
     /// 1170:4e2a: frames of invulnerability after a hit; 4e5e the same for the blinking.
     hurt: i32,
     hurt_blink: i32,
@@ -232,6 +234,7 @@ impl Hero {
             held_lever: -1,
             levers: Vec::new(),
             health: HEALTH,
+            keys: [false; 16],
             hurt: 0,
             hurt_blink: 0,
             hit_mask: 0,

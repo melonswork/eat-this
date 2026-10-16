@@ -96,6 +96,7 @@ def main():
     ap.add_argument("--self", type=lambda v: int(v, 0), default=0, metavar="LEN", help="with --entry: also log the first LEN bytes of the far pointer argument on top of the stack (a method's Self) as signed words")
     ap.add_argument("--dump-groups", action="store_true", help="at DemoLoad, write the sprite group slot table (1170:6188) with the first bytes of each group into groups.txt")
     ap.add_argument("--platforms", action="store_true", help="log the first 0x40 bytes (as i16) of every platform (gPlatforms, 1170:4662) at the start of every game frame into platforms.tsv")
+    ap.add_argument("--particles", default="", metavar="A-B", help="dump the particle array (1170:25b0, count 1170:0918) at the start of frames A..B into particles.tsv: frame, index, x, y, age, life, mask(+34), state(+3e), callback(+42), mover(+4a)")
     ap.add_argument("--writes", default="", help="comma-separated globals; log every write to them (frame, CS:IP, function, new value) into writes.tsv")
     ap.add_argument("-v", "--verbose", action="store_true", help="log file opens and Windows calls")
     o = ap.parse_args()
@@ -140,6 +141,8 @@ def main():
         sel, off = (int(v, 16) for v in (names.get(w) or w).split(":"))
         writes.append((w, ((sel >> 3) << 16) + off))
     writes_f = open(out / "writes.tsv", "w") if writes else None
+    part_f = open(out / "particles.tsv", "w") if o.particles else None
+    part_range = tuple(int(v) for v in o.particles.split("-")) if o.particles else (0, 0)
     calls_f = open(out / "calls.tsv", "w")
     calls_f.write("window\tframe\tcaller\tsite\tkind\tn\tresult\tseed\n")
 
@@ -169,6 +172,11 @@ def main():
                     if sel:
                         ws = [e.rw(sel, off + 2 * k) for k in range(0x20)]
                         plat_f.write(f"{st['frame']}\t{i}\t" + "\t".join(str(v - 0x10000 if v & 0x8000 else v) for v in ws) + "\n")
+            if part_f and part_range[0] <= st["frame"] <= part_range[1]:
+                for i in range(e.rw(DS, 0x0918)):
+                    off, sel = e.rw(DS, 0x25B0 + 4 * i), e.rw(DS, 0x25B2 + 4 * i)
+                    ws = [e.rw(sel, off + k) for k in (8, 0xA, 0x24, 0x22, 0x34, 0x3E, 0x42, 0x4A)]
+                    part_f.write(f"{st['frame']}\t{i}\t" + "\t".join(str(v - 0x10000 if v & 0x8000 else v) for v in ws) + "\n")
             if watch_f:
                 vals = [e.rw(DS, a) for _, a in watch]
                 watch_f.write(f"{st['frame']}\t" + "\t".join(str(v - 0x10000 if v & 0x8000 else v) for v in vals) + "\n")
