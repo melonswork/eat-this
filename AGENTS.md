@@ -66,31 +66,40 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
   teleport records 1000; after a teleport LevelFirstFrame runs a frame without the hero
   (`world_update`). Doors: `doors.rs` (segment 10a8).
 
-## State (2026-10-16, night)
+## State (2026-10-17)
 
-CITY01 exact for 434 windows (632/847 total), GRINDER 113/113. Debug aids: `ET_RNG=<frame-1>`
-(every port Random() with its Rust caller), `ET_DRONE=1` (per-frame drone state `DRONE frame x y
-bob angle tx ty dist reload burst`, `CAND` = hit-test boxes it considered with caller, `GOAL`),
-`ET_PART=F` (+`ET_ALLPART=1`) particles of 12 frames, `ET_HERO=F`, `ET_OBJ=1` (gunship fields),
-`ET_HIT=1`. Tracer: `--particles A-B` dumps the particle array (frame, idx, x, y, age, life, mask
-+34, state +3e, callback +42, mover +4a) into particles.tsv; use `--out DIR` to keep the main
-run's files (windiff reads work/tracer/<demo>/calls.tsv, so rerun it far enough: windiff shows
-"original 0" past the traced windows!).
+CITY01 exact for 610 windows (710/847 total), GRINDER 113/113. Debug aids: `ET_RNG=<frame-1>`
+(every port Random() with its Rust caller), `ET_RNG_TSV=file` + `tools/rngdiff.py` (first call whose
+range/result differs over the whole run; frame shifts of ~1 in object code show up as noise),
+`ET_DRONE=1` + `tools/dronediff.py` (drone vs tracer `--watch 1170:4d9e,4da0,4da2,4dac,4dae,
+4db0,4db2,4db4,4db6,4db8,4dba` into work/tracer_drone2), `ET_PART=F` (+`ET_ALLPART=1`) particles of
+12 frames vs the tracer's `--particles A-B` (particles.tsv: frame, idx, x, y, age, life, mask +34,
+state +3e, callback +42, mover +4a), `ET_HERO=F`, `ET_OBJ=1` (gunship), `ET_DEBUG=1` (aliens,
+bullet hits), `ET_HIT=1`, `ET_DOOR=1`, `ET_AREA=1`, `ET_CORPSE=1`, `ET_SPARK=1`. Always give the
+tracer enough `--windows`: windiff shows "original 0" past the traced windows, and the tracer's
+`--entry SEL:OFF --self LEN` dumps a method's object per call (use it to compare objects).
 
 Drone: `port/src/drone.rs` (pick-up effect 6, FUN_1088_03a3/9d34, flares 0a63/09f8/274f, effect
-64). The hit tests only record candidate boxes (`Drone::consider`); `Level::drone_update` replays
-them with line of sight (FUN_1068_0a54) before following the hero. 1170:093e (`aim_level2`) is
-the drone's priority: -1 for wrecks (`hit_test_low`) and the big alien's shield, 0xf6 for the
-gunship's body, 0x100 otherwise (the dying big alien keeps 0x100: 7eb2 only sets 093c).
-Pick-up 1 = health +10 (4e6c is the HEALTH), 70 = key + weapon sparks. Fixed on the way: big
-alien rockets mirror when it faces left, ledge pull-up collides with slopes (only the hanging
-branch sets collide flags 1), conveyor belts (ground 5, nudge = tile param 3), hero body hit
-boxes mirrored only when facing left.
+64, a teleport puts it beside the hero: 0c20). The hit tests only record candidate boxes
+(`Drone::consider`); `Level::drone_update` replays them with line of sight (FUN_1068_0a54) before
+following the hero. 1170:093e (`aim_level2`) is the drone's priority: -1 for wrecks (`hit_test_low`),
+the big alien's shield and dead aliens whose +0x46 != -1, 0xf6 for the gunship's body, 0x100
+otherwise (the dying big alien keeps 0x100: 7eb2 only sets 093c). Mind such per-site wrappers: the
+decompile of each hit test site says exactly what 093c/093e it sets.
 
-Next: window 435. The drone's x follows the hero too fast from frame 15049 on (orig 875..878 while
-the port goes 876..883; y and angle match); the follow goal (hover above / below / behind / in
-front, FUN_1088_9ca4 blocked checks) or the ease of x differs. Compare `GOAL` with the original's
-4d9e/4da4/4da6 (watch them) around 15049. After that: arm hit-box flip in `take_hits` (still
-`facing`, unverified), effects 23/54, bonuses (6b03), script object tiles (0d5a), other weapons,
-sideways shake 5c7d, frozen/burnt deaths, barrels of type >= 0xb (186c), level-leaving
-teleports, hero standing on the big alien's shield (00b6).
+Also ported this round: pick-up 1 (health +10, 4e6c is the HEALTH) and 70 (key + sparks);
+springboards (kind 0x148c, FUN_1070_d23b) with the hero's carry limits 4e16/4e18; conveyor belts
+(ground 5, nudge = tile param 3, walking off throws him vx +-0x17); somersault poses (states 7, 6);
+script command 10 (delayed tile/door events, queue in `Level::tile_events`) and platforms running
+the lever scripts of the cells they paste; weapon 4 (FUN_1088_6f4d, a bouncing charge) with effects
+77 (188c), 78 (0cf8, sparks) and 43 (45db, wall chunks); callback 0x229; objects sliding down slopes
+(17d6); ledge pull-up collision flags; hero body hit boxes mirrored only facing left.
+
+Next: window 611. At frame 21323 the original hero enters the use pose (state -30) because
+FUN_1060_0819 (a platform the hero rides/controls: sets 1170:5123 = 2 and 5124 = 4 from the
+platform's path and his position, lines 12612..13100 of the decompile) says so; the port jumps.
+Then: levers needing a key (HeroUpdate, tile param 2 flag 4: keys[tile function - 13980], port has
+`Hero::keys` indexed by the pick-up's f3), the arm hit-box flip in `take_hits` (still `facing`,
+unverified), effects 23/53/54, bonuses (6b03), script object tiles (0d5a), other weapons (1..3, 5..9),
+sideways shake 5c7d, frozen/burnt deaths, barrels of type >= 0xb (186c), level-leaving teleports,
+hero standing on the big alien's shield (00b6), wall chunks of tile functions 60308/60304 (45db).
