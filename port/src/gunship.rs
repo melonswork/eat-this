@@ -391,7 +391,7 @@ impl Level {
                 return;
             }
             if self.o(id).w(0x1c) == 5 {
-                eprintln!("warning: a wreck sliding on a slope (FUN_1068_17d6) not ported");
+                self.slide_on_slope(id);
             }
         }
     }

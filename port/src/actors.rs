@@ -200,7 +200,7 @@ impl Level {
                 }
             }
             if self.o(id).w(0x1c) == 5 {
-                eprintln!("warning: springboard sliding on a slope (FUN_1068_17d6) not ported");
+                self.slide_on_slope(id);
             }
         }
     }
@@ -220,6 +220,13 @@ impl Level {
             0x13c4 => {} // FUN_1068_315a: plain sound emitters (kinds < 10000) don't draw Random
             k => eprintln!("warning: object kind {k:#x} not ported"),
         }
+    }
+
+    /// FUN_1068_17d6: standing on a slope, an object slides down it.
+    pub(crate) fn slide_on_slope(&mut self, id: usize) {
+        let o = self.o(id);
+        let dx = if o.w(0x1e) & 0x80 == 0 { -1 } else { 1 };
+        o.set(0xe, o.w(0xe) + dx);
     }
 
     /// FUN_1070_0002: delete the object being updated from the collection being walked.
@@ -339,7 +346,7 @@ impl Level {
             return;
         }
         if self.o(id).w(0x1c) == 5 {
-            eprintln!("warning: crate sliding on a slope (FUN_1068_17d6) not ported");
+            self.slide_on_slope(id);
         }
         let (x, y) = {
             let o = self.o(id);
