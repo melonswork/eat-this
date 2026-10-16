@@ -503,12 +503,28 @@ impl Hero {
             } else {
                 self.frame = (self.anim / 0x1e) % 2 + 0x208;
                 self.height = 0x1a;
+                if self.slope != -1 && slope_word(self.slope, 0x12) != 0x7fff {
+                    self.sliding = 1;
+                    self.facing = if self.slope & 0x80 == 0 { -1 } else { 1 };
+                }
             }
             if self.anim < 1 {
                 self.crouch_down();
                 self.crouch = 8;
             } else {
                 self.anim -= 1;
+            }
+            if self.sliding > 0 {
+                if self.slope == -1 || slope_word(self.slope, 0x12) == 0x7fff {
+                    self.sliding = 0;
+                    if self.vx.abs() < 0x14 {
+                        self.vx = if self.vx < 0 { -0x14 } else { 0x14 };
+                    }
+                } else {
+                    self.vx = (self.vx + (self.facing << 1)).clamp(-0x1d, 0x1d);
+                    dx += (self.vx.abs() / 10 + 1) * self.vx.signum();
+                    friction = false;
+                }
             }
         }
 
