@@ -387,8 +387,34 @@ impl Level {
                     self.tile_events.insert(at, (due, arg(1), arg(2), plane));
                     lc += 4;
                 }
+                0x01 | 0x0e => {
+                    // fill_area / copy_area: FUN_1088_a96b's rectangle of cells (rows outer), each
+                    // put through FUN_1088_a93c.
+                    let (c1, c2) = (arg(1) as i32, arg(2) as i32);
+                    let (x1, y1, x2, y2) = (c1 % width, c1 / width, c2 % width, c2 / width);
+                    for row in y1..=y2 {
+                        for col in x1..=x2 {
+                            let src = (col + row * width) as usize;
+                            let (tile, dest) = if op == 0x01 {
+                                (arg(3), src as i32)
+                            } else {
+                                let cur = world.planes[plane].as_ref().map_or(0, |p| p.cells[src]);
+                                (cur, src as i32 + (arg(3) as i32 - c1))
+                            };
+                            if (tile as i16) < 0 {
+                                continue;
+                            }
+                            if plane == MAIN_PLANE {
+                                self.set_cell(world, tile, dest as u16, fx);
+                            } else if let Some(p) = world.planes[plane].as_mut() {
+                                p.cells[dest as usize] = tile;
+                            }
+                        }
+                    }
+                    lc += 4;
+                }
                 // Not ported yet; skipped with their sizes (tools/scripts.py COMMANDS).
-                0x01 | 0x02 | 0x0e => lc += 4,
+                0x02 => lc += 4,
                 0x0f => lc += 5,
                 0x0c | 0x11 | 0x15 | 0x17 | 0x19 => lc += 3,
                 0x12 | 0x1a => lc += 2,

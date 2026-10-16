@@ -329,6 +329,10 @@ impl Hero {
         self.ground = 0x16;
     }
 
+    pub fn ground(&self) -> i32 {
+        self.ground
+    }
+
     /// HeroStand (1088:0432).
     fn stand(&mut self) {
         self.state = GROUND;

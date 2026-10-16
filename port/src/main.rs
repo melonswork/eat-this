@@ -290,7 +290,7 @@ impl Game {
         }
         if std::env::var("ET_HERO").ok().and_then(|v| v.parse::<u32>().ok()).is_some_and(|f| self.frame >= f && self.frame < f + 4) {
             let (hx, hy) = (self.hero.x, self.hero.y);
-            eprintln!("HERO frame {} at {hx},{hy} state {} height {}", self.frame + 1, self.hero.state, self.hero.height);
+            eprintln!("HERO frame {} at {hx},{hy} state {} height {} ground {} {:?}", self.frame + 1, self.hero.state, self.hero.height, self.hero.ground(), self.level.plat_objs.iter().map(|p| (p.kind, p.x, p.y)).collect::<Vec<_>>());
             for dx in [0, -6, -9, -12] {
                 for dy in -40..=8 {
                     eprint!(" {:x}", hero::Hero::solidity_all(&self.world, &self.level, hy + dy, hx + dx));
@@ -299,6 +299,12 @@ impl Game {
             }
             for p in self.level.platforms.iter().flatten() {
                 eprintln!("  platform {},{} {}x{}", p.x, p.y, p.width, p.height);
+            }
+        }
+        if std::env::var("ET_TILE").ok().and_then(|v| v.parse::<u32>().ok()) == Some(self.frame) {
+            for (y, x) in [(304, 1464), (304, 1460), (304, 1456), (288, 1460), (320, 1460)] {
+                let c = self.world.cell_at(1, y, x).unwrap_or(0);
+                eprintln!("TILE ({y},{x}) cell {c:#x} f0 {} f1 {:#x} f2 {} f3 {}", self.world.cell_function(c, 0), self.world.cell_function(c, 1), self.world.cell_function(c, 2), self.world.cell_function(c, 3));
             }
         }
         let cam = (self.camera.x, self.camera.y);
