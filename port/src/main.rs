@@ -219,6 +219,7 @@ impl Game {
     fn step(&mut self, keys: [i8; 9]) {
         self.rng.log = std::env::var("ET_RNG").ok().and_then(|v| v.parse::<u32>().ok()) == Some(self.frame);
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
+        self.level.now = self.frame;
         let mut fx = Effects::default();
         self.level.update_platforms(&mut self.world);
         for cell in std::mem::take(&mut self.level.pasted) {
@@ -227,7 +228,6 @@ impl Game {
         // FUN_10a0_023f: delayed particles due this frame.
         self.level.particles.now = self.frame;
         self.level.particles.release_due();
-        self.level.now = self.frame;
         {
             let mut fx = Effects::default();
             self.level.release_tile_events(&mut self.world, &mut fx, self.hero.x);
