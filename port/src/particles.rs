@@ -852,6 +852,26 @@ impl Level {
                 m.set(0x32, y + 3);
             }
             CB_CRITTER | 0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
+            0x2299 => {
+                // FUN_1050_2299: a burning bit trails smoke.
+                if m.w(0x24) % 4 == 3 {
+                    let (x, y) = (m.w(8), m.w(0xa));
+                    let ps = &mut self.particles;
+                    ps.p.delay = 3;
+                    ps.p.group = 0;
+                    ps.p.colour = 0x10;
+                    ps.spawn_seq(0x6805, 3, 10, y, x, 1);
+                    ps.p.colour = 0;
+                    ps.p.group = 1;
+                    ps.p.delay = 0;
+                }
+            }
+            0x1b90 => {
+                // FUN_1050_1b90: a flame goes out without floor under it.
+                if f.world.solidity_at(m.w(0xa) + 1, m.w(8)) & 0x211 == 0 {
+                    m.set(0x24, m.w(0x22));
+                }
+            }
             0xb2a => {
                 // FUN_1050_0b2a: the rocket turns (at most 0x20) towards the target last found,
                 // smokes, and blows up at the end of its fuel.
@@ -1065,6 +1085,12 @@ impl Level {
                 }
             }
             14 => self.rocket_blast(y, x, f),
+            42 => {
+                // FUN_1040_45a3: a burning bit goes out.
+                crate::alien::smoke_sprite(&mut self.particles, y, x);
+                f.rng.random(0x14);
+                f.fx.shakes.push((0x12, 6));
+            }
             21 => self.grenade_hit(f),
             23 => {
                 // FUN_1040_2af4: a flash of fire.
@@ -1126,7 +1152,7 @@ impl Level {
                 f.rng.random(0x1e);
                 self.sparks(0x191b, y, x);
             }
-            _ => effects::effect(f.world, id as u16, y, x, f.rng, f.fx),
+            _ => effects::effect(self, f.world, id as u16, y, x, f.rng, f.fx),
         }
     }
 

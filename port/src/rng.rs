@@ -5,11 +5,13 @@ pub struct PascalRandom {
     pub seed: u32,
     /// Calls so far, to compare against the demo's CHECK windows.
     calls: u32,
+    /// Debug (env ET_RNG=frame): print every call with its Rust caller.
+    pub log: bool,
 }
 
 impl PascalRandom {
     pub fn new(seed: u32) -> Self {
-        PascalRandom { seed, calls: 0 }
+        PascalRandom { seed, calls: 0, log: false }
     }
 
     fn next(&mut self) -> u32 {
@@ -20,7 +22,19 @@ impl PascalRandom {
 
     /// Random(n): 0 <= result < n.
     pub fn random(&mut self, n: u16) -> i32 {
-        ((self.next() as u64 * n as u64) >> 32) as i32
+        let r = ((self.next() as u64 * n as u64) >> 32) as i32;
+        if self.log {
+            let bt = std::backtrace::Backtrace::force_capture().to_string();
+            let caller = bt
+                .lines()
+                .filter(|l| l.contains("eatthis::") && !l.contains("eatthis::rng::"))
+                .map(|l| l.trim().trim_start_matches(|c: char| c.is_ascii_digit() || c == ':' || c == ' '))
+                .take(2)
+                .collect::<Vec<_>>()
+                .join(" <- ");
+            eprintln!("RNG Random({n}) = {r}  {caller}");
+        }
+        r
     }
 
     pub fn calls(&self) -> u32 {

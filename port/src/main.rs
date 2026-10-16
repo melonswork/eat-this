@@ -216,6 +216,7 @@ impl Game {
 
     /// One game frame. `keys` is ignored while a demo plays.
     fn step(&mut self, keys: [i8; 9]) {
+        self.rng.log = std::env::var("ET_RNG").ok().and_then(|v| v.parse::<u32>().ok()) == Some(self.frame);
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
         self.level.update_platforms(&mut self.world);
         // FUN_10a0_023f: delayed particles due this frame.
@@ -253,6 +254,7 @@ impl Game {
         self.hero
             .update(&self.world, &self.level, &input, mouse_now, cam, &mut ps, &mut self.rng);
         self.level.particles = ps;
+        self.level.hero_x = self.hero.x;
         if let Some((y, x, aim, parity)) = self.hero.gun.shot {
             self.level.particles.hero_fire(y, x, aim, parity);
             noise = 2;
@@ -326,6 +328,7 @@ impl Game {
     /// GameFrameInGame from the particles of group 0 on (also LevelFirstFrame's): group 0,
     /// the actors (FUN_1070_faec), group 1, the level's foreground procedure.
     fn world_update(&mut self, fx: &mut Effects, noise: i32, up: bool, window: (i32, i32, i32, i32)) {
+        self.level.hero_x = self.hero.x;
         // FUN_1050_4ca5(0): debris and critters, before the actors.
         let cam = (self.camera.x, self.camera.y);
         let mut pf = particles::Frame {

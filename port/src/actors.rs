@@ -312,7 +312,60 @@ impl Level {
             // FUN_1040_637a: smoke sprites (no Random()).
             env.fx.shakes.push((0x18, 0xe));
         } else {
-            eprintln!("warning: crate type {t} breaking not ported");
+            // An explosive barrel.
+            let ps = &mut self.particles;
+            if t < 0xb {
+                ps.p.on_death = 0x2a;
+                ps.p.hits = 0x8000;
+                ps.p.callback = 0x2299;
+                for i in 0..2 {
+                    ps.spawn(0x7532, y - 0xc, x);
+                    let a = i * 0x280 + 0x440 + env.rng.random(0x41);
+                    ps.throw(0x15, 0x48, a);
+                    ps.spawn(0x7532, y - 0xc, x);
+                    let a = i * 0xc0 + 0x520 + env.rng.random(0x41);
+                    ps.throw(0x15, 0x50, a);
+                }
+                ps.p.callback = 0;
+                ps.p.hits = 0;
+                ps.p.on_death = 0;
+            } else {
+                eprintln!("warning: barrel type {t} (FUN_1068_186c) not ported");
+            }
+            crate::alien::smoke_sprite(ps, y, x);
+            ps.last_mut().m.set(0x1c, 0x1c2);
+            burning_floor(ps, env.world, 3, y, x);
+            ps.p.colour = 0x10;
+            ps.spawn_seq(0x6e00, 3, 0x13, y, x, 1); // FUN_1040_690b
+            let r = env.rng.random(0x80);
+            let m = &mut ps.last_mut().m;
+            m.set(0x1c, r + 0x100);
+            m.set(0x1e, r + 0xdc);
+            m.set(0x42, 0x2148);
+            ps.p.colour = 0;
+            ps.p.group = 0;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            for i in 0..4 {
+                let px = x - 6 + i * 4;
+                let py = (y - 6) - env.rng.random(0xe);
+                ps.spawn(29999, py, px);
+                let angle = i * -0x50 + 0x5d0 + env.rng.random(0x81);
+                let speed = env.rng.random(0x11) + 0x60;
+                ps.throw(7, speed, angle);
+            }
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            ps.p.group = 1;
+            env.fx.shakes.push((0x2a, 0x12));
+            env.rng.random(0x14); // the sound's pitch
+            self.explode_area(env.world, 0x60, 4, y + 0xe, x + 0x2e, y - 0x2e, x - 0x2e, env.rng, env.fx);
+            let ps = &mut self.particles;
+            ps.p.delay = 0x10;
+            ps.blast(2, 0xc0, 7, 0x1e, 0x3e, -0x3e, -0x3e, y, x);
+            ps.p.delay = 0;
+            let n = env.rng.random(6);
+            crate::hero::spawn_dust_pub(env.world, n, y, x, env.rng);
         }
         self.falling_critter(y, x, env);
         self.remove_current(id);
@@ -320,21 +373,26 @@ impl Level {
 
     /// FUN_1040_1d72(y, x): one time in five a critter runs out, if there's floor to run on.
     pub fn falling_critter(&mut self, y: i32, x: i32, env: &mut Env) {
-        if env.rng.random(5) != 0 {
+        self.falling_critter_at(env.world, env.rng, y, x);
+    }
+
+    /// FUN_1040_1d72(y, x).
+    pub fn falling_critter_at(&mut self, world: &World, rng: &mut PascalRandom, y: i32, x: i32) {
+        if rng.random(5) != 0 {
             return;
         }
-        let dir = if env.hero.0 - x < 0 { -1 } else { 1 };
+        let dir = if self.hero_x - x < 0 { -1 } else { 1 };
         let mut lx = x;
         for _ in 0..4 {
-            if crate::hero::Hero::solidity_all(env.world, self, y + 0xf, lx) & 0x201 == 0 {
+            if crate::hero::Hero::solidity_all(world, self, y + 0xf, lx) & 0x201 == 0 {
                 return;
             }
-            if crate::hero::Hero::solidity_all(env.world, self, y, lx) & 2 != 0 {
+            if crate::hero::Hero::solidity_all(world, self, y, lx) & 2 != 0 {
                 return;
             }
             lx -= dir * 0x10;
         }
-        let angle = env.rng.random(2) * 0x5a0 + 0x2d0;
+        let angle = rng.random(2) * 0x5a0 + 0x2d0;
         // FUN_1070_f9c7(0x40, angle, y, x).
         let ps = &mut self.particles;
         ps.p.group = 0;
@@ -346,7 +404,7 @@ impl Level {
         ps.spawn(0x5215, y, x);
         ps.critter(7, 0x40, angle);
         ps.p = crate::particles::Params::default();
-        env.rng.random(0x40); // the squeak's pitch
+        rng.random(0x40); // the squeak's pitch
     }
 
     pub(crate) fn o(&mut self, id: usize) -> &mut crate::objects::Obj {
@@ -607,4 +665,23 @@ fn unbounded(o: &mut crate::objects::Obj) {
     o.set(4, -0x7fff);
     o.set(6, 0x7fff);
     o.set(8, 0x7fff);
+}
+
+/// FUN_1040_6475(n, y, x): flames on the floor up to `n` tiles either side, while there is
+/// floor (FUN_1050_1b90 puts each out when its floor goes).
+pub(crate) fn burning_floor(ps: &mut crate::particles::Particles, w: &World, n: i32, y: i32, x: i32) {
+    ps.p.callback = 0x1b90;
+    for dir in [-1, 1] {
+        let mut fx = x + dir * 8;
+        for i in 0..n {
+            if w.solidity_at(y + 1, fx) & 0x2201 == 0 || w.solidity_at(y, fx) & 2 != 0 {
+                break;
+            }
+            ps.p.delay = i << 4;
+            ps.spawn_seq(0x6a00, 1, 0x46, y, fx, 0);
+            fx += dir * 0x10;
+        }
+    }
+    ps.p.delay = 0;
+    ps.p.callback = 0;
 }

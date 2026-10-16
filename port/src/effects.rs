@@ -7,10 +7,10 @@ use crate::world::{OUTSIDE, World};
 
 /// FUN_1040_60bb: effect `id` at (y, x); ids >= 30000 are plain sounds. The effect procedures
 /// are the table at 1170:07b2 (filled at run time; `mise run trace -- ... --dump-mem 1170:07b2:200`).
-pub fn effect(world: &World, id: u16, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
     match id {
         0 => {}
-        34 => explosion(world, y, x, rng, fx),
+        34 => explosion(lv, world, y, x, rng, fx),
         72 => rubble(rng),
         // Seen in GRINDER with no Random() calls in the tracer.
         76 => {}
@@ -21,24 +21,66 @@ pub fn effect(world: &World, id: u16, y: i32, x: i32, rng: &mut PascalRandom, fx
 
 /// FUN_1040_3b1f: a wall blowing up. The fire, debris and sprite objects it spawns aren't
 /// ported; their Random() calls are.
-fn explosion(world: &World, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
-    if rng.random(4) != 0 && rng.random(3) == 0 {
-        // FUN_1040_6b03(0xd10, ...): spawns an object (not ported).
+fn explosion(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+    let (x1, y1, x2, y2) = clear_block(world, y, x);
+    let cx = ((x1 + x2 + 0xf) as u16 >> 1) as i32;
+    let cy = ((y1 + y2 + 0xf) as u16 >> 1) as i32;
+    let ps = &mut lv.particles;
+    if rng.random(4) == 0 {
+        // FUN_1040_63c9: a long smoke.
+        ps.p.group = 0;
+        ps.p.callback = 0x19f8;
+        ps.p.colour = 0x10;
+        ps.spawn_seq(0x6a00, 1, 0x5bc, y2 + 0xf, cx, 0);
+        ps.p.colour = 0;
+        ps.p.callback = 0;
+        ps.p.group = 1;
+    } else {
+        crate::alien::smoke_sprite(ps, y2 + 0xf, cx);
+        if rng.random(3) == 0 {
+            eprintln!("warning: a wall's bonus 0xd10 (FUN_1040_6b03) not ported");
+        }
     }
-    falling_debris(world, y + 0xf, x, rng);
-    for _ in 0..4 {
-        rng.random(2);
-        rng.random(0x81);
-        rng.random(0x20);
+    lv.falling_critter_at(world, rng, y2 + 0xf, cx);
+    let ps = &mut lv.particles;
+    ps.p.group = 0;
+    ps.p.hits = 0x8000;
+    ps.p.on_death = 0x10;
+    for i in 0..4 {
+        let px = cx - 6 + i * 4;
+        let s = rng.random(2) + 0x7514;
+        ps.spawn(s, cy, px);
+        let a = i * -0x50 + 0x5d0 + rng.random(0x81);
+        let speed = rng.random(0x20) + 0x50;
+        ps.throw(9, speed, a);
     }
+    ps.p.on_death = 0;
+    ps.p.hits = 0;
+    ps.p.group = 1;
     fx.shakes.push((0x18, 0xe));
 }
 
-/// FUN_1040_1d72: sometimes a crate falls from the blast.
-fn falling_debris(_world: &World, _y: i32, _x: i32, rng: &mut PascalRandom) {
-    if rng.random(5) == 0 {
-        eprintln!("warning: FUN_1040_1d72's falling object is not ported");
+/// FUN_1040_3aed(y, x) (FUN_10f0_5c10/5b33): clear the block of tiles joined to (x, y) that
+/// share its function; returns its extent (left, top, right, bottom tile corners).
+fn clear_block(world: &mut World, y: i32, x: i32) -> (i32, i32, i32, i32) {
+    let (x0, y0) = (x & 0xfff0, y & 0xfff0);
+    let f = world.tile_function_at(y0, x0);
+    let mut b = (x0, y0, x0, y0);
+    if f == 0 || f == OUTSIDE {
+        return b;
     }
+    let width = world.main().width;
+    let mut stack = vec![(x0, y0)];
+    // The original recurses left, right, up, down; the extent doesn't depend on the order.
+    while let Some((cx, cy)) = stack.pop() {
+        if world.tile_function_at(cy, cx) != f {
+            continue;
+        }
+        world.main_mut().cells[((cy >> 4) * width + (cx >> 4)) as usize] = 0;
+        stack.extend([(cx - 0x10, cy), (cx + 0x10, cy), (cx, cy - 0x10), (cx, cy + 0x10)]);
+        b = (b.0.min(cx), b.1.min(cy), b.2.max(cx), b.3.max(cy));
+    }
+    b
 }
 
 /// FUN_1040_6577: a puff of smoke, six particles, two Random() calls each.
@@ -110,6 +152,6 @@ pub fn explode_tile(
         i if i <= 0 => {}
         39 => lv.breakable_wall(world, strength, ey, ex, rng, fx),
         73 => lv.tile_burst(ey, ex, rng, fx),
-        _ => effect(world, id, ey, ex, rng, fx),
+        _ => effect(lv, world, id, ey, ex, rng, fx),
     }
 }

@@ -64,6 +64,8 @@ pub struct Level {
     pub doors: Vec<crate::doors::Door>,
     /// A door started moving this frame (1170:465e = 3).
     pub door_noise: bool,
+    /// gHeroX as the objects and effects see it this frame.
+    pub hero_x: i32,
     /// FUN_1058_008f's position in the collection being walked (1170:45d6).
     pub walk_index: i32,
     /// The (sector, list) being walked, for FUN_1070_0002.
@@ -118,6 +120,7 @@ impl Level {
             teleports: Vec::new(),
             doors: Vec::new(),
             door_noise: false,
+            hero_x: 0,
             walk_index: 0,
             walking: (0, 0),
             particles: Default::default(),
@@ -333,7 +336,7 @@ impl Level {
         if pull {
             let id = world.cell_function(tile, 4);
             if id as i16 > 0 {
-                crate::effects::effect(world, id, y, x, rng, fx);
+                crate::effects::effect(self, world, id, y, x, rng, fx);
             }
             let f = world.cell_function(tile, 0) as i32;
             if !(6000..=6009).contains(&f) {
@@ -355,7 +358,7 @@ impl Level {
             let (cy, cx) = ((idx / width) * 16 + 7, (idx % width) * 16 + 7);
             let id = world.cell_function(tile, 4);
             if id as i16 > 0 {
-                crate::effects::effect(world, id, cy, cx, rng, fx);
+                crate::effects::effect(self, world, id, cy, cx, rng, fx);
             }
             self.set_cell(world, tile - 1, idx as u16, fx);
         }
@@ -683,6 +686,7 @@ impl Level {
         }
         let step = world.cell_function(tile, 2) as i16 as i32;
         crate::effects::effect(
+            self,
             world,
             world.cell_function(tile, 4),
             ty << 4,
