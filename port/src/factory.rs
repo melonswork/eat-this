@@ -395,7 +395,12 @@ impl Level {
                 self.add_to(s, list::TRIGGERS, o);
             }
             0x13ba => {}
-            _ => return false,
+            _ => {
+                if std::env::var("ET_FACT").is_ok() {
+                    eprintln!("FACTORY unported kind {kind:#x}");
+                }
+                return false;
+            }
         }
         true
     }
@@ -466,6 +471,15 @@ impl Level {
             if clear {
                 world.planes[plane].as_mut().unwrap().cells[i] = 0;
             }
+        }
+    }
+
+    /// Spawn what scripts asked for (FUN_1088_0d5a): enemy icons in `fx.spawns`.
+    pub fn flush_spawns(&mut self, world: &mut World, cx: &mut Ctx, fx: &mut crate::level::Effects) {
+        for (tile, cell) in std::mem::take(&mut fx.spawns) {
+            let w = world.main().width;
+            let f = world.cell_function(tile, 0);
+            self.icon(world, cx, tile, f, cell as i32 / w, cell as i32 % w);
         }
     }
 

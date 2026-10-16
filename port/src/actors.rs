@@ -90,6 +90,8 @@ impl Level {
     fn update_triggers(&mut self, sector: usize, env: &mut Env) {
         let (hx, hy, _) = env.hero;
         self.run_triggers(sector, env.world, env.fx, hx, hy);
+        let mut cx = crate::factory::Ctx { hero_x: hx, rng: env.rng };
+        self.flush_spawns(env.world, &mut cx, env.fx);
     }
 
     /// FUN_1068_08ff on its own (the teleport runs it for the sector left behind).

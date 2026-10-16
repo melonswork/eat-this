@@ -50,6 +50,8 @@ pub struct Effects {
     pub hero_by_enemy: i32,
     /// Enemies killed (1170:4eb0).
     pub kills: i32,
+    /// Object tiles a script placed (FUN_1088_0d5a): (tile, cell), spawned by `Level::flush_spawns`.
+    pub spawns: Vec<(u16, u16)>,
 }
 
 pub struct Level {
@@ -75,6 +77,8 @@ pub struct Level {
     pub now: u32,
     /// gHeroX as the objects and effects see it this frame.
     pub hero_x: i32,
+    /// gCameraY (the scripts' spawn row).
+    pub cam_y: i32,
     /// FUN_1058_008f's position in the collection being walked (1170:45d6).
     pub walk_index: i32,
     /// The (sector, list) being walked, for FUN_1070_0002.
@@ -133,6 +137,7 @@ impl Level {
             tile_events: Vec::new(),
             now: 0,
             hero_x: 0,
+            cam_y: 0,
             walk_index: 0,
             walking: (0, 0),
             particles: Default::default(),
@@ -174,6 +179,9 @@ impl Level {
     /// FUN_1088_1364 + FUN_1088_12f9: put a tile in a main-plane cell; levers run their scripts.
     pub fn set_cell(&mut self, world: &mut World, tile: u16, cell: u16, fx: &mut Effects) {
         world.main_mut().cells[cell as usize] = tile;
+        if std::env::var("ET_CMD").is_ok() {
+            eprintln!("SETCELL {} cell {cell} tile {tile:#x} f0 {}", self.now, world.cell_function(tile, 0));
+        }
         let f = world.cell_function(tile, 0);
         if (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f) {
             self.run_scripts(world, cell, fx);
@@ -209,6 +217,9 @@ impl Level {
                     Self::lever_state(world, w[3 + 2 * k]) == (w[4 + 2 * k] & 0xff) as i32
                 });
                 let run = if w[1] == 0x44d { !all } else { all };
+                if std::env::var("ET_CMD").is_ok() {
+                    eprintln!("SCRIPT {} cell {cell} type {:#x} all {all} run {run} words {:x?}", self.now, w[1], w);
+                }
                 if run {
                     let aborted = self.run_commands(world, &w, 2 + 2 * n, fx);
                     self.platform_sound = 0;
@@ -240,12 +251,15 @@ impl Level {
             match op {
                 0x00 => {
                     let (cell, v) = (arg(1) as i32, arg(2));
+                    if std::env::var("ET_CMD").is_ok() {
+                        eprintln!("CMD0 {} cell {cell} v {v:#x} f0 {} plane {plane}", self.now, world.cell_function(v, 0));
+                    }
                     let (cy, cx) = ((cell / width) << 4, (cell % width) << 4);
                     if plane == MAIN_PLANE && world.tile_function_at(cy, cx) == crate::doors::DOOR {
                         // FUN_10a8_0975(0, v == 1, ...): a door opens (1) or shuts.
                         self.door_set(world, false, (v == 1) as i32, cy, cx, false, 0);
                     } else if (v as i16) > 0 && world.cell_function(v, 0) >= 61000 {
-                        eprintln!("warning: a script placing object tile {} (FUN_1088_0d5a) not ported", world.cell_function(v, 0));
+                        fx.spawns.push((v, arg(1)));
                     } else if plane == MAIN_PLANE {
                         self.set_cell(world, arg(2), arg(1), fx);
                     } else if let Some(p) = world.planes[plane].as_mut() {
@@ -345,6 +359,12 @@ impl Level {
                     }
                     lc += 2;
                 }
+                0x10 => {
+                    // FUN_1088_0d5a(tile, column of the cell + the row above the camera).
+                    let row = ((self.cam_y - 15) as u16 >> 4) as i32;
+                    fx.spawns.push((arg(2), (arg(1) as i32 % width + row * width) as u16));
+                    lc += 3;
+                }
                 0x1d => {
                     fx.grinder_slow = true;
                     lc += 1;
@@ -362,7 +382,7 @@ impl Level {
                 // Not ported yet; skipped with their sizes (tools/scripts.py COMMANDS).
                 0x01 | 0x02 | 0x0e => lc += 4,
                 0x0f => lc += 5,
-                0x0c | 0x10 | 0x11 | 0x15 | 0x17 | 0x19 => lc += 3,
+                0x0c | 0x11 | 0x15 | 0x17 | 0x19 => lc += 3,
                 0x12 | 0x1a => lc += 2,
                 _ => lc += 1,
             }

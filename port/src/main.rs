@@ -215,6 +215,11 @@ impl Game {
         self.demo.as_ref().is_some_and(|d| self.frame >= d.frames)
     }
 
+    fn flush_spawns(&mut self, fx: &mut Effects) {
+        let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
+        self.level.flush_spawns(&mut self.world, &mut cx, fx);
+    }
+
     /// One game frame. `keys` is ignored while a demo plays.
     fn step(&mut self, keys: [i8; 9]) {
         self.rng.frame = self.frame + 1;
@@ -222,18 +227,21 @@ impl Game {
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
         self.level.now = self.frame;
         let mut fx = Effects::default();
+        self.level.cam_y = self.camera.y;
         if let Some(o) = self.level.update_platforms(&mut self.world, self.camera.y) {
             self.camera.offset.1 = o;
         }
         for cell in std::mem::take(&mut self.level.pasted) {
             self.level.run_scripts(&mut self.world, cell, &mut fx);
         }
+        self.flush_spawns(&mut fx);
         // FUN_10a0_023f: delayed particles due this frame.
         self.level.particles.now = self.frame;
         self.level.particles.release_due();
         {
             let mut fx = Effects::default();
             self.level.release_tile_events(&mut self.world, &mut fx, self.hero.x);
+            self.flush_spawns(&mut fx);
             for &(a, b) in &fx.shakes {
                 self.camera.shake(a, b);
             }
@@ -339,6 +347,7 @@ impl Game {
             self.level
                 .touch_sensitive(&mut self.world, ty, tx, &mut self.rng, &mut fx);
         }
+        self.flush_spawns(&mut fx);
         // After HeroUpdate: its camera nudges and shakes, then FUN_1088_0a3b(1) .. FUN_1088_0c82.
         self.camera.offset.0 += self.hero.cam_nudge.0;
         self.camera.offset.1 += self.hero.cam_nudge.1;
@@ -354,6 +363,7 @@ impl Game {
         if std::env::var("ET_DOOR").is_ok() && self.frame >= 16490 && self.frame < 16508 {
             eprintln!("DOORS frame {} hero {:?}", self.frame + 1, hero_at);
         }
+        self.level.cam_y = self.camera.y;
         self.level.doors_near_hero(&mut self.world, hero_at, false);
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, false, &mut cx);
