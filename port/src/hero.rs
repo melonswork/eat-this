@@ -131,6 +131,9 @@ pub struct Hero {
     pub levers: Vec<(i32, i32, i32, bool)>,
     /// Blood splats the hero's hits ask for (FUN_1058_0218): (sprite, y, x).
     pub splats: Vec<(i32, i32, i32)>,
+    /// Cells whose scripts a keyless lever runs, and key slots a key opens (FUN_1088_13dc).
+    pub script_cells: Vec<u16>,
+    pub cell_steps: Vec<u16>,
     /// 1170:4e6c.
     pub health: i32,
     /// 1170:5104..: the keys picked up (pick-up effect 70).
@@ -255,6 +258,8 @@ impl Hero {
             held_lever: -1,
             levers: Vec::new(),
             splats: Vec::new(),
+            script_cells: Vec::new(),
+            cell_steps: Vec::new(),
             health: HEALTH,
             keys: [false; 16],
             hurt: 0,
@@ -778,10 +783,23 @@ impl Hero {
                 let f2 = w.cell_function(cell, 2);
                 if f2 & 2 == 0 {
                     self.lever_reach = 3;
-                    if self.use_count == 1 {
-                        if f2 & 4 != 0 {
-                            eprintln!("warning: levers needing a key (HeroUpdate, flag 4) not ported");
+                    let mut skip = false;
+                    if self.use_count == 1 && f2 & 4 != 0 {
+                        // A lever with a key slot above it.
+                        let above = w.tile_function_at(ly - 0x10, self.x) as i32;
+                        let key = ((above - 13980) as usize) & 0xf;
+                        let width = w.main().width;
+                        if !self.keys[key] {
+                            if w.cell_at(MAIN_PLANE, ly - 0x20, self.x) == Some(0x308) {
+                                self.script_cells.push((((ly - 0x20) >> 4) * width + (self.x >> 4)) as u16);
+                            }
+                            skip = true;
+                        } else {
+                            self.keys[key] = false;
+                            self.cell_steps.push((((ly - 0x10) >> 4) * width + (self.x >> 4)) as u16);
                         }
+                    }
+                    if self.use_count == 1 && !skip {
                         let idx = (ly >> 4) * w.main().width + (self.x >> 4);
                         if f2 & 1 != 0 {
                             self.held_lever = idx;

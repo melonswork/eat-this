@@ -359,6 +359,14 @@ impl Game {
                 eprintln!("warning: pick-up effect {effect} not ported");
             }
         }
+        for cell in std::mem::take(&mut self.hero.script_cells) {
+            self.level.run_scripts(&mut self.world, cell, &mut fx);
+        }
+        for cell in std::mem::take(&mut self.hero.cell_steps) {
+            let v = self.world.main().cells[cell as usize];
+            let off = self.world.cell_function(v, 2);
+            self.level.set_cell(&mut self.world, v.wrapping_add(off), cell, &mut fx);
+        }
         for (idx, y, x, pull) in std::mem::take(&mut self.hero.levers) {
             self.level.work_lever(&mut self.world, idx, y, x, pull, &mut self.rng, &mut fx);
         }
