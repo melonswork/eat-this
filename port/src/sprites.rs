@@ -8,13 +8,15 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 pub static DIR: OnceLock<PathBuf> = OnceLock::new();
+/// The level script's LoadSpriteGroup= names (slots 0x32..).
+pub static LEVEL_GROUPS: OnceLock<Vec<String>> = OnceLock::new();
 
 /// Slot -> file, as FUN_1088_c98f loads them (seen with the tracer's --dump-groups).
 const SLOTS: &[(u16, &str)] = &[
     (0x00, "PPHERO"), (0x01, "PPHERO2"), (0x02, "PPHERO3"),
     (0x06, "PI2ANIM"), (0x09, "FIREDRO2"), (0x18, "PPWEAPON"), (0x19, "PPWEAP02"),
     (0x1a, "PPFLAMER"), (0x1f, "ETSCORE"), (0x20, "PPFONT3"), (0x21, "BONUSANI"),
-    (0x22, "ETBONUS"), (0x28, "STATSOBJ"), (0x47, "BOWL"), (0x48, "CRATE"), (0x4c, "MINE2"),
+    (0x22, "ETBONUS"), (0x23, "PPFONT3"), (0x24, "MENUSL"), (0x27, "ETCIFER3"), (0x29, "EPISPIC"), (0x2a, "EXITPIC"), (0x28, "STATSOBJ"), (0x47, "BOWL"), (0x48, "CRATE"), (0x4c, "MINE2"),
     (0x4d, "FLYDROID"), (0x4e, "FLYPART"), (0x4f, "WALLG5"), (0x50, "BMBDROID"),
     (0x51, "ENEMYANI"), (0x52, "ENMYANI2"), (0x53, "REDBLD"), (0x54, "GREENBLD"), (0x55, "CARS"),
     (0x56, "WALKER"), (0x57, "SMALLALI"), (0x58, "SMALLBOT"), (0x59, "CATERP"), (0x5a, "GRANNY"),
@@ -47,7 +49,13 @@ fn i16_at(b: &[u8], at: usize) -> i32 {
 }
 
 fn load(slot: u16) -> Boxes {
-    let Some(&(_, name)) = SLOTS.iter().find(|(s, _)| *s == slot) else {
+    let level = (slot >= 0x32)
+        .then(|| LEVEL_GROUPS.get().and_then(|g| g.get(slot as usize - 0x32)))
+        .flatten()
+        .filter(|n| !n.is_empty())
+        .map(|n| n.trim_end_matches(".spr").trim_end_matches(".SPR").to_ascii_uppercase());
+    let fixed = SLOTS.iter().find(|(s, _)| *s == slot).map(|&(_, n)| n.to_string());
+    let Some(name) = fixed.or(level) else {
         eprintln!("warning: sprite slot {slot:#x} unknown");
         return Vec::new();
     };

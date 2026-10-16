@@ -942,6 +942,12 @@ impl Level {
 
     /// FUN_1068_1bdd with 1170:127c (the base speed) set to `base`.
     pub(crate) fn gibs_speed(&mut self, y: i32, x: i32, base: i32, env: &mut Env) {
+        self.gibs_kind(y, x, base, false, env);
+    }
+
+    /// FUN_1068_186c is the same burst in red (`red`): the hero's, a barrel's.
+    pub(crate) fn gibs_kind(&mut self, y: i32, x: i32, base: i32, red: bool, env: &mut Env) {
+        let (flesh, bones, nbones, blood) = if red { (0x5307, 0x530f, 5, 0x5300) } else { (0x5407, 0x540f, 3, 0x5400) };
         let rng = &mut *env.rng;
         let ps = &mut self.particles;
         // Each step throws one piece left and one right, both spreading further each step:
@@ -955,12 +961,12 @@ impl Level {
         for i in 1..=0x20 {
             let (speed, spread) = ((i << 6) / 0x20 + base, (i * 0x3c0) / 0x20);
             ps.p.delay = rng.random(8);
-            let s = (rng.random(4) == 0) as i32 + 0x5407;
+            let s = (rng.random(4) == 0) as i32 + flesh;
             ps.spawn(s, y, x);
             let a = left(rng, spread);
             ps.throw(0xb, speed, a);
             ps.p.delay = rng.random(8);
-            let s = (rng.random(4) == 0) as i32 * 2 + 0x5406;
+            let s = (rng.random(4) == 0) as i32 * 2 + flesh - 1;
             ps.spawn(s, y, x);
             let a = right(rng, spread);
             ps.throw(0xb, speed, a);
@@ -972,7 +978,7 @@ impl Level {
             let (speed, spread) = ((i * 0x30) / 4 + base, (i * 0x3c0) / 4);
             for side in 0..2 {
                 ps.p.delay = rng.random(8) + 8;
-                let s = rng.random(3) + 0x540f;
+                let s = rng.random(nbones) + bones;
                 ps.spawn(s, y, x);
                 let a = if side == 0 { left(rng, spread) } else { right(rng, spread) };
                 ps.throw(0xe, speed, a);
@@ -983,7 +989,7 @@ impl Level {
             let (speed, spread) = ((i << 5) / 8 + base, (i * 0x3c0) / 8);
             for side in 0..2 {
                 ps.p.delay = rng.random(8) + 8;
-                ps.spawn_seq(0x5400, 4, 5, y, x, 1);
+                ps.spawn_seq(blood, 4, 5, y, x, 1);
                 let a = if side == 0 { left(rng, spread) } else { right(rng, spread) };
                 ps.throw(0xb, speed, a);
             }
@@ -991,7 +997,7 @@ impl Level {
         ps.p.hits = 0;
         for (d, dy, dx) in [(0x1e, 6, 1), (0x19, 0xc, 4), (0x14, -5, -5), (0xf, 5, 0)] {
             ps.p.delay = d;
-            blood_puff(ps, y + dy, x + dx);
+            ps.spawn_seq(blood, 4, 5, y + dy, x + dx, 1);
         }
         ps.p.delay = 0;
     }

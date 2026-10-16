@@ -366,6 +366,10 @@ impl Level {
             Some((l, tp, r, b)) => self.particles.hit_test_low(y + b, x + r, y + tp, x + l, 0x11fb),
             None => 0,
         };
+        if std::env::var("ET_CRATE").is_ok() {
+            let (now, hp) = (self.particles.now, self.o(id).w(0x20));
+            eprintln!("CRATE {now} id {id} at ({x},{y}) type {t} sprite {sprite:#x} damage {damage} hp {hp}");
+        }
         if damage > 0 {
             let damage = if damage == 4 && t == 0 { 1 } else { damage };
             let push = self.particles.hit_direction();
@@ -422,6 +426,9 @@ impl Level {
             env.fx.shakes.push((0x18, 0xe));
         } else {
             // An explosive barrel.
+            if t >= 0xb {
+                self.gibs_kind(y - 0xc, x, 0x10, true, env);
+            }
             let ps = &mut self.particles;
             if t < 0xb {
                 ps.p.on_death = 0x2a;
@@ -438,8 +445,6 @@ impl Level {
                 ps.p.callback = 0;
                 ps.p.hits = 0;
                 ps.p.on_death = 0;
-            } else {
-                eprintln!("warning: barrel type {t} (FUN_1068_186c) not ported");
             }
             crate::alien::smoke_sprite(ps, y, x);
             ps.last_mut().m.set(0x1c, 0x1c2);

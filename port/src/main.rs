@@ -956,6 +956,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     world::load_game_ds(&o.data.join("../ETLAUNCH.EXE"))?;
     let _ = sprites::DIR.set(o.data.join("SPRITES"));
+    // The script's LoadSpriteGroup= lines fill slots 0x32.. in order (an empty one skips a slot).
+    let groups: Vec<String> = find_ci(map_path.parent().unwrap_or(Path::new(".")), &{
+        let mut n = map_path.file_stem().unwrap_or_default().to_os_string();
+        n.push(".SCR");
+        n.to_string_lossy().into_owned()
+    })
+    .and_then(|p| std::fs::read(p).ok())
+    .map(|t| {
+        String::from_utf8_lossy(&t)
+            .lines()
+            .filter_map(|l| {
+                let l = l.trim();
+                let (k, v) = l.split_once('=')?;
+                k.eq_ignore_ascii_case("LoadSpriteGroup").then(|| v.split(',').next().unwrap_or("").trim().to_string())
+            })
+            .collect()
+    })
+    .unwrap_or_default();
+    let _ = sprites::LEVEL_GROUPS.set(groups);
     let world = World::load(&map_path, &o.data.join("TILES"))?;
     let game = Game::new(world, demo);
     if o.headless {
