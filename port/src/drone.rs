@@ -66,6 +66,14 @@ impl Drone {
         self.fy = y << 16;
     }
 
+    /// FUN_1088_0c20: the hero is placed (a teleport): the drone goes to him at once.
+    pub fn place(&mut self, y: i32, x: i32) {
+        self.x = x;
+        self.y = y - 0x15;
+        self.fx = x << 16;
+        self.fy = self.y << 16;
+    }
+
     /// The drone part of FUN_1050_568b / 51aa: a box the target may be.
     #[track_caller]
     pub fn consider(&mut self, bottom: i32, right: i32, top: i32, left: i32, level: i32) {

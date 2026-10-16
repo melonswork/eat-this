@@ -438,6 +438,7 @@ impl Game {
         if !self.hero.teleport(&self.world, &self.level.teleports) {
             return;
         }
+        self.level.particles.drone.place(self.hero.y, self.hero.x);
         let mut fx = Effects::default();
         // FUN_1068_08ff: the old sector's triggers see him go.
         self.level
