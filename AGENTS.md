@@ -66,11 +66,16 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
   teleport records 1000; after a teleport LevelFirstFrame runs a frame without the hero
   (`world_update`). Doors: `doors.rs` (segment 10a8).
 
-## State (2026-10-16, later)
+## State (2026-10-16, evening)
 
-CITY01 exact for 231 windows (532/847 total), GRINDER 113/113. Next: class 0x13e2
-(FUN_1070_1b00, VMT 0xc98: a flying gunship with long 1/16-px positions, states 0 fly/shoot,
-1 smoking, 2 falling, 3 crashed → wreck object VMT 0xca8; helpers 1487/1634/16ee/17f7/18e0,
-1428, 6405, 5be8, 6156; lots of FUN_1168_0fdd math: read the asm). Not ported yet: effects 1, 6,
-54, 70 (`effect N not ported`), bonuses (6b03), script object tiles (FUN_1088_0d5a), the other
-weapons, sideways shake 5c7d, frozen/burnt deaths, level-leaving teleports.
+CITY01 exact for 319 windows (550/847 total), GRINDER 113/113. Debug aid: `ET_RNG=<frame-1>`
+prints every port Random() with its Rust caller — paste it next to the tracer's calls.tsv rows
+for the frame to see the first differing call.
+
+Next: window 320 needs the hero's drone (pick-up effect 6 → FUN_1088_03a3; globals
+4d9e..4dbc; per-frame FUN_1088_9d34 follows the hero and shoots at the target the hit tests
+pick (FUN_1050_51aa/568b compare 093e against 4db6, distance against 4db4); enemy rockets
+release flares at it (FUN_1050_0a63 from the rocket callback 0b2a). Also not ported: pick-up
+effects 1 (score, 4e6c/4ea8) and 70 (keys 1170:5104), effects 23/54, bonuses (6b03), script
+object tiles (0d5a), other weapons, sideways shake 5c7d, frozen/burnt deaths, barrels of type
+>= 0xb (186c), level-leaving teleports.
