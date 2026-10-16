@@ -1142,6 +1142,37 @@ impl Level {
             16 => {
                 self.bounce_off(f);
             }
+            9 => {
+                self.particles.spawn_seq(0x6500, 2, 0x14, y, x, 1);
+            }
+            28 => {
+                // FUN_1040_300c: a hull piece lands: two bits fly off, smoke and a blast.
+                let m = &self.particles.list[self.particles.current].m;
+                let (py, px) = (m.w(0xa), m.w(8));
+                let ps = &mut self.particles;
+                ps.p.group = 0;
+                ps.p.hits = 0x8000;
+                ps.p.on_death = 0x1b;
+                ps.p.draw = 1;
+                ps.spawn(0x4e08, py, px + 2);
+                let r = f.rng.random(0xa0);
+                ps.throw(9, 0x40, 0x500 - r);
+                ps.p.on_death = 0x11;
+                ps.p.draw = 0;
+                ps.spawn(0x4e08, py, px - 2);
+                let r = f.rng.random(0xa0);
+                ps.throw(10, 0x48, r + 0x640);
+                ps.p.on_death = 0;
+                ps.p.hits = 0;
+                ps.p.group = 1;
+                ps.spawn_seq(0x6500, 2, 0x14, py, px, 1); // effect 9
+                ps.p.delay = 0x1e;
+                smoke4_at(ps, py, px + 10);
+                ps.p.delay = 0x46;
+                smoke4_at(ps, py - 6, px + 2);
+                ps.p.delay = 0;
+                f.fx.shakes.push((0x18, 8));
+            }
             7 => {
                 // FUN_1040_0897: a puff that drifts up.
                 self.particles.spawn_seq(0x6400, 2, 0x24, y, x, 1);
@@ -1965,4 +1996,15 @@ fn critter_gibs(ps: &mut Particles, rng: &mut PascalRandom, y: i32, x: i32) {
 
 fn puff_at(ps: &mut Particles, y: i32, x: i32) {
     ps.spawn_seq(0x6800, 2, 0xf, y, x, 1);
+}
+
+/// FUN_1040_6405.
+fn smoke4_at(ps: &mut Particles, y: i32, x: i32) {
+    puff_at(ps, y, x - 4);
+    ps.p.delay += 7;
+    puff_at(ps, y - 5, x + 1);
+    ps.p.delay += 4;
+    puff_at(ps, y + 5, x - 2);
+    ps.p.delay += 0x13;
+    puff_at(ps, y - 1, x);
 }

@@ -18,6 +18,8 @@ pub struct Env<'a> {
     /// 1170:465e: 2 the frame the hero fired, 1 when a screen shake just started.
     pub noise: i32,
     pub camera: (i32, i32),
+    /// The hero itself, for the objects that hurt him on the spot (FUN_1088_3c32).
+    pub hero_obj: &'a mut crate::hero::Hero,
 }
 
 /// The hero globals the objects read.
@@ -220,6 +222,8 @@ impl Level {
             0x14aa => {} // FUN_1070_a06a: draws a sprite
             0x148c => self.springboard(id, env),
             0x140a => self.walker(id, env),
+            0x13f6 => self.boss(id, env),
+            crate::boss::WRECK => self.boss_wreck(id, env),
             crate::decals::DROP => self.drop_decal(id, env),
             crate::decals::SHELL => self.shell_decal(id, env),
             crate::decals::SPLAT => self.splat(id, env),
@@ -720,7 +724,7 @@ impl Level {
     fn after_move(&mut self, id: usize, env: &mut Env) {
         let kind = self.objects[id].as_ref().unwrap().kind;
         match kind {
-            0x145a | 0x143c => {
+            0x145a | 0x143c | 0x140a | crate::decals::DROP | crate::decals::SHELL => {
                 let o = self.o(id);
                 if o.w(0x1c) == 0 {
                     if o.w(0x1a) == 0 {
@@ -734,6 +738,9 @@ impl Level {
                     o.set(6, 0x7fff);
                     o.set(8, 0x7fff);
                 } else {
+                    if kind == 0x140a && o.w(0x1a) > 6 {
+                        env.fx.shakes.push((0x10, 6));
+                    }
                     o.set(0x1a, 0);
                 }
             }

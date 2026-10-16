@@ -30,6 +30,7 @@ mod smallbot;
 mod sprites;
 mod tileanim;
 mod trig;
+mod boss;
 mod walker;
 mod world;
 
@@ -414,6 +415,7 @@ impl Game {
                 h: self.hero.view(up),
                 noise,
                 camera: cam,
+                hero_obj: &mut self.hero,
             };
             self.level.update_decals(&mut env, window);
         }
@@ -434,6 +436,7 @@ impl Game {
             h: self.hero.view(up),
             noise,
             camera: cam,
+            hero_obj: &mut self.hero,
         };
         self.level.update_actors(&mut env, window);
         if std::mem::take(&mut fx.hero_bounce) {

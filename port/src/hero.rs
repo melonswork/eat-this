@@ -117,6 +117,10 @@ pub struct Hero {
     exit_kind: i32,
     /// 1170:5123: 3 while a lever is in reach this frame (then 1: Up jumps again).
     lever_reach: i32,
+    /// 1170:4e20: frames Down has been held while crouching still (to 0x10).
+    down_timer: i32,
+    /// 1170:4e24: > 0 while sliding down a slope on his belly.
+    sliding: i32,
     /// 1170:4e5a: frames the use pose has been held (to 2); the lever moves at 1.
     use_count: i32,
     /// 1170:4dfa: the use pose's frame when the lever is high up.
@@ -242,6 +246,8 @@ impl Hero {
             prev: (x, y),
             push: None,
             lever_reach: 0,
+            down_timer: 0,
+            sliding: 0,
             use_count: 0,
             use_frame: 0x7fff,
             held_lever: -1,
@@ -305,7 +311,9 @@ impl Hero {
             self.crouch_max = 0;
             self.anim = 0;
             self.turn = NO_TURN;
+            self.down_timer = 0;
         }
+        self.sliding = 0;
     }
 
     /// FUN_1070_00b6: lifted onto a moving top.
@@ -541,9 +549,74 @@ impl Hero {
             self.gun.shooting = false;
             if self.crouch < 8 {
                 self.crouch = (self.crouch + 1).abs();
-            } else if self.ground != 0x15 {
-                self.half_width = 9;
+            } else {
+                if self.ground != 0x15 {
+                    self.half_width = 9;
+                }
+                // Down held long enough on a slope: slide down it (or through an exit).
+                let dirn = if self.slope & 0x80 == 0 { -1 } else { 1 };
+                if self.sliding == 0 {
+                    if self.slope != -1
+                        && self.down_timer < 1
+                        && held(DOWN)
+                        && self.released[DOWN]
+                        && slope_run(w, 3, dirn, self.y, self.x) > 2
+                        && slope_word(self.slope, 0x12) != 0x7fff
+                    {
+                        self.sliding = 1;
+                        self.facing = dirn;
+                        self.down_timer = 0;
+                    }
+                    if !held(DOWN) {
+                        self.down_timer = 0;
+                    } else if self.down_timer < 0x10 {
+                        self.down_timer += 1;
+                    } else {
+                        let e = exit_at(w, true, self.y, self.x);
+                        if (e >> 8) & 0xff == 1 {
+                            self.state = EXIT;
+                            self.crouch = 0;
+                            self.exit_kind = e & 0xff;
+                            self.frame = 0xa8;
+                            self.anim = 0;
+                        }
+                    }
+                }
             }
+            if self.state == CROUCH && self.sliding > 0 {
+                let dirbit = self.slope != -1 && self.slope & 0x80 != 0;
+                let ceiling_ok = w.tile_function_at(self.y - 0x10, self.x) != 7110;
+                if self.slope == -1
+                    || slope_word(self.slope, 0x12) == 0x7fff
+                    || (self.head_blocked == 0 && ceiling_ok && (input[LEFT] == 1 || input[RIGHT] == 1 || input[UP] == 1))
+                    || self.prev_blocked != 0
+                    || ((self.facing < 0) != !dirbit)
+                {
+                    self.sliding = 0;
+                    self.crouch = 7;
+                    self.frame = 0xa8;
+                    self.released[DOWN] = false;
+                    if self.vx.abs() < 0x14 {
+                        self.vx = if self.vx < 0 { -0x14 } else { 0x14 };
+                    }
+                } else {
+                    if self.sliding % 4 == 2 {
+                        ps.p.colour = 0x10;
+                        ps.p.group = 0;
+                        ps.spawn_seq(0x638, 2, 0xc, self.y, self.x, 1);
+                        ps.p.group = 1;
+                        ps.p.colour = 0;
+                    }
+                    self.sliding += 1;
+                    self.frame = slope_word(self.slope, 0x12);
+                    self.vx = (self.vx + (self.facing << 1)).clamp(-0x1d, 0x1d);
+                    dx += (self.vx.abs() / 10 + 1) * self.vx.signum();
+                    friction = false;
+                }
+                self.height = 0x16;
+                self.half_width = 8;
+            }
+            if self.state == CROUCH && self.sliding < 1 {
             self.frame = self.crouch + 0xa0;
             let ix = self.facing * self.half_width + self.x;
             if self.head_blocked == 0
@@ -586,6 +659,7 @@ impl Hero {
                 }
                 if self.turn == NO_TURN {
                     let next = if moving && self.prev_blocked == 0 {
+                        self.down_timer = 1;
                         self.anim + 1
                     } else {
                         let i = (self.anim / 2 + 0x19) % 0x14;
@@ -605,6 +679,7 @@ impl Hero {
                         self.anim = 0;
                     }
                 }
+            }
             }
         }
 
@@ -1004,6 +1079,11 @@ impl Hero {
             let kind = if ps.hit_mask & 0x20 != 0 { 4 } else { 1 };
             self.hit(damage, kind, rng);
         }
+    }
+
+    /// FUN_1088_3c32(damage) from an object: a shot-like hit.
+    pub fn hurt(&mut self, damage: i32, rng: &mut PascalRandom) {
+        self.hit(damage, 1, rng);
     }
 
     /// FUN_1088_3c32(damage) with 1170:162a = `kind` (1 shot, 4 burnt).
@@ -2061,6 +2141,28 @@ fn exit_middle(w: &World, y: i32, x: i32) -> i32 {
 
 /// A word of the slope table row (1170:1280 + 0x16 * (kind & 0xff7f)): 0x12 its shape id,
 /// 0x14 flags (1 stop on it, 2 slippery, 8 sliding dust).
+/// FUN_1088_29c8(n, dir, y, x): how many slope tiles (up to n) run on from here, stepping
+/// down by each one's drop and sideways by `dir` tiles.
+fn slope_run(w: &World, n: i32, dir: i32, mut y: i32, mut x: i32) -> i32 {
+    let mut c = 0;
+    if w.solidity_at(y - 8, x) & 0x20 == 0 {
+        y += 8;
+    }
+    loop {
+        if w.solidity_at(y, x) & 0x20 == 0 {
+            return c;
+        }
+        let cell = w.cell_at(MAIN_PLANE, y, x).unwrap_or(0);
+        let id = w.cell_function(cell, 2) as usize & 0xff7f;
+        y += crate::world::SLOPES[id * 0x16 + 0x11] as i32 * 0x10;
+        x += dir * 0x10;
+        c += 1;
+        if c >= n {
+            return c;
+        }
+    }
+}
+
 fn slope_word(kind: i32, off: usize) -> i32 {
     let row = &crate::world::SLOPES[((kind as u16 & 0xff7f) as usize) * 0x16..];
     i16::from_le_bytes([row[off], row[off + 1]]) as i32
