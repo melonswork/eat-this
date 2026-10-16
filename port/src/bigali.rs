@@ -787,14 +787,19 @@ impl Level {
     }
 }
 
-/// FUN_1070_015f(sprite, speed, angle, y, x): a spent shell flying off.
+/// FUN_1070_015f(0x1914, 0x40, angle, y, x): a spent shell flying off.
 pub fn shell(ps: &mut Particles, angle: i32, y: i32, x: i32) {
+    shell_of(ps, 0x1914, 0x40, angle, y, x);
+}
+
+/// FUN_1070_015f(sprite, speed, angle, y, x).
+pub fn shell_of(ps: &mut Particles, sprite: i32, speed: i32, angle: i32, y: i32, x: i32) {
     ps.p.hits = 0x8000;
     ps.p.on_death = 0xd;
     ps.p.callback = 0x17f4;
-    ps.spawn(0x1914, y, x);
+    ps.spawn(sprite, y, x);
     ps.last_mut().m.set(0x26, 2);
-    ps.throw(7, 0x40, angle);
+    ps.throw(7, speed, angle);
     ps.p.callback = 0;
     ps.p.on_death = 0;
     ps.p.hits = 0;

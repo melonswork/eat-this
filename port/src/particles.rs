@@ -1038,6 +1038,21 @@ impl Level {
             16 => {
                 self.bounce_off(f);
             }
+            17 => {
+                // FUN_1040_0fcc: a heavy bit bounces; landing slowly it puffs smoke.
+                let v = self.bounce_off(f);
+                if v >= 0 && v < 0x2aaab && self.particles.hit_side != 2 {
+                    let ps = &mut self.particles;
+                    ps.spawn_seq(0x6f00, 2, 0x18, y, x, 1);
+                    let r = f.rng.random(0x100);
+                    let m = &mut ps.last_mut().m;
+                    m.set(0x1c, r + 0x200);
+                    m.set(0x1e, r + 0x240);
+                    m.set(0x42, 0x2148);
+                    f.rng.random(0x14); // the sound's pitch
+                    f.fx.shakes.push((0x12, 5));
+                }
+            }
             13 => {
                 // FUN_1040_0c4d: a shell casing tinkles; once it stops it lies on the floor (an
                 // object in the list +0x5a that only draws: not kept here).

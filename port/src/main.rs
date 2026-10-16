@@ -16,6 +16,7 @@ mod doors;
 mod demo;
 mod effects;
 mod factory;
+mod gunship;
 mod hero;
 mod level;
 mod objects;

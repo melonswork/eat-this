@@ -120,6 +120,8 @@ impl Level {
             0x145a => self.smallbot(id, env),
             0x143c => self.crate_box(id, env),
             0x13d8 => self.mine(id, env),
+            0x13e2 => self.gunship(id, env),
+            crate::gunship::WRECK => self.wreck(id, env),
             0x1428 => self.alien(id, env),
             0x1432 => self.bigali(id, env),
             0x14aa => {} // FUN_1070_a06a: draws a sprite
@@ -582,6 +584,7 @@ impl Level {
                 }
             }
             0x1428 => self.alien_after_move(id),
+            crate::gunship::WRECK => self.wreck_after_move(id),
             0x1432 => self.bigali_after_move(id, env),
             k => eprintln!("warning: move hook of {k:#x} not ported"),
         }
