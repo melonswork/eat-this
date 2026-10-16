@@ -66,40 +66,29 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
   teleport records 1000; after a teleport LevelFirstFrame runs a frame without the hero
   (`world_update`). Doors: `doors.rs` (segment 10a8).
 
-## State (2026-10-17)
+## State (2026-10-17, later)
 
-CITY01 exact for 610 windows (710/847 total), GRINDER 113/113. Debug aids: `ET_RNG=<frame-1>`
-(every port Random() with its Rust caller), `ET_RNG_TSV=file` + `tools/rngdiff.py` (first call whose
-range/result differs over the whole run; frame shifts of ~1 in object code show up as noise),
-`ET_DRONE=1` + `tools/dronediff.py` (drone vs tracer `--watch 1170:4d9e,4da0,4da2,4dac,4dae,
-4db0,4db2,4db4,4db6,4db8,4dba` into work/tracer_drone2), `ET_PART=F` (+`ET_ALLPART=1`) particles of
-12 frames vs the tracer's `--particles A-B` (particles.tsv: frame, idx, x, y, age, life, mask +34,
-state +3e, callback +42, mover +4a), `ET_HERO=F`, `ET_OBJ=1` (gunship), `ET_DEBUG=1` (aliens,
-bullet hits), `ET_HIT=1`, `ET_DOOR=1`, `ET_AREA=1`, `ET_CORPSE=1`, `ET_SPARK=1`. Always give the
-tracer enough `--windows`: windiff shows "original 0" past the traced windows, and the tracer's
-`--entry SEL:OFF --self LEN` dumps a method's object per call (use it to compare objects).
+CITY01 exact for 721 windows (800/847 total), GRINDER 113/113. Done since the 610 mark:
+ladders (HeroUpdate state -5: detection loop before the exits, grab before the Down-crouch, the -5 block before
+the levers; collision already knew -5), the hero's hit boxes are ALWAYS mirrored (the rec word is gHeroFacing =
++-1 and FUN_10f0_2240 only tests != 0; mirrored rects swap their edges), platform camera lock (script command
+0x14 = platform w20, 4e36 = (w20 + 0x7d) - platform.y + camY every frame while it is in the hero's sector),
+script commands that spawn enemies (command 0 with an object tile and command 0x10 = 0d5a at the row above the
+camera; `Effects.spawns` + `Level::flush_spawns`), decals (`decals.rs`: blood drops 0xbb0, shell casings 0xbc4,
+wall splats 0x976 in sector list L5A, updated by FUN_1070_fb30 BEFORE particle group 0; eviction FUN_1068_04d0 at
+> 0x1f; FUN_1058_016f takes the byte0 of the MAIN-plane cell looked up first, not plane 0's).
+Debug aids added: `ET_CAM` (camera per frame, compare with tracer `--watch gCameraX,gCameraY`), `ET_AIM`,
+`ET_CMD` (script commands / SETCELL / SCRIPT), `ET_FACT` (unported factory kinds), `ET_SPLAT`.
+Tracer: `--entry` works with SEL:OFF (`--entry 1068:182c`) but hooking EnemyFactory aborts the run; `--particles`
+tsv frame N ~ port ET_PART frame N-1 (the tracer samples before the update).
+Earlier aids (still valid): `ET_RNG=<frame-1>`, `ET_RNG_TSV=file` + `tools/rngdiff.py`, `ET_DRONE=1` +
+`tools/dronediff.py`, `ET_PART=F` (+`ET_ALLPART=1`), `ET_HERO=F`, `ET_OBJ=1`, `ET_DEBUG=1`, `ET_HIT=1`,
+`ET_DOOR=1`, `ET_AREA=1`, `ET_CORPSE=1`, `ET_SPARK=1`.
 
-Drone: `port/src/drone.rs` (pick-up effect 6, FUN_1088_03a3/9d34, flares 0a63/09f8/274f, effect
-64, a teleport puts it beside the hero: 0c20). The hit tests only record candidate boxes
-(`Drone::consider`); `Level::drone_update` replays them with line of sight (FUN_1068_0a54) before
-following the hero. 1170:093e (`aim_level2`) is the drone's priority: -1 for wrecks (`hit_test_low`),
-the big alien's shield and dead aliens whose +0x46 != -1, 0xf6 for the gunship's body, 0x100
-otherwise (the dying big alien keeps 0x100: 7eb2 only sets 093c). Mind such per-site wrappers: the
-decompile of each hit test site says exactly what 093c/093e it sets.
-
-Also ported this round: pick-up 1 (health +10, 4e6c is the HEALTH) and 70 (key + sparks);
-springboards (kind 0x148c, FUN_1070_d23b) with the hero's carry limits 4e16/4e18; conveyor belts
-(ground 5, nudge = tile param 3, walking off throws him vx +-0x17); somersault poses (states 7, 6);
-script command 10 (delayed tile/door events, queue in `Level::tile_events`) and platforms running
-the lever scripts of the cells they paste; weapon 4 (FUN_1088_6f4d, a bouncing charge) with effects
-77 (188c), 78 (0cf8, sparks) and 43 (45db, wall chunks); callback 0x229; objects sliding down slopes
-(17d6); ledge pull-up collision flags; hero body hit boxes mirrored only facing left.
-
-Next: window 611. At frame 21323 the original hero enters the use pose (state -30) because
-FUN_1060_0819 (a platform the hero rides/controls: sets 1170:5123 = 2 and 5124 = 4 from the
-platform's path and his position, lines 12612..13100 of the decompile) says so; the port jumps.
-Then: levers needing a key (HeroUpdate, tile param 2 flag 4: keys[tile function - 13980], port has
-`Hero::keys` indexed by the pick-up's f3), the arm hit-box flip in `take_hits` (still `facing`,
-unverified), effects 23/53/54, bonuses (6b03), script object tiles (0d5a), other weapons (1..3, 5..9),
-sideways shake 5c7d, frozen/burnt deaths, barrels of type >= 0xb (186c), level-leaving teleports,
-hero standing on the big alien's shield (00b6), wall chunks of tile functions 60308/60304 (45db).
+Next: window 722. Frame 25257: object kind 0x140a (walker with a turret rider; update FUN_1070_4051, constructor in
+`factory.rs`, port prints `object kind 0x140a not ported`; helpers 1765, 3d4c, 3d85, 3f4d, 0dd8, 00b6, 3a81).
+Also unported and seen in CITY01: kind 0x13f6 (stationary boss-like object, update FUN_1070_30b6, 790 updates),
+the hero riding a smallbot (FUN_1070_a18e), the hero's death (FUN_1068_186c splats), objects of VMT 0xc84
+(kind 0x14be, icon 61600, FUN_1070_0cce), kinds 0x14d2/0x14f0 icons, effects 23/53/54, bonus 0xd10 (6b03),
+levers needing a key, other weapons (1..3, 5..9), sideways shake 5c7d, frozen/burnt deaths, barrels >= 0xb,
+level-leaving teleports, hero on the big alien's shield (00b6), wall chunks 60308/60304 (45db).
