@@ -7,6 +7,7 @@
 
 mod actors;
 mod alien;
+mod bigali;
 mod archive;
 mod bg;
 mod camera;

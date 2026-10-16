@@ -137,7 +137,7 @@ impl Level {
             2 => {
                 let (x, y, sprite) = (self.o(id).w(0xe), self.o(id).w(0x10), self.o(id).w(0x32));
                 let mut damage = match sprites::hit_rect(sprite, y, x, false) {
-                    Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x11fb),
+                    Some((b, r, t, l)) => self.particles.hit_test_low(b, r, t, l, 0x11fb),
                     None => 0,
                 };
                 if self.stomp(sprite, y, x, false, env) > 0 {

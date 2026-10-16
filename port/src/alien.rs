@@ -812,7 +812,7 @@ impl Level {
             let (x, y) = self.xy(id);
             let sprite = self.o(id).w(0x34);
             let damage = match sprites::hit_rect(sprite, y, x, *mirror) {
-                Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x11fb),
+                Some((b, r, t, l)) => self.particles.hit_test_low(b, r, t, l, 0x11fb),
                 None => 0,
             };
             let o = self.o(id);
@@ -926,6 +926,11 @@ impl Level {
     /// FUN_1068_1bdd(y, x): an alien bursts into gibs: 64 bits of flesh, 8 bones, 16 drops of
     /// blood, then four puffs, all spread over the next frames.
     fn gibs(&mut self, y: i32, x: i32, env: &mut Env) {
+        self.gibs_speed(y, x, GIB_SPEED, env);
+    }
+
+    /// FUN_1068_1bdd with 1170:127c (the base speed) set to `base`.
+    pub(crate) fn gibs_speed(&mut self, y: i32, x: i32, base: i32, env: &mut Env) {
         let rng = &mut *env.rng;
         let ps = &mut self.particles;
         // Each step throws one piece left and one right, both spreading further each step:
@@ -937,7 +942,7 @@ impl Level {
         ps.p.callback = 0x23b7;
         ps.p.flags = 0x8c;
         for i in 1..=0x20 {
-            let (speed, spread) = ((i << 6) / 0x20 + GIB_SPEED, (i * 0x3c0) / 0x20);
+            let (speed, spread) = ((i << 6) / 0x20 + base, (i * 0x3c0) / 0x20);
             ps.p.delay = rng.random(8);
             let s = (rng.random(4) == 0) as i32 + 0x5407;
             ps.spawn(s, y, x);
@@ -953,7 +958,7 @@ impl Level {
         ps.p.flags = 0x84;
         ps.p.on_death = 0x30;
         for i in 1..=4 {
-            let (speed, spread) = ((i * 0x30) / 4 + GIB_SPEED, (i * 0x3c0) / 4);
+            let (speed, spread) = ((i * 0x30) / 4 + base, (i * 0x3c0) / 4);
             for side in 0..2 {
                 ps.p.delay = rng.random(8) + 8;
                 let s = rng.random(3) + 0x540f;
@@ -964,7 +969,7 @@ impl Level {
         }
         ps.p.on_death = 0;
         for i in 1..=8 {
-            let (speed, spread) = ((i << 5) / 8 + GIB_SPEED, (i * 0x3c0) / 8);
+            let (speed, spread) = ((i << 5) / 8 + base, (i * 0x3c0) / 8);
             for side in 0..2 {
                 ps.p.delay = rng.random(8) + 8;
                 ps.spawn_seq(0x5400, 4, 5, y, x, 1);

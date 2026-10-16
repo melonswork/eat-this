@@ -32,6 +32,10 @@ pub struct HeroView {
     pub vy: i32,
     pub fall: i32,
     pub up: bool,
+    /// 1170:4e2a: the hero's invulnerability frames.
+    pub hurt: i32,
+    /// 1170:4660: what hit him this frame.
+    pub hit_mask: i32,
 }
 
 impl Level {
@@ -40,7 +44,7 @@ impl Level {
     /// rectangle, 1170:45ca..45d0).
     pub fn update_actors(&mut self, env: &mut Env, window: (i32, i32, i32, i32)) {
         let sector = self.sector.unwrap_or(0);
-        if std::env::var_os("ET_DEBUG2").is_some() && env.frame == 950 {
+        if std::env::var("ET_DEBUG2").ok().and_then(|v| v.parse::<u32>().ok()) == Some(env.frame as u32) {
             for (s, l) in self.lists.iter().enumerate() {
                 for (li, ids) in l.iter().enumerate() {
                     for &id in ids {
@@ -111,6 +115,7 @@ impl Level {
             0x145a => self.smallbot(id, env),
             0x143c => self.crate_box(id, env),
             0x1428 => self.alien(id, env),
+            0x1432 => self.bigali(id, env),
             0x14aa => {} // FUN_1070_a06a: draws a sprite
             0x13c4 => {} // FUN_1068_315a: plain sound emitters (kinds < 10000) don't draw Random
             _ => {}
@@ -164,7 +169,7 @@ impl Level {
             (o.w(0xe), o.w(0x10))
         };
         let damage = match crate::sprites::hitbox(sprite) {
-            Some((l, tp, r, b)) => self.particles.hit_test(y + b, x + r, y + tp, x + l, 0x11fb),
+            Some((l, tp, r, b)) => self.particles.hit_test_low(y + b, x + r, y + tp, x + l, 0x11fb),
             None => 0,
         };
         if damage > 0 {
@@ -459,12 +464,12 @@ impl Level {
             let o = self.o(id);
             o.set(0xe, o.w(0xe) + carry);
         }
-        self.after_move(id);
+        self.after_move(id, env);
         result
     }
 
     /// VMT +0x10 after the physics. FUN_1068_1155 is the default.
-    fn after_move(&mut self, id: usize) {
+    fn after_move(&mut self, id: usize, env: &mut Env) {
         let kind = self.objects[id].as_ref().unwrap().kind;
         match kind {
             0x145a | 0x143c => {
@@ -485,6 +490,7 @@ impl Level {
                 }
             }
             0x1428 => self.alien_after_move(id),
+            0x1432 => self.bigali_after_move(id, env),
             k => eprintln!("warning: move hook of {k:#x} not ported"),
         }
     }

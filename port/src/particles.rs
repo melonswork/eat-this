@@ -381,6 +381,15 @@ impl Particles {
         self.spawn_seq(0x190a, 2, 2, y, x, 1);
     }
 
+    /// `hit_test` with the homing priority 1170:093c at 0 (wrecks, corpses, crates: rockets
+    /// only steer at them when nothing better is around), restored to 0x100 after.
+    pub fn hit_test_low(&mut self, bottom: i32, right: i32, top: i32, left: i32, mask: i32) -> i32 {
+        self.p.aim_level = 0;
+        let d = self.hit_test(bottom, right, top, left, mask);
+        self.p.aim_level = 0x100;
+        d
+    }
+
     /// FUN_1050_568b(bottom, right, top, left, mask): the damage of the particles hitting this
     /// box. A hit particle stops (unless flag 1) and remembers where it hit.
     pub fn hit_test(&mut self, bottom: i32, right: i32, top: i32, left: i32, mask: i32) -> i32 {

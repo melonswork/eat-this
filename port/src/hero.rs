@@ -111,6 +111,8 @@ pub struct Hero {
     /// 1170:4e2a: frames of invulnerability after a hit; 4e5e the same for the blinking.
     hurt: i32,
     hurt_blink: i32,
+    /// 1170:4660: what hit the hero this frame (25aa of the hit test), cleared each frame.
+    hit_mask: i32,
     /// 1170:511f: HeroStartJump's first argument (set when thrown back): falls fast even holding Up.
     knocked: bool,
     /// 1170:4de6: knocked down flat (after being thrown back) rather than crumpled (a fall).
@@ -191,6 +193,7 @@ impl Hero {
             health: HEALTH,
             hurt: 0,
             hurt_blink: 0,
+            hit_mask: 0,
             knocked: false,
             flat: false,
             on_slope: false,
@@ -265,6 +268,8 @@ impl Hero {
             vy: self.vy,
             fall: self.fall,
             up,
+            hurt: self.hurt,
+            hit_mask: self.hit_mask,
         }
     }
 
@@ -326,6 +331,7 @@ impl Hero {
         self.height = HEIGHT - (self.ground == 1) as i32;
         self.shakes.clear();
         self.cam_nudge = (0, 0);
+        self.hit_mask = 0;
         let mut friction = true;
         let mut walking = false;
         let (mut dx, mut dy) = (std::mem::take(&mut self.nudge), 0);
@@ -714,6 +720,7 @@ impl Hero {
             }
         }
         if damage != 0 {
+            self.hit_mask = ps.hit_mask;
             let kind = if ps.hit_mask & 0x20 != 0 { 4 } else { 1 };
             self.hit(damage, kind, rng);
         }

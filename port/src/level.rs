@@ -550,11 +550,33 @@ impl Level {
             }
             p.x = p.x16 >> 4;
             p.y = p.y16 >> 4;
+            if p.flags & 0x18 != 0 {
+                eprintln!("warning: a platform's shake/dust (flags {:#x}) not ported", p.flags);
+            }
+            let (sector, rect) = (p.sector, (p.x, p.y, p.x + p.width - 1, p.y + p.height - 1));
+            let mut done = false;
             if arrived {
                 p.point += 1;
-                if p.point == p.points.len() {
-                    self.paste_back(world, i);
-                }
+                done = p.point == p.points.len();
+            }
+            self.wake_actors(sector, rect);
+            if done {
+                self.paste_back(world, i);
+            }
+        }
+    }
+
+    /// FUN_1058_0114: actors of the sector whose box meets the rect get an unbounded box, so
+    /// they update wherever the camera is (riding a platform). Clears all but bit 0 of +0xc.
+    fn wake_actors(&mut self, sector: usize, (left, top, right, bottom): (i32, i32, i32, i32)) {
+        for &id in &self.lists[sector][crate::objects::list::ACTORS] {
+            let o = self.objects[id].as_mut().unwrap();
+            o.set(0xc, o.w(0xc) & 1);
+            if o.w(0xc) != 0 && o.w(2) <= right && o.w(4) <= bottom && left <= o.w(6) && top <= o.w(8) {
+                o.set(2, -0x7fff);
+                o.set(4, -0x7fff);
+                o.set(6, 0x7fff);
+                o.set(8, 0x7fff);
             }
         }
     }

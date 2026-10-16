@@ -34,6 +34,11 @@ struct Look {
 impl Level {
     /// FUN_1070_7eb2.
     pub fn bigali(&mut self, id: usize, env: &mut Env) {
+        if std::env::var_os("ET_DEBUG").is_some() {
+            let o = self.o(id);
+            let words: Vec<String> = (0..0x46).step_by(2).map(|i| o.w(i).to_string()).collect();
+            eprintln!("BIG {}\t{}", env.frame + 1, words.join(" "));
+        }
         let h = env.h;
         {
             let o = self.o(id);
@@ -724,6 +729,60 @@ impl Level {
             }
             ps.p.delay = 0;
             eprintln!("warning: FUN_1050_5c7d's sideways shake from a big alien not applied");
+        }
+    }
+
+    /// FUN_1070_72a2 (VMT +0x10 after the physics): falling and landing.
+    pub fn bigali_after_move(&mut self, id: usize, env: &mut Env) {
+        let o = self.o(id);
+        if o.w(0x1c) == 0 {
+            if o.w(0x1a) == 0 {
+                o.set(0x18, o.w(0x10));
+                if -300 < o.w(0x28) && o.w(0x28) != -0x78 {
+                    if o.w(0x28) == -10 && o.w(0x2e) < 1 {
+                        o.set(0x2e, o.w(0x20));
+                    } else {
+                        o.set(0x2e, 0);
+                    }
+                    o.set(0x28, -0x82);
+                    o.set(0x3c, 0);
+                }
+            }
+            o.set(0x1a, o.w(0x1a) + 1);
+            o.set(2, -0x7fff);
+            o.set(4, -0x7fff);
+            o.set(6, 0x7fff);
+            o.set(8, 0x7fff);
+            // FUN_1070_0105: a splash entering water (no water in the levels ported so far).
+        } else if o.w(0x1a) != 0 {
+            if o.w(0x28) == -0x82 {
+                let fall = o.w(0x10) - o.w(0x18);
+                if fall < 0x30 {
+                    o.set(0x28, -10);
+                    o.set(0x2e, 0);
+                    o.set(0x2c, 4);
+                    o.set(0x3e, 0);
+                } else {
+                    o.set(0x28, -0x14);
+                    o.set(0x2e, 0xb4);
+                    o.set(0x2c, 0);
+                }
+                if fall > 0x1f {
+                    let (x, y) = (o.w(0xe), o.w(0x10));
+                    // FUN_1040_66d4: dust.
+                    let ps = &mut self.particles;
+                    ps.p.colour = 0x10;
+                    ps.spawn_seq(0x6d00, 2, 0x13, y, x, 1);
+                    ps.p.colour = 0;
+                    env.fx.shakes.push((0x10, 6));
+                }
+            } else if o.w(0x28) == -0x78 {
+                o.set(0x28, -10);
+                o.set(0x2e, 0);
+                o.set(0x2c, 4);
+                o.set(0x3e, 0);
+            }
+            self.o(id).set(0x1a, 0);
         }
     }
 }
