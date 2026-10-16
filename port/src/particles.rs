@@ -524,12 +524,10 @@ impl Particles {
                 eprintln!("BLAST rel {l},{t},{r},{b} flags {:x} dmg {} boxes {:?}", m.w(0x3a), m.w(0x38), boxes);
             }
             if hflip != 0 {
-                l = -l;
-                r = -r;
+                (l, r) = (-r, -l);
             }
             if vflip != 0 {
-                t = -t;
-                b = -b;
+                (t, b) = (-b, -t);
             }
             let mut hit = false;
             for hb in &boxes {
@@ -1851,6 +1849,9 @@ fn blast_damage(m: &Obj, bottom: i32, right: i32, top: i32, left: i32) -> i32 {
             d
         }
     };
+    if std::env::var("ET_HIT").is_ok() {
+        eprintln!("blast_damage p {px},{py} box {x1},{y1},{x2},{y2} target l{left} r{right} t{top} b{bottom} dmg {}", m.w(0x38));
+    }
     let d = if px < left {
         vertical(((left - px) * 0x40) / (x2 - px))
     } else if right < px {
