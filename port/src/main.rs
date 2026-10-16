@@ -222,7 +222,9 @@ impl Game {
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
         self.level.now = self.frame;
         let mut fx = Effects::default();
-        self.level.update_platforms(&mut self.world);
+        if let Some(o) = self.level.update_platforms(&mut self.world, self.camera.y) {
+            self.camera.offset.1 = o;
+        }
         for cell in std::mem::take(&mut self.level.pasted) {
             self.level.run_scripts(&mut self.world, cell, &mut fx);
         }
@@ -286,6 +288,9 @@ impl Game {
             }
         }
         let cam = (self.camera.x, self.camera.y);
+        if std::env::var("ET_CAM").is_ok() {
+            eprintln!("CAM {} {} {}", self.frame, cam.0, cam.1);
+        }
         let mut ps = std::mem::take(&mut self.level.particles);
         self.hero
             .update(&self.world, &self.level, &input, mouse_now, cam, &mut ps, &mut self.rng);

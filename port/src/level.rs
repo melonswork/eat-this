@@ -339,6 +339,12 @@ impl Level {
                     }
                     lc += 1;
                 }
+                0x14 => {
+                    if let Some(Some(p)) = self.platforms.get_mut(last_platform) {
+                        p.cam_lock = arg(1) as i16 as i32;
+                    }
+                    lc += 2;
+                }
                 0x1d => {
                     fx.grinder_slow = true;
                     lc += 1;
@@ -357,7 +363,7 @@ impl Level {
                 0x01 | 0x02 | 0x0e => lc += 4,
                 0x0f => lc += 5,
                 0x0c | 0x10 | 0x11 | 0x15 | 0x17 | 0x19 => lc += 3,
-                0x12 | 0x14 | 0x1a => lc += 2,
+                0x12 | 0x1a => lc += 2,
                 _ => lc += 1,
             }
         }
@@ -566,7 +572,8 @@ impl Level {
     }
 
     /// FUN_1078_0aef: move the platforms of the hero's sector one step along their paths.
-    pub fn update_platforms(&mut self, world: &mut World) {
+    pub fn update_platforms(&mut self, world: &mut World, cam_y: i32) -> Option<i32> {
+        let mut cam_offset = None;
         for i in 0..self.platforms.len() {
             let Some(p) = self.platforms[i].as_mut() else {
                 continue;
@@ -575,6 +582,10 @@ impl Level {
                 continue;
             }
             (p.prev_x, p.prev_y) = (p.x, p.y);
+            if p.cam_lock != 0x7fff {
+                // 1170:4e36, where the hero rests on screen, pinned to the platform.
+                cam_offset = Some((p.cam_lock + 0x7d) - p.y + cam_y);
+            }
             let Some(&(px, py, speed)) = p.points.get(p.point) else {
                 continue;
             };
@@ -618,6 +629,7 @@ impl Level {
                 self.paste_back(world, i);
             }
         }
+        cam_offset
     }
 
     /// FUN_1058_0114: actors of the sector whose box meets the rect get an unbounded box, so

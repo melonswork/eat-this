@@ -354,6 +354,9 @@ impl Hero {
     /// HeroAimAtMouse (1088:420b).
     fn aim_at_mouse(&mut self) {
         let g = &mut self.gun;
+        if std::env::var("ET_AIM").is_ok() {
+            eprintln!("AIM hero {},{} muzzle {:?} mouse {:?} cam {:?}", self.x, self.y, g.muzzle, g.mouse, g.cam);
+        }
         g.aim = crate::trig::atan2(
             g.mouse.1 - ((self.y + g.muzzle.1 - 0x16) - g.cam.1),
             g.mouse.0 - ((self.x + g.muzzle.0) - g.cam.0),
