@@ -119,6 +119,7 @@ impl Level {
         match kind {
             0x145a => self.smallbot(id, env),
             0x143c => self.crate_box(id, env),
+            0x13d8 => self.mine(id, env),
             0x1428 => self.alien(id, env),
             0x1432 => self.bigali(id, env),
             0x14aa => {} // FUN_1070_a06a: draws a sprite
@@ -135,6 +136,83 @@ impl Level {
         self.lists[s][l].remove(i);
         self.walk_index -= 1;
         self.objects[id] = None;
+    }
+
+    /// FUN_1070_02b3: a mine (0x13d8). Shot (fire: soon) or with the hero close by it starts
+    /// ticking (+0x20) and goes off 0x40 frames later (+0x22 counts).
+    fn mine(&mut self, id: usize, env: &mut Env) {
+        let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
+        let d = match crate::sprites::hit_rect(0x4c00, y, x, false) {
+            Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x11ff),
+            None => 0,
+        };
+        let fire = self.particles.hit_mask & 4 != 0;
+        let o = self.o(id);
+        if d > 0 {
+            o.set(0x20, 1);
+            if !fire {
+                o.set(0x22, 0x40);
+            } else if o.w(0x22) < 0x31 {
+                o.set(0x22, 0x31);
+            }
+            unbounded(o);
+        }
+        if o.w(0x20) == 0 {
+            o.set(2, x - 0x50);
+            o.set(6, x + 0x50);
+            o.set(4, y - 0x20);
+            o.set(8, y + 0x10);
+            let (hx, hy, _) = env.hero;
+            if x - 0x60 < hx && hx < x + 0x60 && y - 0x30 < hy && hy < y + 0x30 {
+                o.set(0x20, 1);
+                o.set(0x22, 0);
+                unbounded(o);
+            }
+        } else {
+            o.set(0x22, o.w(0x22) + 1);
+            if o.w(0x22) > 0x3f {
+                self.mine_explode(id, y, x, env);
+                return;
+            }
+        }
+        if self.actor_physics(id, env, 3, 6, 5) > 0 {
+            let o = self.o(id);
+            o.set(0x20, 1);
+            o.set(0x22, 0x40);
+            unbounded(o);
+        }
+    }
+
+    fn mine_explode(&mut self, id: usize, y: i32, x: i32, env: &mut Env) {
+        self.explode_area(env.world, 0x60, 0x14, y + 0xe, x + 0x2e, y - 0x2e, x - 0x2e, env.rng, env.fx);
+        let ps = &mut self.particles;
+        ps.blast(2, 0xc0, 7, 0x1e, 0x3e, -0x3e, -0x3e, y, x);
+        ps.p.group = 0;
+        ps.p.hits = 0x8000;
+        ps.p.on_death = 0x10;
+        for (speed, base, sign, range) in [(0x70, 0x640, 1, 0xa0), (0x80, 0x5e0, 1, 0x60), (0x80, 0x560, -1, 0x60), (0x70, 0x500, -1, 0xa0)] {
+            ps.spawn(-10, y, x);
+            let a = base + sign * env.rng.random(range);
+            ps.throw(9, speed, a);
+        }
+        ps.p.on_death = 0;
+        ps.p.hits = 0;
+        ps.p.delay = 4;
+        ps.p.colour = 0x10;
+        ps.spawn_seq(0x6e00, 3, 0x13, y - 4, x, 1); // FUN_1040_690b
+        let r = env.rng.random(0x40);
+        let m = &mut ps.last_mut().m;
+        m.set(0x1c, r + 0x122);
+        m.set(0x1e, r + 0x100);
+        m.set(0x42, 0x2148);
+        ps.p.colour = 0;
+        ps.p.group = 1;
+        ps.p.delay = 0x14;
+        crate::alien::smoke_sprite(ps, y, x);
+        ps.p.delay = 0;
+        ps.spawn_seq(0x6500, 2, 0x14, y - 6, x, 1);
+        env.fx.shakes.push((0x2a, 0x10));
+        self.remove_current(id);
     }
 
     /// FUN_1070_90f1: a crate (0x143c). Shots push it and wear it down.
@@ -494,6 +572,15 @@ impl Level {
                     o.set(0x1a, 0);
                 }
             }
+            0x13d8 => {
+                // FUN_1070_028b: a falling mine goes off.
+                let o = self.o(id);
+                if o.w(0x1c) == 0 {
+                    o.set(0x20, 1);
+                    o.set(0x22, 0x40);
+                    unbounded(o);
+                }
+            }
             0x1428 => self.alien_after_move(id),
             0x1432 => self.bigali_after_move(id, env),
             k => eprintln!("warning: move hook of {k:#x} not ported"),
@@ -509,4 +596,12 @@ pub(crate) fn slope_height(w: &World, x: i32, cell: u16) -> i32 {
         i = 0xf - i;
     }
     crate::world::SLOPES[((p & 0xff7f) as usize) * 0x16 + i as usize] as i32
+}
+
+/// FUN_1058_0002: an unbounded box (the object updates wherever the camera is).
+fn unbounded(o: &mut crate::objects::Obj) {
+    o.set(2, -0x7fff);
+    o.set(4, -0x7fff);
+    o.set(6, 0x7fff);
+    o.set(8, 0x7fff);
 }
