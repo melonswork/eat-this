@@ -74,6 +74,7 @@ pub struct Hero {
     nudge: i32,
     hang_x: i32,       // 1170:4e52
     hang_y: i32,       // 1170:4e54
+    belt: i32,         // 1170:4ea0: the conveyor's speed under him
     climb: i32,        // 1170:4e0e: 0 hanging, 1..0x1b pulling up
     push_timer: i32,   // 1170:4e12 (gHeroShootWalkTimer): frames since pushing a wall
     prev_blocked: i32, // 1170:4e64: last frame's gHeroBlockedDX
@@ -205,6 +206,7 @@ impl Hero {
             nudge: 0,
             hang_x: 0,
             hang_y: 0x7fff,
+            belt: 0,
             climb: 0,
             push_timer: 0,
             prev_blocked: 0,
@@ -793,6 +795,10 @@ impl Hero {
         let (blocked, step_h) = self.move_and_collide(w, lv, dx, dy);
         self.prev_blocked = blocked;
         self.push_out_of_walls(w);
+        if self.ground == 5 {
+            // A conveyor belt (tile function 11000) carries him next frame (1170:4e06).
+            self.nudge = self.belt;
+        }
         let posed = self.end_of_frame(walking, blocked, step_h, rng);
         self.gun_end(posed, &input, rng, ps.now);
         self.pick_up(w);
@@ -827,6 +833,9 @@ impl Hero {
 
     /// FUN_1088_3c32(damage) with 1170:162a = `kind` (1 shot, 4 burnt).
     fn hit(&mut self, damage: i32, kind: i32, rng: &mut PascalRandom) {
+        if std::env::var("ET_HIT").is_ok() {
+            eprintln!("HIT damage {damage} kind {kind} health {} hurt {} mask {:x}", self.health, self.hurt, self.hit_mask);
+        }
         if self.hurt >= 1 {
             return;
         }
@@ -1371,6 +1380,7 @@ impl Hero {
         let mut best = NONE;
         let mut carry = 0;
         let mut ground = self.ground;
+        let mut belt = None;
         // One column test (FUN_1088_2cff + 2c97). `offset` and `pdy` are 0 for the map.
         let mut column = |func0: u16,
                           sol: u16,
@@ -1379,7 +1389,8 @@ impl Hero {
                           offset: i32,
                           pdy: i32,
                           best: &mut i32,
-                          ground: &mut i32|
+                          ground: &mut i32,
+                          belt: &mut Option<(usize, i32, i32)>|
          -> bool {
             let solid_floor = sol & solid::HERO_FLOOR != 0;
             let ladder_top = func0 == 10
@@ -1400,6 +1411,7 @@ impl Hero {
                 *ground = if !solid_floor && *ground > 9 {
                     0x14
                 } else if func0 == 11000 {
+                    *belt = Some(sx_abs.0).map(|pl| (pl, sy, sx_abs.1));
                     5
                 } else if *ground != 5 {
                     9
@@ -1425,6 +1437,7 @@ impl Hero {
                 0,
                 &mut best,
                 &mut ground,
+                &mut belt,
             );
             sx = if k == 1 { x + hw } else { sx + 16 };
             if k == 0 {
@@ -1460,6 +1473,7 @@ impl Hero {
                         pdy,
                         &mut best,
                         &mut ground,
+                        &mut belt,
                     ) {
                         carry = p.x - p.prev_x;
                     }
@@ -1473,6 +1487,11 @@ impl Hero {
         }
         if best != NONE {
             self.ground = ground;
+        }
+        if let Some((plane, sy, sx)) = belt {
+            if let Some(cell) = w.cell_at(plane, sy, sx) {
+                self.belt = w.cell_function(cell, 3) as i16 as i32;
+            }
         }
         if self.collide_flags & 2 == 0 {
             return (best, carry);

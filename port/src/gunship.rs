@@ -30,6 +30,11 @@ impl Level {
                 o.set(0x34, o.w(0x34) - 1);
             }
         }
+        if std::env::var("ET_OBJ").is_ok() {
+            let o = self.o(id);
+            let ws: Vec<String> = (0..0x20).map(|i| o.w(i * 2).to_string()).collect();
+            eprintln!("OBJ {} {}", env.frame + 1, ws.join(" "));
+        }
         let state = self.o(id).w(0x32);
         let mut sprite;
         match state {

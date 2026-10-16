@@ -252,18 +252,20 @@ impl Game {
         };
         if std::env::var("ET_PART").ok().and_then(|v| v.parse::<u32>().ok()).is_some_and(|f| self.frame >= f && self.frame < f + 12) {
             for p in &self.level.particles.list {
-                if p.m.w(0x4a) == particles::MOVE_ROCKET as i32 {
-                    eprintln!("PART frame {} rocket pos {},{} age {} life {} state {} hits34 {:x}", self.frame, p.m.w(8), p.m.w(0xa), p.m.w(0x24), p.m.w(0x22), p.m.w(0x3e), p.m.w(0x34));
+                if p.m.w(0x4a) == particles::MOVE_ROCKET as i32 || std::env::var("ET_ALLPART").is_ok() {
+                    eprintln!("PART frame {} pos {},{} age {} life {} state {} mask {} cb {:x} box {},{},{},{}", self.frame, p.m.w(8), p.m.w(0xa), p.m.w(0x24), p.m.w(0x22), p.m.w(0x3e), p.m.w(0x34), p.m.w(0x42), p.m.w(0x2c), p.m.w(0x2e), p.m.w(0x30), p.m.w(0x32));
                 }
             }
         }
         if std::env::var("ET_HERO").ok().and_then(|v| v.parse::<u32>().ok()).is_some_and(|f| self.frame >= f && self.frame < f + 4) {
             let (hx, hy) = (self.hero.x, self.hero.y);
-            eprintln!("HERO frame {} at {hx},{hy} state {}", self.frame, self.hero.state);
-            for dy in -24..=8 {
-                eprint!(" {:x}", hero::Hero::solidity_all(&self.world, &self.level, hy + dy, hx));
+            eprintln!("HERO frame {} at {hx},{hy} state {} height {}", self.frame + 1, self.hero.state, self.hero.height);
+            for dx in [0, -6, -9, -12] {
+                for dy in -40..=8 {
+                    eprint!(" {:x}", hero::Hero::solidity_all(&self.world, &self.level, hy + dy, hx + dx));
+                }
+                eprintln!();
             }
-            eprintln!();
             for p in self.level.platforms.iter().flatten() {
                 eprintln!("  platform {},{} {}x{}", p.x, p.y, p.width, p.height);
             }
@@ -291,7 +293,8 @@ impl Game {
             } else if effect == 6 {
                 self.level.particles.drone.pickup(y, x);
             } else if effect == 1 {
-                // FUN_1040_014a: a bonus (score 4e6c += 10, 4ea8 += 1) bursts into sparks.
+                // FUN_1040_014a: health +10 (1170:4e6c, a heart), a counter 4ea8 += 1, sparks.
+                self.hero.health += 10;
                 self.level.particles.bonus_pickup(y, x);
             } else if effect == 70 {
                 // FUN_1040_043c: a key (1170:5104 + f3), sparks like a weapon's.
