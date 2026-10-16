@@ -77,8 +77,8 @@ pub struct Level {
     pub now: u32,
     /// gHeroX as the objects and effects see it this frame.
     pub hero_x: i32,
-    /// gCameraY (the scripts' spawn row).
-    pub cam_y: i32,
+    /// gCameraX/Y as the scripts and decals see them.
+    pub cam: (i32, i32),
     /// FUN_1058_008f's position in the collection being walked (1170:45d6).
     pub walk_index: i32,
     /// The (sector, list) being walked, for FUN_1070_0002.
@@ -137,7 +137,7 @@ impl Level {
             tile_events: Vec::new(),
             now: 0,
             hero_x: 0,
-            cam_y: 0,
+            cam: (0, 0),
             walk_index: 0,
             walking: (0, 0),
             particles: Default::default(),
@@ -361,7 +361,7 @@ impl Level {
                 }
                 0x10 => {
                     // FUN_1088_0d5a(tile, column of the cell + the row above the camera).
-                    let row = ((self.cam_y - 15) as u16 >> 4) as i32;
+                    let row = ((self.cam.1 - 15) as u16 >> 4) as i32;
                     fx.spawns.push((arg(2), (arg(1) as i32 % width + row * width) as u16));
                     lc += 3;
                 }

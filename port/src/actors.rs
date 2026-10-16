@@ -67,7 +67,7 @@ impl Level {
 
     /// FUN_1058_008f. Objects removed during the walk keep the walk's position right
     /// (the original's 1170:45d6 bookkeeping).
-    fn walk(&mut self, sector: usize, l: usize, env: &mut Env, window: (i32, i32, i32, i32)) {
+    pub(crate) fn walk(&mut self, sector: usize, l: usize, env: &mut Env, window: (i32, i32, i32, i32)) {
         let mut i = 0;
         while i < self.lists[sector][l].len() {
             let id = self.lists[sector][l][i];
@@ -219,6 +219,9 @@ impl Level {
             0x1432 => self.bigali(id, env),
             0x14aa => {} // FUN_1070_a06a: draws a sprite
             0x148c => self.springboard(id, env),
+            crate::decals::DROP => self.drop_decal(id, env),
+            crate::decals::SHELL => self.shell_decal(id, env),
+            crate::decals::SPLAT => self.splat(id, env),
             0x13c4 => {} // FUN_1068_315a: plain sound emitters (kinds < 10000) don't draw Random
             k => eprintln!("warning: object kind {k:#x} not ported"),
         }

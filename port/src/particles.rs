@@ -1165,7 +1165,10 @@ impl Level {
                     f.rng.random(8);
                 }
                 if self.particles.keep_dying {
-                    f.rng.random(2);
+                    let draw = f.rng.random(2);
+                    let m = &self.particles.list[self.particles.current].m;
+                    let (sprite, py, px) = (m.w(0x14) + 3, m.w(0x12), m.w(0x10));
+                    self.lay_decal(f.world, crate::decals::SHELL, draw, sprite, py, px);
                 }
             }
             14 => self.rocket_blast(y, x, f),
@@ -1242,8 +1245,10 @@ impl Level {
                     } else {
                         self.particles.spawn_seq(base + 0x19, 4, 5, hy, hx, 1);
                         if f.rng.random(2) == 0 && (base == 0x5400 || base == 0x5300) {
-                            f.rng.random(3);
-                            f.rng.random(2);
+                            let sprite = base + f.rng.random(3) + 0x29;
+                            let draw = f.rng.random(2);
+                            let (py, px) = (self.particles.list[self.particles.current].m.w(0x12), self.particles.list[self.particles.current].m.w(0x10));
+                            self.lay_decal(f.world, crate::decals::DROP, draw, sprite, py, px);
                         }
                     }
                 }

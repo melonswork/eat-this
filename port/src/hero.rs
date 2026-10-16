@@ -125,6 +125,8 @@ pub struct Hero {
     held_lever: i32,
     /// The lever operations this frame, for the level: (cell, y, x, pull).
     pub levers: Vec<(i32, i32, i32, bool)>,
+    /// Blood splats the hero's hits ask for (FUN_1058_0218): (sprite, y, x).
+    pub splats: Vec<(i32, i32, i32)>,
     /// 1170:4e6c.
     pub health: i32,
     /// 1170:5104..: the keys picked up (pick-up effect 70).
@@ -244,6 +246,7 @@ impl Hero {
             use_frame: 0x7fff,
             held_lever: -1,
             levers: Vec::new(),
+            splats: Vec::new(),
             health: HEALTH,
             keys: [false; 16],
             hurt: 0,
@@ -1022,8 +1025,8 @@ impl Hero {
                 self.throw_back();
                 self.shakes.push((0x10, 8));
                 if damage > 0x4f && rng.random(3) != 0 {
-                    rng.random(5);
-                    eprintln!("warning: blood splats (FUN_1058_0218) not ported");
+                    let sprite = rng.random(5) + 0x531e;
+                    self.splats.push((sprite, self.y - 0x24, self.x));
                 }
             }
             4 => {

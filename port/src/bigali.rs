@@ -304,8 +304,9 @@ impl Level {
                     self.o(id).set(0x36, 0);
                     if self.particles.hit_mask & 0x400 == 0 {
                         let (x, y) = self.bxy(id);
-                        env.rng.random(8);
-                        env.rng.random(3); // a blood splat (FUN_1058_0218, not kept)
+                        let by = (y - 0x20) - env.rng.random(8);
+                        let which = env.rng.random(3);
+                        self.blood_splat(env.world, 0x541e + which, by, x);
                         env.rng.random(3); // the death cry
                         let o = self.o(id);
                         o.set(0x28, -300);
@@ -683,8 +684,9 @@ impl Level {
             let speed = env.rng.random(9) + 0x30;
             self.gibs_speed(y, x, speed, env);
             if env.rng.random(3) != 0 {
-                env.rng.random(8);
-                env.rng.random(3); // a blood splat (FUN_1058_0218, not kept)
+                let by = (oy - 0x20) - env.rng.random(8);
+                let which = env.rng.random(3);
+                self.blood_splat(env.world, 0x541e + which, by, x);
             }
             let ps = &mut self.particles;
             ps.p.delay = 0x14;

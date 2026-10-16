@@ -272,7 +272,7 @@ impl Level {
                             let (x, y) = self.xy(id);
                             let by = (y - 0x20) - env.rng.random(8);
                             let which = env.rng.random(3);
-                            self.blood_splat(0x541e + which, by, x);
+                            self.blood_splat(env.world, 0x541e + which, by, x);
                             // FUN_1070_59d5: a puff of blood (group 0).
                             self.particles.p.group = 0;
                             blood_puff(&mut self.particles, y - 0x14, x);
@@ -923,7 +923,7 @@ impl Level {
                 if env.rng.random(3) != 0 {
                     let by = (oy - 0x20) - env.rng.random(8);
                     let which = env.rng.random(3);
-                    self.blood_splat(0x541e + which, by, x);
+                    self.blood_splat(env.world, 0x541e + which, by, x);
                 }
             } else {
                 eprintln!("warning: alien burnt (FUN_1070_544e) not ported");
@@ -994,11 +994,6 @@ impl Level {
             blood_puff(ps, y + dy, x + dx);
         }
         ps.p.delay = 0;
-    }
-
-    /// FUN_1058_0218(sprite, y, x): a blood splat on the wall behind, if there is a wall.
-    fn blood_splat(&mut self, _sprite: i32, _y: i32, _x: i32) {
-        eprintln!("warning: blood splats (FUN_1058_0218) not ported");
     }
 
     /// FUN_1068_0dd8(half, dx): walk dx along the patrol range; turn at its ends, walls and

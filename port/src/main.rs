@@ -12,6 +12,7 @@ mod archive;
 mod bg;
 mod camera;
 mod data;
+mod decals;
 mod doors;
 mod drone;
 mod demo;
@@ -227,7 +228,7 @@ impl Game {
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
         self.level.now = self.frame;
         let mut fx = Effects::default();
-        self.level.cam_y = self.camera.y;
+        self.level.cam = (self.camera.x, self.camera.y);
         if let Some(o) = self.level.update_platforms(&mut self.world, self.camera.y) {
             self.camera.offset.1 = o;
         }
@@ -303,6 +304,9 @@ impl Game {
         self.hero
             .update(&self.world, &self.level, &input, mouse_now, cam, &mut ps, &mut self.rng);
         self.level.particles = ps;
+        for (sprite, y, x) in std::mem::take(&mut self.hero.splats) {
+            self.level.blood_splat(&self.world, sprite, y, x);
+        }
         self.level.hero_x = self.hero.x;
         if let Some((y, x, aim, parity)) = self.hero.gun.shot {
             self.level.particles.hero_fire(y, x, aim, parity);
@@ -363,7 +367,7 @@ impl Game {
         if std::env::var("ET_DOOR").is_ok() && self.frame >= 16490 && self.frame < 16508 {
             eprintln!("DOORS frame {} hero {:?}", self.frame + 1, hero_at);
         }
-        self.level.cam_y = self.camera.y;
+        self.level.cam = (self.camera.x, self.camera.y);
         self.level.doors_near_hero(&mut self.world, hero_at, false);
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, false, &mut cx);
@@ -396,8 +400,23 @@ impl Game {
     /// the actors (FUN_1070_faec), group 1, the level's foreground procedure.
     fn world_update(&mut self, fx: &mut Effects, noise: i32, up: bool, window: (i32, i32, i32, i32)) {
         self.level.hero_x = self.hero.x;
-        // FUN_1050_4ca5(0): debris and critters, before the actors.
+        // FUN_1070_fb30: the things lying around.
         let cam = (self.camera.x, self.camera.y);
+        self.level.cam = cam;
+        {
+            let mut env = actors::Env {
+                world: &mut self.world,
+                rng: &mut self.rng,
+                fx,
+                hero: (self.hero.x, self.hero.y, self.hero.height),
+                frame: self.frame,
+                h: self.hero.view(up),
+                noise,
+                camera: cam,
+            };
+            self.level.update_decals(&mut env, window);
+        }
+        // FUN_1050_4ca5(0): debris and critters, before the actors.
         let mut pf = particles::Frame {
             world: &mut self.world,
             rng: &mut self.rng,
