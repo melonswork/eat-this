@@ -26,6 +26,7 @@ pub const CROUCH: i32 = -40;
 pub const LEDGE: i32 = -4;
 /// Pulling a lever (HeroUseObject).
 pub const USE: i32 = -30;
+pub const LADDER: i32 = -5;
 /// Walking into an exit (function 9000 tiles).
 pub const EXIT: i32 = -100;
 /// Tile function of exits (doors to another place, paired by the teleport records).
@@ -462,6 +463,18 @@ impl Hero {
             }
         }
 
+        // Ladder tiles (function 10) along the body: their kind (param 2) and flags (param 3).
+        let (mut ladder_kind, mut ladder_flags) = (-1i32, 0i32);
+        for k in 0..=((self.height - 1) >> 4) {
+            let ty = self.y - k * 16;
+            if w.tile_function_at(ty, self.x) == 10 {
+                let cell = w.cell_at(MAIN_PLANE, ty, self.x).unwrap_or(0);
+                ladder_kind = w.cell_function(cell, 2) as i16 as i32;
+                let f3 = w.cell_function(cell, 3) as i32;
+                ladder_flags = if k == 0 { f3 } else { ladder_flags | f3 };
+            }
+        }
+
         if self.state == KNOCKED_DOWN {
             self.gun.shooting = false;
             if self.flat {
@@ -476,6 +489,35 @@ impl Hero {
                 self.crouch = 8;
             } else {
                 self.anim -= 1;
+            }
+        }
+
+        // Grabbing a ladder (HeroGrabLadder): Up on the way in, Down from above.
+        let mut down_ladder = false;
+        if self.state >= 0 || matches!(self.state, LADDER | USE | CROUCH) {
+            if ladder_kind == -1 || !held(UP) || self.state == LADDER {
+                if held(DOWN) && w.tile_function_at(self.y + 1, self.x) == 10 {
+                    if ladder_kind == -1 {
+                        let cell = w.cell_at(MAIN_PLANE, self.y + 1, self.x).unwrap_or(0);
+                        ladder_kind = w.cell_function(cell, 2) as i16 as i32;
+                        ladder_flags = w.cell_function(cell, 3) as i32;
+                    }
+                    down_ladder = true;
+                    if self.state != LADDER
+                        && (self.ground == 0
+                            || (self.state == CROUCH && 8 - (self.head_blocked == 0) as i32 == self.crouch)
+                            || w.tile_function_at(self.y - 0x10, self.x) == 10)
+                    {
+                        self.state = LADDER;
+                        self.anim = 9;
+                    }
+                }
+            } else if self.ground == 0 || self.use_count == 1 {
+                self.state = LADDER;
+                self.anim = 9;
+            } else {
+                self.lever_reach = 2;
+                self.released[UP] = true;
             }
         }
 
@@ -550,6 +592,71 @@ impl Hero {
                         self.turn = NO_TURN;
                         self.anim = 0;
                     }
+                }
+            }
+        }
+
+        if self.state == LADDER {
+            if ladder_kind == -1 || (self.ceiling > 0 && !down_ladder) {
+                self.released[UP] = false;
+                if w.tile_function_at(self.y + 2, self.x) == 10 {
+                    dy = ((self.y & !15) + 0xf) - self.y;
+                    self.ground = 9;
+                    self.crouch_down();
+                    self.crouch = (self.head_blocked != 0) as i32 + 6;
+                    self.frame = 0xa8;
+                    self.height = 0x18;
+                } else {
+                    self.stand();
+                }
+            } else {
+                if !held(UP) {
+                    if held(DOWN) {
+                        dy += 2;
+                        self.anim -= 1;
+                    }
+                } else if !held(DOWN) && ladder_flags & 2 == 0 {
+                    dy -= 2;
+                    if self.ceiling < 0 {
+                        self.anim &= !1;
+                    } else {
+                        self.anim += 1;
+                    }
+                }
+                if ladder_flags & 1 == 0 && (self.ground != 9 || dy < 1) {
+                    if !held(LEFT) {
+                        if held(RIGHT) {
+                            dx += 1;
+                        }
+                    } else {
+                        dx -= 1;
+                    }
+                }
+                if ladder_kind == 0 {
+                    self.anim = (self.anim + 0x20) % 0x20;
+                    self.frame = self.anim / 2 + 0x3a;
+                } else if ladder_kind == 1 || ladder_kind == 9 {
+                    self.anim = (self.anim + 0x20) % 0x20;
+                    self.frame = 200 + 8 - ((self.anim / 2) % 16 - 8).abs();
+                }
+                self.height = 0x29;
+                if w.tile_function_at(self.y + 1, self.x) == 10 {
+                    let mut k = 5;
+                    while w.tile_function_at(self.y - (k + 1) * 6, self.x) != 10 {
+                        self.frame = 0x11d - k;
+                        if self.frame == 0x118 {
+                            self.frame = 0x119;
+                        }
+                        self.anim = 9;
+                        self.height = (6 - k) * -3 + 0x29;
+                        if k == 0 {
+                            break;
+                        }
+                        k -= 1;
+                    }
+                }
+                if dx == 0 {
+                    dx = (((self.x & !15) + 7 + (self.facing > 0) as i32) - self.x).signum();
                 }
             }
         }
