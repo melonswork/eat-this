@@ -66,16 +66,31 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
   teleport records 1000; after a teleport LevelFirstFrame runs a frame without the hero
   (`world_update`). Doors: `doors.rs` (segment 10a8).
 
-## State (2026-10-16, evening)
+## State (2026-10-16, night)
 
-CITY01 exact for 319 windows (550/847 total), GRINDER 113/113. Debug aid: `ET_RNG=<frame-1>`
-prints every port Random() with its Rust caller — paste it next to the tracer's calls.tsv rows
-for the frame to see the first differing call.
+CITY01 exact for 434 windows (632/847 total), GRINDER 113/113. Debug aids: `ET_RNG=<frame-1>`
+(every port Random() with its Rust caller), `ET_DRONE=1` (per-frame drone state `DRONE frame x y
+bob angle tx ty dist reload burst`, `CAND` = hit-test boxes it considered with caller, `GOAL`),
+`ET_PART=F` (+`ET_ALLPART=1`) particles of 12 frames, `ET_HERO=F`, `ET_OBJ=1` (gunship fields),
+`ET_HIT=1`. Tracer: `--particles A-B` dumps the particle array (frame, idx, x, y, age, life, mask
++34, state +3e, callback +42, mover +4a) into particles.tsv; use `--out DIR` to keep the main
+run's files (windiff reads work/tracer/<demo>/calls.tsv, so rerun it far enough: windiff shows
+"original 0" past the traced windows!).
 
-Next: window 320 needs the hero's drone (pick-up effect 6 → FUN_1088_03a3; globals
-4d9e..4dbc; per-frame FUN_1088_9d34 follows the hero and shoots at the target the hit tests
-pick (FUN_1050_51aa/568b compare 093e against 4db6, distance against 4db4); enemy rockets
-release flares at it (FUN_1050_0a63 from the rocket callback 0b2a). Also not ported: pick-up
-effects 1 (score, 4e6c/4ea8) and 70 (keys 1170:5104), effects 23/54, bonuses (6b03), script
-object tiles (0d5a), other weapons, sideways shake 5c7d, frozen/burnt deaths, barrels of type
->= 0xb (186c), level-leaving teleports.
+Drone: `port/src/drone.rs` (pick-up effect 6, FUN_1088_03a3/9d34, flares 0a63/09f8/274f, effect
+64). The hit tests only record candidate boxes (`Drone::consider`); `Level::drone_update` replays
+them with line of sight (FUN_1068_0a54) before following the hero. 1170:093e (`aim_level2`) is
+the drone's priority: -1 for wrecks (`hit_test_low`) and the big alien's shield, 0xf6 for the
+gunship's body, 0x100 otherwise (the dying big alien keeps 0x100: 7eb2 only sets 093c).
+Pick-up 1 = health +10 (4e6c is the HEALTH), 70 = key + weapon sparks. Fixed on the way: big
+alien rockets mirror when it faces left, ledge pull-up collides with slopes (only the hanging
+branch sets collide flags 1), conveyor belts (ground 5, nudge = tile param 3), hero body hit
+boxes mirrored only when facing left.
+
+Next: window 435. The drone's x follows the hero too fast from frame 15049 on (orig 875..878 while
+the port goes 876..883; y and angle match); the follow goal (hover above / below / behind / in
+front, FUN_1088_9ca4 blocked checks) or the ease of x differs. Compare `GOAL` with the original's
+4d9e/4da4/4da6 (watch them) around 15049. After that: arm hit-box flip in `take_hits` (still
+`facing`, unverified), effects 23/54, bonuses (6b03), script object tiles (0d5a), other weapons,
+sideways shake 5c7d, frozen/burnt deaths, barrels of type >= 0xb (186c), level-leaving
+teleports, hero standing on the big alien's shield (00b6).

@@ -191,6 +191,9 @@ impl Level {
                 }
             }
         }
+        if std::env::var("ET_DRONE").is_ok() {
+            eprintln!("GOAL {} {gx},{gy} hero {hx},{hy} h {} f {}", now + 1, hero.height, hero.facing);
+        }
         if d.x != gx {
             d.fx = ease(d.fx, gx);
         }
