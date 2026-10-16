@@ -454,6 +454,19 @@ impl Level {
                     let s = world.sector_at(o.w(4), o.w(2));
                     self.add_to(s, list::L66, o);
                 }
+                0x14c8 => {
+                    let w = &*world;
+                    self.plat_objs.push(crate::platobj::PlatObj::lift(&rec, |y, x| w.sector_at(y, x)));
+                }
+                101 => {
+                    let w = &*world;
+                    if let Some(p) = crate::platobj::PlatObj::swing(&rec, |y, x| w.sector_at(y, x)) {
+                        if std::env::var("ET_PLAT").is_ok() {
+                            eprintln!("PLATOBJ made {:?}", p);
+                        }
+                        self.plat_objs.push(p);
+                    }
+                }
                 k if (100..=199).contains(&k) => {
                     eprintln!("warning: OBJECTS type {k} (FUN_1060_0166) not ported")
                 }

@@ -25,6 +25,7 @@ mod level;
 mod objects;
 mod particles;
 mod palette;
+mod platobj;
 mod picture;
 mod rng;
 mod smallbot;
@@ -305,8 +306,18 @@ impl Game {
             eprintln!("CAM {} {} {}", self.frame, cam.0, cam.1);
         }
         let mut ps = std::mem::take(&mut self.level.particles);
-        self.hero
-            .update(&self.world, &self.level, &input, mouse_now, cam, &mut ps, &mut self.rng);
+        let mut plat_objs = std::mem::take(&mut self.level.plat_objs);
+        self.hero.update(
+            &self.world,
+            &self.level,
+            &input,
+            mouse_now,
+            cam,
+            &mut ps,
+            &mut self.rng,
+            &mut plat_objs,
+        );
+        self.level.plat_objs = plat_objs;
         self.level.particles = ps;
         for (sprite, y, x) in std::mem::take(&mut self.hero.splats) {
             self.level.blood_splat(&self.world, sprite, y, x);

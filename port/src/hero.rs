@@ -400,6 +400,7 @@ impl Hero {
         cam: (i32, i32),
         ps: &mut crate::particles::Particles,
         rng: &mut PascalRandom,
+        plat_objs: &mut [crate::platobj::PlatObj],
     ) {
         // ReadGameInput: moving the mouse raises the gun.
         self.gun.shot = None;
@@ -1053,6 +1054,41 @@ impl Hero {
         self.ground = 0;
         self.head_blocked = 0;
         self.lever_reach &= 1;
+        // FUN_1060_145a: the platform objects of the default sector and of his own, which carry him.
+        {
+            let window = (cam.0, cam.1, cam.0 + 0x13f, cam.1 + 199);
+            let mut side = crate::platobj::HeroSide {
+                x: self.x,
+                y: self.y,
+                dx,
+                dy,
+                vy: self.vy,
+                state: self.state,
+                half_width: self.half_width,
+                prev_ground: self.prev_ground,
+                ground: None,
+            };
+            let hero_sector = lv.sector.unwrap_or(0);
+            let sectors: &[usize] = if hero_sector == 0 { &[0] } else { &[0, hero_sector] };
+            for &sector in sectors {
+                for p in plat_objs.iter_mut().filter(|p| p.sector == sector) {
+                    let (x1, y1, x2, y2) = p.bbox;
+                    if x1 <= window.2 && y1 <= window.3 && window.0 <= x2 && window.1 <= y2 {
+                        if p.kind == 4 {
+                            let mut released = self.released[DOWN];
+                            crate::platobj::update_lift(p, &mut side, w, rng, input[DOWN] > 0, &mut released, &mut self.shakes);
+                            self.released[DOWN] = released;
+                        } else {
+                            crate::platobj::update(p, &mut side, ps.now);
+                        }
+                    }
+                }
+            }
+            (dx, dy) = (side.dx, side.dy);
+            if let Some(g) = side.ground {
+                self.ground = g;
+            }
+        }
         let (blocked, step_h) = self.move_and_collide(w, lv, dx, dy);
         self.prev_blocked = blocked;
         self.push_out_of_walls(w);
