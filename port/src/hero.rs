@@ -766,9 +766,13 @@ impl Hero {
 
         let mut collide_flags = 3;
         if self.state == LEDGE {
+            // Only the hanging branch (not the pull-up) sets local_1e = 1.
+            let hanging = self.climb == 0;
             let (ndx, ndy) = self.hang(w, lv, &input, dx, dy);
             (dx, dy) = (ndx, ndy);
-            collide_flags = 1;
+            if hanging {
+                collide_flags = 1;
+            }
         }
         self.collide_flags = collide_flags;
 
@@ -1353,6 +1357,9 @@ impl Hero {
         y_new: i32,
         prev_slope: i32,
     ) -> (i32, i32) {
+        if std::env::var("ET_FLOOR").is_ok() {
+            eprintln!("FLOOR x {} dx {dx} y_old {y_old} y_new {y_new} prev_slope {prev_slope} flags {} state {} ground {} hw {}", self.x, self.collide_flags, self.state, self.ground, self.half_width);
+        }
         let hw = self.half_width;
         let x = self.x;
         let e = if self.ground <= 9 && self.state <= 0 {

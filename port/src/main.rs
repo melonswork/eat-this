@@ -257,6 +257,17 @@ impl Game {
                 }
             }
         }
+        if std::env::var("ET_HERO").ok().and_then(|v| v.parse::<u32>().ok()).is_some_and(|f| self.frame >= f && self.frame < f + 4) {
+            let (hx, hy) = (self.hero.x, self.hero.y);
+            eprintln!("HERO frame {} at {hx},{hy} state {}", self.frame, self.hero.state);
+            for dy in -24..=8 {
+                eprint!(" {:x}", hero::Hero::solidity_all(&self.world, &self.level, hy + dy, hx));
+            }
+            eprintln!();
+            for p in self.level.platforms.iter().flatten() {
+                eprintln!("  platform {},{} {}x{}", p.x, p.y, p.width, p.height);
+            }
+        }
         let cam = (self.camera.x, self.camera.y);
         let mut ps = std::mem::take(&mut self.level.particles);
         self.hero
