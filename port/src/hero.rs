@@ -968,8 +968,9 @@ impl Hero {
     /// FUN_1088_55f0's end: shots against the body's and the arm's sprites (mask 0x3a2), the
     /// worse one counts (FUN_1088_3c32).
     fn take_hits(&mut self, ps: &mut crate::particles::Particles, rng: &mut PascalRandom) {
-        // Mirrored when he faces left (DAT_1b54[(gHeroFacing == -1) * 2]).
-        let flip = (self.facing == -1) as i32;
+        // The record's hflip word is gHeroFacing itself (1 or -1) and the test only asks for
+        // non-zero: the hit boxes are mirrored whichever way he faces.
+        let flip = 1;
         let d1 = if self.frame != NONE {
             ps.hit_test_sprite((self.frame, self.x, self.y, flip, 0), 0x3a2)
         } else {
