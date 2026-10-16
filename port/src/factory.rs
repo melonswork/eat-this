@@ -395,6 +395,25 @@ impl Level {
                 self.add_to(s, list::TRIGGERS, o);
             }
             0x13ba => {}
+            0x14d2 => {
+                let mut o = actor(kind, 0xde4, 0x34);
+                o.set(10, r.byte2());
+                o.set(0xe, r.at(4));
+                o.set(0x10, r.at(6) + 9);
+                o.set(0x14, r.at(8));
+                o.set(0x16, r.at(10));
+                for f in [0x26, 0x28, 0x2a, 0x2e, 0x24, 0x30, 0x32] {
+                    o.set(f, 0);
+                }
+                o.set(0x2c, 0x40);
+                o.set(0x20, facing_hero(cx.hero_x, o.w(0xe)));
+                o.set(2, o.w(0x14) - 0x30);
+                o.set(4, o.w(0x10) - 0x40);
+                o.set(6, o.w(0x16) + 0x30);
+                o.set(8, o.w(0x10) + 0x20);
+                let (y, x) = (o.w(0x10), o.w(0xe));
+                self.add_actor(world, o, y, x);
+            }
             _ => {
                 if std::env::var("ET_FACT").is_ok() {
                     eprintln!("FACTORY unported kind {kind:#x}");

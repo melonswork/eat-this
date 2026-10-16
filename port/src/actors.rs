@@ -223,6 +223,7 @@ impl Level {
             0x148c => self.springboard(id, env),
             0x140a => self.walker(id, env),
             0x13f6 => self.boss(id, env),
+            crate::turret::KIND => self.turret(id, env),
             crate::boss::WRECK => self.boss_wreck(id, env),
             crate::decals::DROP => self.drop_decal(id, env),
             crate::decals::SHELL => self.shell_decal(id, env),
@@ -783,6 +784,7 @@ impl Level {
                     self.o(id).set(0x1a, 0);
                 }
             }
+            crate::turret::KIND => self.turret_after_move(id, env),
             0x1428 => self.alien_after_move(id),
             crate::gunship::WRECK => self.wreck_after_move(id),
             0x1432 => self.bigali_after_move(id, env),

@@ -32,6 +32,7 @@ mod sprites;
 mod tileanim;
 mod trig;
 mod boss;
+mod turret;
 mod walker;
 mod world;
 
