@@ -504,6 +504,9 @@ impl Particles {
                 continue;
             }
             let (mut l, mut t, mut r, mut b) = (m.w(0x2c) - sx, m.w(0x2e) - sy, m.w(0x30) - sx, m.w(0x32) - sy);
+            if std::env::var("ET_HIT").is_ok() && m.w(0x34) == 7 {
+                eprintln!("BLAST rel {l},{t},{r},{b} flags {:x} dmg {} boxes {:?}", m.w(0x3a), m.w(0x38), boxes);
+            }
             if hflip != 0 {
                 l = -l;
                 r = -r;

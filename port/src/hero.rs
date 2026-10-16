@@ -808,16 +808,21 @@ impl Hero {
     /// FUN_1088_55f0's end: shots against the body's and the arm's sprites (mask 0x3a2), the
     /// worse one counts (FUN_1088_3c32).
     fn take_hits(&mut self, ps: &mut crate::particles::Particles, rng: &mut PascalRandom) {
-        let flip = self.facing;
+        // Mirrored when he faces left (DAT_1b54[(gHeroFacing == -1) * 2]).
+        let flip = (self.facing == -1) as i32;
         let d1 = if self.frame != NONE {
             ps.hit_test_sprite((self.frame, self.x, self.y, flip, 0), 0x3a2)
         } else {
             0
         };
         let mask1 = ps.hit_mask;
+        if std::env::var("ET_HIT").is_ok() {
+            eprintln!("boxes {:?}", crate::sprites::hitboxes(self.frame));
+            eprintln!("TAKEHITS {} d1 {d1} frame {:x} at {},{} frame2 {:x}", ps.now, self.frame, self.x, self.y, self.gun.frame2);
+        }
         let mut damage = d1;
         if self.gun.frame2 != NONE {
-            let d2 = ps.hit_test_sprite((self.gun.frame2, self.x, self.y, flip, 0), 0x3a2);
+            let d2 = ps.hit_test_sprite((self.gun.frame2, self.x, self.y, self.facing, 0), 0x3a2);
             if d2 < 0 || d2 <= d1 {
                 ps.hit_mask = mask1;
             } else {
