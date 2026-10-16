@@ -50,13 +50,27 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
   pushable blocks (record 0x4b0 copied from word 2), knock-back state 0x10 → knocked down flat.
   No turning while shooting. Health 0x2c6, invulnerability 0x52 frames.
 - Object removal during the walk: `remove_current` (FUN_1070_0002) fixes `walk_index`.
+- Argument order: a callee's `[BP+6]` is the LAST pushed argument. When Ghidra's call or a
+  nested-proc decompile looks odd, check the callee's asm (e.g. TileFunctionAt: [BP+6]=y,
+  [BP+8]=x, so Ghidra shows `TileFunctionAt(y, x)`). Ghidra was right about door markers; I
+  "fixed" it wrongly once — verify against the callee before overriding the decompile.
+- Some drawing code calls Random and then restores RandSeed (big alien shield, 1070:8c72):
+  the tracer counts those calls; windiff's IGNORE set skips such sites.
+- Object boxes: actors update only while their box (+2..+8) meets the camera. FUN_1058_0002
+  makes it unbounded (falling, hit, ...); moving platforms do it for actors they touch
+  (FUN_1058_0114, `wake_actors`). Unknown kinds print `warning: object kind ... not ported`.
+- 465e noise: 1 shake started, 2 hero/big-alien fire, 3 a door started moving (FUN_10a8_0975,
+  even in LevelFirstFrame). Aliens hearing it go on guard (-500) with a Random(2).
+- Weapons: table 1170:1656 (0xd bytes), pick-ups = plane-2 function 30000 (effect 67), right
+  button = weapon proc table 188a (only grenades ported). Exits = function 9000 (state -100),
+  teleport records 1000; after a teleport LevelFirstFrame runs a frame without the hero
+  (`world_update`). Doors: `doors.rs` (segment 10a8).
 
-## State (2026-10-16)
+## State (2026-10-16, later)
 
-CITY01 exact for ~106 windows. In progress: big alien class 0x1432 (`port/src/bigali.rs`
-written, NOT yet wired: add `mod bigali;` in main.rs, dispatch `0x1432 => self.bigali` in
-actors.rs `update_object`, move hook FUN_1070_72a2 in `after_move`; HeroView needs `hurt`
-(4e2a) and `hit_mask` (4660); crate/alien/smallbot tests should set `ps.p.aim_level = 0`
-where the original sets 093c=0). Not ported yet: grenade mover 2d37 and effect 21 (1481),
-lying shells/splat objects (no RNG), bonuses (6b03), FUN_10a8_1369 (tile 7050), sideways shake
-5c7d, frozen/burnt deaths.
+CITY01 exact for 231 windows (532/847 total), GRINDER 113/113. Next: class 0x13e2
+(FUN_1070_1b00, VMT 0xc98: a flying gunship with long 1/16-px positions, states 0 fly/shoot,
+1 smoking, 2 falling, 3 crashed → wreck object VMT 0xca8; helpers 1487/1634/16ee/17f7/18e0,
+1428, 6405, 5be8, 6156; lots of FUN_1168_0fdd math: read the asm). Not ported yet: effects 1, 6,
+54, 70 (`effect N not ported`), bonuses (6b03), script object tiles (FUN_1088_0d5a), the other
+weapons, sideways shake 5c7d, frozen/burnt deaths, level-leaving teleports.
