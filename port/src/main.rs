@@ -315,6 +315,10 @@ impl Game {
             self.level.particles.hero_fire(y, x, aim, parity);
             noise = 2;
         }
+        if let Some((y, x, a)) = self.hero.gun.shell7 {
+            self.level.particles.shell7(a, y, x);
+            noise = 2;
+        }
         if let Some((y, x, a)) = self.hero.gun.charge {
             self.level.particles.mine(a, y, x);
             noise = 2;

@@ -297,6 +297,26 @@ impl Particles {
         self.p.hits = 0;
     }
 
+    /// FUN_1088_655f: weapon 7's shell (effect 44 when it hits slowly or its fuse runs out).
+    pub fn shell7(&mut self, angle: i32, y: i32, x: i32) {
+        self.p.group = 0;
+        self.p.hits = 0x8000;
+        self.p.flags = 0x80;
+        self.p.damage = 0x60;
+        self.p.callback = 0x13c3;
+        self.p.on_death = 0x2c;
+        self.p.draw = (0x5a0..=0x10df).contains(&angle) as i32;
+        self.spawn_seq(0x1866, 6, 0x1e, y, x, 0);
+        self.bounce(7, 0x40, angle);
+        self.p.draw = 0;
+        self.p.on_death = 0;
+        self.p.callback = 0;
+        self.p.damage = 0x10;
+        self.p.flags = 0x84;
+        self.p.hits = 0;
+        self.p.group = 1;
+    }
+
     /// FUN_1088_6f4d: weapon 4's bouncing charge (effect 77 when it hits or its fuse runs out).
     pub fn mine(&mut self, angle: i32, y: i32, x: i32) {
         self.p.hits = 0x8000;
@@ -913,6 +933,47 @@ impl Level {
                     ps.p.delay = 0;
                 }
             }
+            0x14bd => {
+                // FUN_1050_14bd: two fires crawl along the floor either way, every 6 frames.
+                if m.w(0x24) % 6 == 1 {
+                    f.fx.shakes.push((0x2a, 10));
+                    for k in 0..2usize {
+                        let (mut x, mut y, mut d) = {
+                            let v = &self.particles.list[i].v;
+                            (v.w(6 * k), v.w(6 * k + 2), v.w(6 * k + 4))
+                        };
+                        let nx = x - 0x10 + d * 0x20;
+                        if f.world.solidity_at(y, nx) & 2 == 0 {
+                            if f.world.solidity_at(y + 0x10, nx) & 0x211 == 0 {
+                                if f.world.solidity_at(y + 0x20, nx) & 0x211 == 0 {
+                                    d ^= 1;
+                                } else {
+                                    x = nx;
+                                    y = (y & !15) + 0x1f;
+                                }
+                            } else {
+                                x = nx;
+                            }
+                        } else if f.world.solidity_at(y - 0x10, nx) & 2 == 0 {
+                            x = nx;
+                            y = (y & !15) - 1;
+                        } else {
+                            d ^= 1;
+                        }
+                        let v = &mut self.particles.list[i].v;
+                        v.set(6 * k, x);
+                        v.set(6 * k + 2, y);
+                        v.set(6 * k + 4, d);
+                        // FUN_1050_144b: a flame, tiles blown, a blast.
+                        let ps = &mut self.particles;
+                        ps.p.callback = 0x1b90;
+                        ps.spawn_seq(0x6a00, 1, 0x46, y, x, 0);
+                        ps.p.callback = 0;
+                        self.explode_area(f.world, 0xc0, 4, y + 0x10, x + 0x12, y - 0x60, x - 0x12, f.rng, f.fx);
+                        self.particles.blast(2, 0x60, 0xd, 0x20, 0x22, -0x60, -0x22, y, x);
+                    }
+                }
+            }
             0x1b90 => {
                 // FUN_1050_1b90: a flame goes out without floor under it.
                 if f.world.solidity_at(m.w(0xa) + 1, m.w(8)) & 0x211 == 0 {
@@ -1142,6 +1203,7 @@ impl Level {
             16 => {
                 self.bounce_off(f);
             }
+            44 => self.shell7_hit(f),
             9 => {
                 self.particles.spawn_seq(0x6500, 2, 0x14, y, x, 1);
             }
@@ -1355,6 +1417,104 @@ impl Level {
             self.particles.keep_dying = false;
         }
         vy
+    }
+
+    /// Effect 44, FUN_1040_2046: weapon 7's shell bounces; a slow impact or its fuse sets it off.
+    fn shell7_hit(&mut self, f: &mut Frame) {
+        let i = self.particles.current;
+        let side = self.particles.hit_side;
+        let p = &mut self.particles.list[i];
+        let (m, v) = (&mut p.m, &mut p.v);
+        if m.w(0x3e) == -10 {
+            return;
+        }
+        if m.w(0x24) < m.w(0x22) {
+            m.set(8, m.w(0x10));
+            m.set(0xa, m.w(0x12));
+            if side < 2 {
+                if v.l(4) == 0 {
+                    self.shell7_blast(f);
+                    return;
+                }
+                m.set(0x3e, 0);
+                m.set(4, m.w(0x10) - (m.w(4) - m.w(0x10)));
+                v.set_l(0, v.l(0).wrapping_neg());
+            } else {
+                if v.l(4) == 0 && v.w(8) < 5 {
+                    v.set_l(0, v.l(0) / 2);
+                } else {
+                    let t = v.w(8);
+                    let fall = (t * t - (t - 1) * (t - 1)) / v.w(0xa);
+                    let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
+                    v.set_l(4, vy);
+                    if side != 2 && (vy >> 16) < 0xc {
+                        self.shell7_blast(f);
+                        return;
+                    }
+                }
+                m.set(0x3e, 0);
+                v.set(8, 1);
+                if f.world.solidity_at(m.w(0xe), m.w(8)) & 0x40 == 0 {
+                    m.set(0xc, m.w(8));
+                } else {
+                    m.set(8, m.w(0xc));
+                }
+                m.set(4, m.w(0xc));
+                m.set(6, m.w(0xa));
+            }
+            m.set(0x24, m.w(0x24) + 1);
+            self.particles.keep_dying = false;
+            return;
+        }
+        if m.w(0x3e) == -1 {
+            m.set(8, m.w(0x10));
+            m.set(0xa, m.w(0x12));
+        }
+        self.shell7_blast(f);
+    }
+
+    /// FUN_1040_1ec6: the shell goes off: a flash, four bits of casing, shake and dust.
+    fn shell7_blast(&mut self, f: &mut Frame) {
+        let i = self.particles.current;
+        let (mut y, x) = (self.particles.list[i].m.w(0xa), self.particles.list[i].m.w(8));
+        if (y & !15) != 0xf && f.world.solidity_at(y + 0x10, x) & 1 != 0 {
+            y = (y & !15) + 0xf;
+            self.particles.list[i].m.set(0xa, y);
+        }
+        let ps = &mut self.particles;
+        ps.p.delay = 1;
+        ps.spawn_seq(0x6f00, 3, 0x18, y, x, 1);
+        ps.p.delay = 0;
+        ps.p.group = 0;
+        ps.p.hits = 0x8000;
+        ps.p.on_death = 0x10;
+        ps.p.callback = 0x177a;
+        for k in 0..4 {
+            let steps = f.rng.random(4) + 2;
+            ps.spawn(0x1824, y - 1, x);
+            ps.last_mut().m.set(0x26, steps);
+            let r = f.rng.random(0x61);
+            ps.throw(9, 0x70, k * 0x60 + 0x4e0 + r);
+        }
+        ps.p.on_death = 0;
+        ps.p.hits = 0;
+        ps.p.group = 1;
+        ps.p.callback = 0x14bd;
+        ps.spawn_seq(0x7fff, 1, 0x2a, y, x, 0);
+        {
+            // FUN_1050_4a51: two fires to crawl away from where it burst.
+            let p = ps.last_mut();
+            let (sx, sy) = (p.m.w(4), p.m.w(6));
+            for k in 0..2 {
+                p.v.set(6 * k as usize, sx);
+                p.v.set(6 * k as usize + 2, sy);
+                p.v.set(6 * k as usize + 4, k);
+            }
+        }
+        ps.p.callback = 0;
+        f.fx.shakes.push((0x2a, 0x12));
+        let n = f.rng.random(7) + 2;
+        crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
     }
 
     /// Effect 78, FUN_1040_0cf8: a spark of the charge's blast bounces (and then only hits walls).

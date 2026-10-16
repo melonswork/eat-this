@@ -11,6 +11,21 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
     match id {
         0 => {}
         34 => explosion(lv, world, y, x, rng, fx),
+        18 => {
+            // FUN_1040_11b0: a tile falls to bits.
+            fx.shakes.push((0x18, 8));
+            let ps = &mut lv.particles;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            ps.spawn(0x331b, y, x);
+            let r = rng.random(0xc0);
+            ps.throw(7, 0x40, 0x560 - r);
+            ps.spawn(0x331b, y, x);
+            let r = rng.random(0xc0);
+            ps.throw(7, 0x58, r + 0x5e0);
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+        }
         43 => wall_chunks(lv, world, y, x, rng, fx),
         72 => rubble(rng),
         // Seen in GRINDER with no Random() calls in the tracer.
