@@ -1542,6 +1542,11 @@ impl Hero {
 }
 
 /// SpawnDust (1040:1e04): `count` leaf particles, five Random() calls each, on "Send leaves" tiles.
+/// SpawnDust for the other modules.
+pub fn spawn_dust_pub(w: &World, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
+    spawn_dust(w, count, y, x, rng);
+}
+
 fn spawn_dust(w: &World, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
     if w.tile_function_at(y, x) != LEAVES {
         return;

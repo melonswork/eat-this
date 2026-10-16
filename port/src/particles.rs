@@ -41,6 +41,10 @@ pub const MOVE_LINE: u16 = 0x2ade;
 pub const MOVE_THROW: u16 = 0x2c17;
 /// FUN_1050_2d37: a bouncing throw (FUN_1050_457e).
 pub const MOVE_BOUNCE: u16 = 0x2d37;
+/// FUN_1050_3c4f: a homing rocket in 16.16 fixed point (FUN_1050_4870).
+pub const MOVE_ROCKET: u16 = 0x3c4f;
+/// FUN_1050_2ac9: just ages (no sprite frame either).
+pub const MOVE_AGE: u16 = 0x2ac9;
 /// FUN_1050_36a9: a running critter (FUN_1050_4622).
 pub const MOVE_CRITTER: u16 = 0x36a9;
 
@@ -130,7 +134,7 @@ impl Default for Particle {
     fn default() -> Particle {
         Particle {
             m: Obj::new(0, 0, 0x50),
-            v: Obj::new(0, 0, 0x10),
+            v: Obj::new(0, 0, 0x20),
         }
     }
 }
@@ -188,7 +192,7 @@ impl Particles {
         m.set(0x42, p.callback as i32);
         let particle = Particle {
             m,
-            v: Obj::new(0, 0, 0x10),
+            v: Obj::new(0, 0, 0x20),
         };
         if p.delay != 0 {
             let due = self.now.wrapping_add(p.delay as u32);
@@ -276,6 +280,63 @@ impl Particles {
         self.last_mut().m.set(0x4a, MOVE_BOUNCE as i32);
     }
 
+    /// FUN_1050_4870(speed, angle): a rocket that steers towards targets found by the hit tests
+    /// (FUN_1050_0b2a). It starts one step back.
+    pub fn rocket(&mut self, speed: i32, angle: i32) {
+        let p = self.last_mut();
+        p.m.set(0x4a, MOVE_ROCKET as i32);
+        p.m.set(0x4c, 0x1c);
+        let v = &mut p.v;
+        v.set_l(0, p.m.w(8) << 16);
+        v.set_l(4, p.m.w(0xa) << 16);
+        v.set_l(8, (trig::cos(angle) * speed) / 4);
+        v.set_l(0xc, (trig::sin(angle) * speed) / -4);
+        v.set(0x10, angle);
+        v.set(0x12, speed);
+        v.set(0x18, 0x140);
+        v.set(0x1a, 0);
+        p.m.set(8, v.l(0).wrapping_sub(v.l(8)) >> 16);
+        p.m.set(0xa, v.l(4).wrapping_sub(v.l(0xc)) >> 16);
+    }
+
+    /// FUN_1050_4296(life, damage, hits, bottom, right, top, left, y, x): a blast hurting what
+    /// overlaps its box, less towards the edges (flag 0x20: FUN_1050_4b17).
+    #[allow(clippy::too_many_arguments)]
+    pub fn blast(&mut self, life: i32, damage: i32, hits: i32, bottom: i32, right: i32, top: i32, left: i32, y: i32, x: i32) {
+        let p = self.p;
+        let mut m = Obj::new(0, 0, 0x50);
+        for off in [4, 8, 0xc] {
+            m.set(off, x);
+            m.set(off + 2, y);
+        }
+        m.set(0x22, life);
+        m.set(0x34, hits);
+        m.set(0x36, p.homing);
+        m.set(0x3a, p.flags | 0x3b);
+        m.set(0x38, damage);
+        m.set(0x2c, x + left);
+        m.set(0x2e, y + top);
+        m.set(0x30, x + right);
+        m.set(0x32, y + bottom);
+        m.set(0x4a, MOVE_AGE as i32);
+        m.set(0x42, 0x121);
+        let particle = Particle {
+            m,
+            v: Obj::new(0, 0, 0x20),
+        };
+        if p.delay != 0 {
+            let due = self.now.wrapping_add(p.delay as u32);
+            let at = self.pending.iter().position(|(d, _)| due < *d).unwrap_or(self.pending.len());
+            self.pending.insert(at, (due, particle));
+            self.last = at;
+            self.last_pending = true;
+        } else {
+            self.list.push(particle);
+            self.last = self.list.len() - 1;
+            self.last_pending = false;
+        }
+    }
+
     /// FUN_1050_4622(gravity, speed, angle): a critter running along the floor. Its mover
     /// (FUN_1050_36a9) isn't ported: it stays where it is.
     pub fn critter(&mut self, gravity: i32, speed: i32, angle: i32) {
@@ -333,7 +394,7 @@ impl Particles {
             }
             if left <= m.w(0x30) && top <= m.w(0x32) && m.w(0x2c) <= right && m.w(0x2e) <= bottom {
                 if m.w(0x3a) & 0x20 != 0 {
-                    eprintln!("warning: particle damage FUN_1050_4b17 not ported");
+                    damage += blast_damage(m, bottom, right, top, left);
                 } else {
                     damage += m.w(0x38);
                 }
@@ -349,7 +410,11 @@ impl Particles {
                 m.set(0x12, m.w(0xa));
             }
             if m.w(0x36) & mask != 0 {
-                eprintln!("warning: homing particles (FUN_1050_568b) not ported");
+                let level = self.p.aim_level;
+                let p = &mut self.list[i];
+                let dx = (left + right) / 2 - p.m.w(8);
+                let dy = (top + bottom) / 2 - p.m.w(0xa);
+                aim_at(p, level, dx, dy);
             }
         }
         damage
@@ -392,7 +457,15 @@ impl Particles {
             }
             if hit {
                 if m.w(0x3a) & 0x20 != 0 {
-                    eprintln!("warning: particle damage FUN_1050_4b17 not ported");
+                    // FUN_1050_51aa: against the box that was hit, placed and flipped.
+                    let hb = boxes.iter().find(|hb| {
+                        let (x1, y1, x2, y2) = hb.rect;
+                        hb.kind == 0 && l <= x2 && t <= y2 && x1 <= r && y1 <= b
+                    });
+                    let (x1, y1, x2, y2) = hb.unwrap().rect;
+                    let (bl, br) = if hflip == 0 { (sx + x1, sx + x2) } else { (sx - x2, sx - x1) };
+                    let (bt, bb) = if vflip == 0 { (sy + y1, sy + y2) } else { (sy - y2, sy - y1) };
+                    damage += blast_damage(m, bb, br, bt, bl);
                 } else {
                     damage += m.w(0x38);
                 }
@@ -408,7 +481,15 @@ impl Particles {
                 m.set(0x12, m.w(0xa));
             }
             if m.w(0x36) & mask != 0 {
-                eprintln!("warning: homing particles (FUN_1050_51aa) not ported");
+                let level = self.p.aim_level;
+                let p = &mut self.list[i];
+                for hb in boxes.iter().take_while(|hb| hb.kind <= 0).filter(|hb| hb.kind == 0) {
+                    let (x1, y1, x2, y2) = hb.rect;
+                    let cx = if hflip == 0 { (x1 + x2) / 2 + sx } else { sx - (x1 + x2) / 2 };
+                    let cy = if vflip == 0 { (y1 + y2) / 2 + sy } else { sy - (y1 + y2) / 2 };
+                    let (dx, dy) = (cx - p.m.w(8), cy - p.m.w(0xa));
+                    aim_at(p, level, dx, dy);
+                }
             }
         }
         damage
@@ -486,6 +567,10 @@ impl Level {
     /// The mover at +0x4a.
     fn move_particle(&mut self, i: usize, cam: (i32, i32)) {
         let p = &mut self.particles.list[i];
+        if p.m.uw(0x4a) == MOVE_AGE {
+            p.m.set(0x24, p.m.w(0x24) + 1);
+            return;
+        }
         sprite_frame(&mut p.m);
         let (m, v) = (&mut p.m, &mut p.v);
         let mover = m.uw(0x4a);
@@ -528,6 +613,18 @@ impl Level {
             }
             MOVE_CRITTER => {
                 m.set(0x24, m.w(0x24) + 1);
+            }
+            MOVE_ROCKET => {
+                m.set(8, v.l(0) >> 16);
+                m.set(0xa, v.l(4) >> 16);
+                v.set_l(0, v.l(0).wrapping_add(v.l(8)));
+                v.set_l(4, v.l(4).wrapping_add(v.l(0xc)));
+                if off_screen(m, -0x100) {
+                    m.set(0x24, m.w(0x22));
+                    m.set(0x3e, -10);
+                } else {
+                    m.set(0x24, m.w(0x24) + 1);
+                }
             }
             other => {
                 eprintln!("warning: particle mover 1050:{other:04x} not ported");
@@ -658,7 +755,45 @@ impl Level {
                 m.set(0x30, x + 3);
                 m.set(0x32, y + 3);
             }
-            CB_CRITTER | 0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 => {} // drawing only
+            CB_CRITTER | 0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 => {} // drawing only
+            0xb2a => {
+                // FUN_1050_0b2a: the rocket turns (at most 0x20) towards the target last found,
+                // smokes, and blows up at the end of its fuel.
+                let p = &mut self.particles.list[i];
+                let (m, v) = (&mut p.m, &mut p.v);
+                if v.w(0x18) != 0x140 {
+                    let a = trig::atan2(v.w(0x16), v.w(0x14));
+                    if v.w(0x10) != a {
+                        let d = ((a - v.w(0x10)) + 0x21c0) % 0x1680;
+                        let na = if d < 0xb40 {
+                            ((v.w(0x10) + 0x1680) - 0x20.min(0xb40 - d)) % 0x1680
+                        } else {
+                            (0x20.min(d - 0xb40) + v.w(0x10)) % 0x1680
+                        };
+                        v.set(0x10, na);
+                        v.set_l(8, (trig::cos(na) * v.w(0x12)) / 4);
+                        v.set_l(0xc, (trig::sin(na) * v.w(0x12)) / -4);
+                    }
+                    v.set(0x18, 0x140);
+                    v.set(0x1a, 0);
+                }
+                let (x, y, age, life, state) = (m.w(8), m.w(0xa), m.w(0x24), m.w(0x22), m.w(0x3e));
+                if life <= age && state > -10 {
+                    m.set(0x3e, -1);
+                    m.set(0x10, x);
+                    m.set(0x12, y);
+                }
+                if age % 4 == 3 {
+                    let ps = &mut self.particles;
+                    ps.p.delay = 5;
+                    ps.p.group = 0;
+                    ps.p.colour = 0x10;
+                    ps.spawn_seq(0x5111, 2, 9, y, x, 1);
+                    ps.p.colour = 0;
+                    ps.p.group = 1;
+                    ps.p.delay = 0;
+                }
+            }
             0x1a3 => {
                 // FUN_1050_01a3: a 9x9 box.
                 let (x, y) = (m.w(8), m.w(0xa));
@@ -818,6 +953,62 @@ impl Level {
                     f.rng.random(2);
                 }
             }
+            14 => self.rocket_blast(y, x, f),
+            23 => {
+                // FUN_1040_2af4: a flash of fire.
+                self.particles.spawn_seq(0x6900, 2, 0x19, y, x, 1);
+            }
+            63 => {
+                // FUN_1040_075a: an enemy bullet hits.
+                let i = self.particles.current;
+                let m = &self.particles.list[i].m;
+                let (py, px) = (m.w(0xa), m.w(8));
+                if f.world.tile_function_at(py, px) == 13000 {
+                    let cell = f.world.cell_at(crate::world::MAIN_PLANE, py, px).unwrap_or(0);
+                    let id = f.world.cell_function(cell, 4) as i16 as i32;
+                    self.particle_effect(id, y, x, f);
+                    return;
+                }
+                if m.w(0x3e) == -1 && f.rng.random(8) == 0 {
+                    f.rng.random(0x40);
+                }
+                self.sparks(0x1918, y, x);
+            }
+            22 | 48 => {
+                // FUN_1040_295e / 4ed6: a drop of blood or a bone: slides down walls, splashes
+                // on the floor (bones may stay: lying objects aren't kept here).
+                let i = self.particles.current;
+                {
+                    let m = &mut self.particles.list[i].m;
+                    m.set(8, m.w(0x10));
+                    m.set(0xa, m.w(0x12));
+                }
+                self.particle_callback(i, f);
+                let side = self.particles.hit_side;
+                let p = &mut self.particles.list[i];
+                if side < 2 {
+                    p.m.set(0x24, 0);
+                    p.m.set(0x3e, 0);
+                    p.m.set(4, p.m.w(0x10));
+                    p.m.set(6, p.m.w(0x12));
+                    p.v.set_l(0, 0);
+                    p.v.set_l(4, 0);
+                    p.v.set(8, 1);
+                    self.particles.keep_dying = false;
+                } else if side != 2 {
+                    let base = p.m.w(0x14) & 0xff00;
+                    let (hy, hx) = (p.m.w(0x12), p.m.w(0x10));
+                    if id == 22 {
+                        self.particles.spawn_seq(base + 10, 4, 4, hy, hx, 1);
+                    } else {
+                        self.particles.spawn_seq(base + 0x19, 4, 5, hy, hx, 1);
+                        if f.rng.random(2) == 0 && (base == 0x5400 || base == 0x5300) {
+                            f.rng.random(3);
+                            f.rng.random(2);
+                        }
+                    }
+                }
+            }
             15 => {
                 // FUN_1040_0a80: a metallic ping and sparks.
                 f.rng.random(0x1e);
@@ -870,6 +1061,59 @@ impl Level {
         vy
     }
 
+    /// Effect 14, FUN_1040_09d4(y, x): a rocket explodes.
+    fn rocket_blast(&mut self, y: i32, x: i32, f: &mut Frame) {
+        f.fx.shakes.push((0x12, 5));
+        if DETAIL > 3 {
+            let ps = &mut self.particles;
+            ps.p.colour = 0x28;
+            ps.p.group = 0;
+            ps.spawn_seq(0x1b04, 4, 2, y, x, 1);
+            ps.p.colour = 0;
+            ps.p.group = 1;
+        }
+        self.particles.spawn_seq(0x6900, 2, 0x19, y, x, 1);
+        let r = f.rng.random(0x20);
+        let m = &mut self.particles.last_mut().m;
+        m.set(0x1c, r + 0x133);
+        m.set(0x1e, r + 0x100);
+        m.set(0x42, 0x2148);
+        self.explode_area(f.world, 0x60, 4, y + 0x20, x + 0x20, y - 0x20, x - 0x20, f.rng, f.fx);
+        let n = f.rng.random(4);
+        crate::hero::spawn_dust_pub(f.world, n, y - 7, x, f.rng);
+    }
+
+    /// FUN_1050_5b61(strength, mask, bottom, right, top, left): blow up every explodable tile
+    /// in the rectangle (from the bottom right).
+    #[allow(clippy::too_many_arguments)]
+    pub fn explode_area(
+        &mut self,
+        world: &mut World,
+        strength: i32,
+        mask: u16,
+        bottom: i32,
+        right: i32,
+        top: i32,
+        left: i32,
+        rng: &mut PascalRandom,
+        fx: &mut Effects,
+    ) {
+        let mut ty = bottom;
+        while (top & !15) <= ty {
+            let mut tx = right;
+            while (left & !15) <= tx {
+                if world.solidity_at(ty, tx) & 0x80 != 0 {
+                    effects::explode_tile(self, world, strength, mask, ty, tx, rng, fx);
+                }
+                if world.tile_function_at(ty, tx) == 0x1b8a {
+                    eprintln!("warning: FUN_10a8_1369 (blown tile 7050) not ported");
+                }
+                tx -= 0x10;
+            }
+            ty -= 0x10;
+        }
+    }
+
     /// Effect 62, FUN_1040_06d4: a bullet hits.
     fn bullet_hit(&mut self, y: i32, x: i32, f: &mut Frame) {
         let i = self.particles.current;
@@ -904,8 +1148,12 @@ impl Level {
     }
 }
 
-/// 1170:4f0c > 10 (FUN_1050_18e6): lying smoke ages (the frame rate's headroom, as measured).
-const SMOKE_AGES: bool = true;
+/// 1170:4f0c > 10 (FUN_1050_18e6): lying smoke ages. 4f0c stays 0 while a demo plays.
+const SMOKE_AGES: bool = false;
+/// 1170:4f0c > 10, as above.
+pub const FRAME_SLACK: bool = false;
+/// 1170:16d9, the detail level (3 on the demos).
+const DETAIL: i32 = 3;
 
 /// FUN_1040_6577(y, x): a puff of smoke rising, six particles over 40 frames (with the current
 /// group and colour).
@@ -962,4 +1210,61 @@ fn sprite_frame(m: &mut Obj) {
         s += m.w(0x24) / m.w(0x26);
     }
     m.set(0x16, s);
+}
+
+/// FUN_1050_4b17(particle, bottom, right, top, left): a blast's damage to a box, full at the
+/// centre and none at the edge of the blast's box.
+fn blast_damage(m: &Obj, bottom: i32, right: i32, top: i32, left: i32) -> i32 {
+    let (px, py) = (m.w(8), m.w(0xa));
+    let (x1, y1, x2, y2) = (m.w(0x2c), m.w(0x2e), m.w(0x30), m.w(0x32));
+    let dist = |a: i32, b: i32| ((a as f64).powi(2) + (b as f64).powi(2)).sqrt().round_ties_even() as i32;
+    let vertical = |d: i32| {
+        if py < top {
+            dist(((top - py) * 0x40) / (y2 - py), d)
+        } else if bottom < py {
+            dist(((py - bottom) * 0x40) / (py - y1), d)
+        } else {
+            d
+        }
+    };
+    let d = if px < left {
+        vertical(((left - px) * 0x40) / (x2 - px))
+    } else if right < px {
+        vertical(((px - right) * 0x40) / (px - x1))
+    } else if py < top {
+        ((top - py) * 0x40) / (y2 - py)
+    } else if bottom < py {
+        ((py - bottom) * 0x40) / (py - y1)
+    } else {
+        0
+    };
+    if d < 0x40 {
+        ((0x40 - d) * m.w(0x38)) / 0x40
+    } else {
+        0
+    }
+}
+
+/// The homing part of FUN_1050_568b / 51aa: remember the nearest target (or, with flag 0x200,
+/// the one most straight ahead within 0x100) of at least the current priority (1170:093c).
+fn aim_at(p: &mut Particle, level: i32, dx: i32, dy: i32) {
+    let v = &mut p.v;
+    if v.w(0x1a) > level {
+        return;
+    }
+    let score = if p.m.w(0x3a) & 0x200 == 0 {
+        ((dx as f64).powi(2) + (dy as f64).powi(2)).sqrt().round_ties_even() as i32
+    } else {
+        let d = ((v.w(0x10) - trig::atan2(dy, dx)) + 0x21c0) % 0x1680 - 0xb40;
+        if d.abs() >= 0x100 {
+            return;
+        }
+        d.abs()
+    };
+    if score < v.w(0x18) || v.w(0x1a) < level {
+        v.set(0x18, score);
+        v.set(0x14, dx);
+        v.set(0x16, dy);
+        v.set(0x1a, level);
+    }
 }
