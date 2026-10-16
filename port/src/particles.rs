@@ -851,7 +851,7 @@ impl Level {
                 m.set(0x30, x + 3);
                 m.set(0x32, y + 3);
             }
-            CB_CRITTER | 0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f => {} // drawing only
+            CB_CRITTER | 0x2d2 | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
             0xb2a => {
                 // FUN_1050_0b2a: the rocket turns (at most 0x20) towards the target last found,
                 // smokes, and blows up at the end of its fuel.
@@ -1230,6 +1230,44 @@ impl Level {
         ps.p.group = 1;
         let n = f.rng.random(6) + 1;
         crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
+    }
+
+    /// Effect 73, FUN_1040_3fc4(y, x): a tile bursts (FUN_1040_3eb4: five chips thrown up,
+    /// some sound), and two times in three a spark follows later.
+    pub fn tile_burst(&mut self, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+        let ps = &mut self.particles;
+        ps.p.group = 0;
+        ps.p.hits = 0x8000;
+        ps.p.on_death = 0x10;
+        ps.p.callback = 0x177a;
+        ps.p.colour = 0x10;
+        for i in 0..=4 {
+            ps.p.delay = rng.random(4);
+            let px = x - 6 + i * 3;
+            let py = y + 1 + rng.random(4);
+            let steps = rng.random(2) + 3;
+            ps.spawn(0x7500, py, px); // FUN_1050_4106: with its own frame step
+            ps.last_mut().m.set(0x26, steps);
+            ps.throw(7, 0x20, i * 0x80 + 0xfe0);
+        }
+        ps.p.colour = 0;
+        ps.p.callback = 0;
+        ps.p.on_death = 0;
+        ps.p.hits = 0;
+        ps.p.group = 1;
+        ps.p.delay = 0;
+        rng.random(0x1f); // the sound's pitch
+        fx.shakes.push((0xc, 5));
+        if rng.random(3) != 0 {
+            ps.p.delay = rng.random(0x28) + 0x28;
+            // FUN_1040_3440: a spark (group 0, a sound when it appears).
+            ps.p.group = 0;
+            ps.p.on_spawn = 0x7576;
+            ps.spawn_seq(0x1928, 3, 4, y + 2, x, 1);
+            ps.p.on_spawn = 0;
+            ps.p.group = 1;
+            ps.p.delay = 0;
+        }
     }
 
     /// Effect 14, FUN_1040_09d4(y, x): a rocket explodes.

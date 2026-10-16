@@ -109,6 +109,7 @@ pub fn explode_tile(
     match id as i16 {
         i if i <= 0 => {}
         39 => lv.breakable_wall(world, strength, ey, ex, rng, fx),
+        73 => lv.tile_burst(ey, ex, rng, fx),
         _ => effect(world, id, ey, ex, rng, fx),
     }
 }

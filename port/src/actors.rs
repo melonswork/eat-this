@@ -124,7 +124,7 @@ impl Level {
             0x1432 => self.bigali(id, env),
             0x14aa => {} // FUN_1070_a06a: draws a sprite
             0x13c4 => {} // FUN_1068_315a: plain sound emitters (kinds < 10000) don't draw Random
-            _ => {}
+            k => eprintln!("warning: object kind {k:#x} not ported"),
         }
     }
 
