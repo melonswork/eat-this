@@ -777,6 +777,16 @@ impl Hero {
                     self.frame = 0x10e;
                 }
                 self.height = if vy_before == self.vy0 { 0x21 } else { 0x1f };
+                if self.state == 7 && self.frame > 0x105 {
+                    // Somersault (a springboard throw).
+                    self.frame = (self.anim >> 1) % 0x10 + 300;
+                    self.anim += 1;
+                    self.height = 0x1b;
+                } else if self.state == 6 {
+                    self.frame = 0x13b - (self.anim >> 1) % 0x10;
+                    self.anim += 1;
+                    self.height = 0x1b;
+                }
                 if self.gun.shooting {
                     self.gun.muzzle = (if self.facing < 1 { 4 } else { 0 }, 8);
                     if self.state == JUMP || self.state == 10 {
