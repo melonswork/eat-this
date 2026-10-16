@@ -811,10 +811,18 @@ impl Level {
             *mirror = self.o(id).w(0x20) < 0;
             let (x, y) = self.xy(id);
             let sprite = self.o(id).w(0x34);
+            // (The drone ignores it unless +0x46 is -1.)
+            let hidden = self.o(id).w(0x46) != -1;
+            self.particles.p.aim_level = 0;
+            if hidden {
+                self.particles.p.aim_level2 = -1;
+            }
             let damage = match sprites::hit_rect(sprite, y, x, *mirror) {
-                Some((b, r, t, l)) => self.particles.hit_test_low(b, r, t, l, 0x11fb),
+                Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x11fb),
                 None => 0,
             };
+            self.particles.p.aim_level = 0x100;
+            self.particles.p.aim_level2 = 0x100;
             let o = self.o(id);
             if o.w(0x42) > 0 {
                 o.set(0x42, o.w(0x42) - 1);
