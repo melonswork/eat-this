@@ -227,7 +227,7 @@ impl Level {
             crate::decals::DROP => self.drop_decal(id, env),
             crate::decals::SHELL => self.shell_decal(id, env),
             crate::decals::SPLAT => self.splat(id, env),
-            0x13c4 => {} // FUN_1068_315a: plain sound emitters (kinds < 10000) don't draw Random
+            0x13c4 => self.emitter(id, env), // FUN_1068_315a
             k => eprintln!("warning: object kind {k:#x} not ported"),
         }
     }

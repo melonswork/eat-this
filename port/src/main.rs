@@ -6,6 +6,7 @@
 //!                                                   RandSeed with the demo's CHECK entries
 
 mod actors;
+mod ambient;
 mod alien;
 mod bigali;
 mod archive;
