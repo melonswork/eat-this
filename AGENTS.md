@@ -68,11 +68,24 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
 
 ## State (2026-10-17, end)
 
-CITY01 (LEVEL1_2.DMO) is exact for ALL 847 windows, GRINDER 113/113. The other demos match only partly
-(2026-10-17): LEVEL1_1 199/679, LEVEL2_1 358/616, LEVEL2_2 249/770, LEVEL3_1 186/352, LEVEL3_2 17/173: each needs
-its own `windiff` loop (trace with `mise run trace -- work/cd/BIN/USERMAPS/<DEMO>.DMO --windows N`).
-A matching RandSeed does not prove the hero is in the right place: also compare `--dump` with the tracer's
-`--watch gHeroX,gHeroY,gHeroState` (a wrong position hid for 40 windows once).
+CITY01 (LEVEL1_2.DMO) is exact for ALL 847 windows, GRINDER 113/113. FOREST04 (LEVEL2_1.DMO) is exact for 400 of
+616 windows (next: the trees, object kind 0x1446, VMT 0xd90, update FUN_1070_9420, ctor in EnemyFactory line ~25477,
+icons 62000/62001 = FUN_1070_fab2). LEVEL1_1 (0 windows: the START intro, script command 0x1c launches the hero out
+of a ship, 4e70/4e96..4e9a), LEVEL2_2 43, LEVEL3_1 34, LEVEL3_2 0 (level setup draws 402 Randoms) still need their own
+`windiff` loops (`/tmp`-free recipe: `mise run trace -- work/cd/BIN/USERMAPS/<DEMO>.DMO --windows N+2`, then
+`python3 tools/windiff.py <DEMO> N`, then `ET_RNG=<frame-1>` in the port). A matching RandSeed does not prove the hero is
+in the right place: also compare `--dump` with the tracer's `--watch gHeroX,gHeroY,gHeroState`.
+
+Added after the CITY01 pass (all from the FOREST04 loop): ambient sound emitters (`ambient.rs`: audibility of
+FUN_10e0_016b needs the listener = camera centre; the first deadlines 4ec0/4ebc are the boot-seed values 509/329, the
+hero's idle values -20/590 too); sprite groups by slot from the script's `LoadSpriteGroup=` lines (slots 0x32..) plus
+the fixed slots in sprites.rs; walking gunner 0x14d2 (`turret.rs`); platform objects 100..103 / lifts 0x14c8
+(`platobj.rs`, run from inside HeroUpdate before the hero moves, like FUN_1060_145a); script commands fill_area (0x01)
+and copy_area (0x0e); levers with key slots (tile param 2 flag 4: `Hero::keys`, `script_cells`, `cell_steps`);
+weapons 2 (rapid gun, effect 81), 7 (napalm shell, effects 44/18, fire crawlers FUN_1050_14bd), 8 (three homing
+rockets, callback 0x7bf, effect 57); the switch-weapon key (input 8); bonus drops (`Level::bonus` = FUN_1040_6b03,
+callback 0x2588, effect 66: they fly, the hero can catch them, else they land as plane-2 tiles); pipes (states -1
+hanging from 60800, -2 climbing out of 60600); red gibs FUN_1068_186c for barrels.
 
 Ported since the 610 mark: ladders (HeroUpdate state -5: detection loop before the exits, grab before the
 Down-crouch, the -5 block before the levers); the hero's hit boxes are ALWAYS mirrored (the rec word is gHeroFacing
