@@ -149,6 +149,41 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                 ps.p.colour = 0;
             }
         }
+        83 => {
+            // FUN_1040_34a7: chips (FUN_1040_31d4), a sound, a shake and maybe a late spark.
+            let ps = &mut lv.particles;
+            ps.p.group = 0;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            ps.p.callback = 0x177a;
+            ps.p.colour = 0x10;
+            for i in 0..=4 {
+                ps.p.delay = rng.random(4);
+                let px = x - 6 + i * 3;
+                let py = y + rng.random(4);
+                let steps = rng.random(2) + 3;
+                ps.spawn(0x7500, py, px);
+                ps.last_mut().m.set(0x26, steps);
+                ps.throw(7, 0x20, i * 0x80 + 0xfe0);
+            }
+            ps.p.colour = 0;
+            ps.p.callback = 0;
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            ps.p.group = 1;
+            ps.p.delay = 0;
+            rng.random(0x29); // the sound's pitch
+            fx.shakes.push((0xc, 7));
+            if rng.random(2) != 0 {
+                ps.p.delay = rng.random(0x50) + 0x28;
+                ps.p.group = 0;
+                ps.p.on_spawn = 0x7576;
+                ps.spawn_seq(0x1928, 3, 4, y + 8, x, 1);
+                ps.p.on_spawn = 0;
+                ps.p.group = 1;
+                ps.p.delay = 0;
+            }
+        }
         84 => {
             // FUN_1040_34e3: chips thrown up (FUN_1040_31d4), maybe a late spark, a sound.
             let ps = &mut lv.particles;
@@ -367,6 +402,9 @@ pub fn explode_tile(
     let w = world.main().width;
     let cell_index = ((y >> 4) * w + (x >> 4)) as u16;
     let original = world.main().cells[cell_index as usize];
+    if std::env::var_os("ET_EXPL").is_some() {
+        eprintln!("EXPL strength {strength} mask {mask:x} at {y},{x} cell {original:#x} f1 {:#x} f2 {} f3 {} f4 {}", world.cell_function(original, 1), world.cell_function(original, 2) as i16, world.cell_function(original, 3), world.cell_function(original, 4));
+    }
     if world.cell_function(original, 3) & mask == 0 {
         return;
     }
