@@ -165,13 +165,13 @@ impl Level {
                     let edge = x + 0x10;
                     if edge <= h.prev_x && h.x <= edge && open(env, -1) {
                         push = (h.x - 0x10) - x;
-                        env.fx.hero_lim.0 = Some(((env.frame as i32 - 1) & 1) - 1);
+                        env.fx.hero_lim.0 = Some((env.frame as i32 & 1) - 1);
                     }
                 } else {
                     let edge = x - 0x10;
                     if h.prev_x <= edge && edge <= h.x && open(env, 1) {
                         push = (h.x + 0x10) - x;
-                        env.fx.hero_lim.1 = Some(1 - ((env.frame as i32 - 1) & 1));
+                        env.fx.hero_lim.1 = Some(1 - (env.frame as i32 & 1));
                     }
                 }
             }
