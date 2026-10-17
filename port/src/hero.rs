@@ -1153,6 +1153,18 @@ impl Hero {
                     }
                 }
             }
+            // Kicking off a wall: up and away from it while the climb is slowing (FUN_1088_753e).
+            if self.state == 5 && self.vy > -0x21 && input[UP] > 0 {
+                let wall = |x: i32| {
+                    Self::solidity_all(w, lv, self.y - 2, x) & 2 != 0 || Self::solidity_all(w, lv, self.y - 0x12, x) & 2 != 0
+                };
+                if (input[LEFT] > 0 && wall(self.x + self.half_width + 5))
+                    || (input[RIGHT] > 0 && wall((self.x - self.half_width) - 5))
+                {
+                    self.start_jump(-0x32, 7);
+                    self.shakes.push((0xe, 4));
+                }
+            }
             self.vy = self.vy.min(0x32);
         }
 

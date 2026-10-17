@@ -191,6 +191,9 @@ impl Level {
                         self.o(id).set(0x20, 6);
                     }
                     if top <= h.y {
+                        if std::env::var_os("ET_SPRING").is_some() {
+                            eprintln!("SPRINGJUMP {} fall {} up {} state {} vy {}", env.frame, h.fall, h.up, h.state, h.vy);
+                        }
                         let mut power = ((h.fall << 2) / 3).min(0x5a);
                         let mut release = false;
                         if power < 0x46 && h.up {
