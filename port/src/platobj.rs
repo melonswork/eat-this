@@ -292,7 +292,9 @@ pub fn update_lift(
 ) {
     update_lift_move(p, hero, world, rng, down, released_down, shakes);
     // FUN_1060_1cee (the lifts' second pass): dust falls off both ends every 16th moving frame.
-    if ds_word(0x9da + p.row * 14) == 0x1cee && p.age % 0x10 == 0xf {
+    // (Rows 0 and 3 of the table at 1170:09ce have the draw routine 1060:1cee at +0xc; the
+    // table is filled at run time, so it isn't in the EXE's data.)
+    if matches!(p.row, 0 | 3) && p.age % 0x10 == 0xf {
         let mut lx = p.x - 1;
         for a in 0..=1 {
             let s = world.solidity_at(p.y + 2, lx);
