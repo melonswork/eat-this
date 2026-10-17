@@ -555,6 +555,23 @@ impl Game {
         let cam_x = self.camera.x;
         self.level
             .update_grinder(&mut self.world, hero, cam_x, &mut self.rng, fx);
+        // START's foreground (FUN_1090_0ace): the ship the hero was thrown from is a platform
+        // (FUN_1070_00b6 on each of sprite 0x3700's plain boxes).
+        if self.hero.ship != (0, 0) {
+            if std::env::var_os("ET_SHIP").is_some() {
+                eprintln!("SHIP {} at {:?} hero {},{} boxes {:?}", self.frame, self.hero.ship, self.hero.x, self.hero.y, sprites::hitboxes(0x3700));
+            }
+            for b in sprites::hitboxes(0x3700).iter().filter(|b| b.kind == 1) {
+                let top = self.hero.ship.1 + b.rect.1 - 1;
+                let (right, left) = (self.hero.ship.0 + b.rect.2, self.hero.ship.0 + b.rect.0);
+                let v = self.hero.view(false);
+                let ok = (v.state >= 1 && v.vy >= 0) || (v.state < 1 && !(-5..=-1).contains(&v.state));
+                let (lo, hi) = (v.y.min(v.prev_y), v.y.max(v.prev_y));
+                if left <= v.x && v.x <= right && ok && lo <= top && top <= hi {
+                    self.hero.stand_on(top);
+                }
+            }
+        }
     }
 
     /// FUN_1088_517a: through the exit to the other end of its teleport record, then
