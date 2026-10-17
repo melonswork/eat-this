@@ -134,6 +134,7 @@ pub struct Hero {
     pub levers: Vec<(i32, i32, i32, bool)>,
     /// Blood splats the hero's hits ask for (FUN_1058_0218): (sprite, y, x).
     pub splats: Vec<(i32, i32, i32)>,
+    pub death: Option<(i32, i32)>,
     /// Cells whose scripts a keyless lever runs, and key slots a key opens (FUN_1088_13dc).
     pub script_cells: Vec<u16>,
     pub cell_steps: Vec<u16>,
@@ -266,6 +267,7 @@ impl Hero {
             held_lever: -1,
             levers: Vec::new(),
             splats: Vec::new(),
+            death: None,
             script_cells: Vec::new(),
             cell_steps: Vec::new(),
             health: HEALTH,
@@ -1259,8 +1261,7 @@ impl Hero {
         self.health -= damage;
         if self.health < 1 {
             rng.random(0x20); // FUN_1088_3c05: the cry's pitch
-            eprintln!("warning: the hero's death (FUN_1068_186c, splats) not ported");
-            rng.random(5);
+            self.death = Some((self.y, self.x)); // main: the gibs, smoke and a splat (FUN_1068_186c, 637a, 0218)
             self.hurt = 0x7fff;
             self.anim = 0x8c;
             self.state = DEAD;

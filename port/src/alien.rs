@@ -947,8 +947,11 @@ impl Level {
 
     /// FUN_1068_186c is the same burst in red (`red`): the hero's, a barrel's.
     pub(crate) fn gibs_kind(&mut self, y: i32, x: i32, base: i32, red: bool, env: &mut Env) {
+        self.gibs_rng(y, x, base, red, &mut *env.rng);
+    }
+
+    pub(crate) fn gibs_rng(&mut self, y: i32, x: i32, base: i32, red: bool, rng: &mut crate::rng::PascalRandom) {
         let (flesh, bones, nbones, blood) = if red { (0x5307, 0x530f, 5, 0x5300) } else { (0x5407, 0x540f, 3, 0x5400) };
-        let rng = &mut *env.rng;
         let ps = &mut self.particles;
         // Each step throws one piece left and one right, both spreading further each step:
         // (delay, sprite) then the angle's Random(0x80).

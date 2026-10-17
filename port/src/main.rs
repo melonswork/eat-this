@@ -346,6 +346,12 @@ impl Game {
         );
         self.level.plat_objs = plat_objs;
         self.level.particles = ps;
+        if let Some((y, x)) = self.hero.death.take() {
+            self.level.gibs_rng(y - 0x19, x, 0x20, true, &mut self.rng);
+            alien::smoke_sprite(&mut self.level.particles, y, x);
+            let r = self.rng.random(5);
+            self.level.blood_splat(&self.world, 0x531e + r, y - 0x24, x);
+        }
         for (sprite, y, x) in std::mem::take(&mut self.hero.splats) {
             self.level.blood_splat(&self.world, sprite, y, x);
         }
