@@ -1254,7 +1254,7 @@ impl Hero {
                     if x1 <= window.2 && y1 <= window.3 && window.0 <= x2 && window.1 <= y2 {
                         if p.kind == 4 {
                             let mut released = self.released[DOWN];
-                            crate::platobj::update_lift(p, &mut side, w, rng, input[DOWN] > 0, &mut released, &mut self.shakes, ps);
+                            crate::platobj::update_lift(p, &mut side, w, rng, input[DOWN] > 0, &mut released, &mut self.shakes);
                             self.released[DOWN] = released;
                         } else {
                             crate::platobj::update(p, &mut side, ps.now);

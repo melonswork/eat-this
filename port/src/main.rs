@@ -500,6 +500,18 @@ impl Game {
             };
             self.level.update_decals(&mut env, window);
         }
+        // FUN_1060_14a7: the platform objects' second pass (lifts shed dust).
+        {
+            let sector = self.level.sector.unwrap_or(0);
+            let objs = std::mem::take(&mut self.level.plat_objs);
+            for p in objs.iter().filter(|p| p.kind == 4 && (p.sector == 0 || p.sector == sector)) {
+                let (x1, y1, x2, y2) = p.bbox;
+                if x1 <= window.2 && y1 <= window.3 && window.0 <= x2 && window.1 <= y2 {
+                    platobj::lift_dust(p, &self.world, &mut self.level.particles, &mut self.rng);
+                }
+            }
+            self.level.plat_objs = objs;
+        }
         // FUN_1050_4ca5(0): debris and critters, before the actors.
         let mut pf = particles::Frame {
             world: &mut self.world,

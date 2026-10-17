@@ -288,33 +288,8 @@ pub fn update_lift(
     down: bool,
     released_down: &mut bool,
     shakes: &mut Vec<(i32, i32)>,
-    ps: &mut crate::particles::Particles,
 ) {
     update_lift_move(p, hero, world, rng, down, released_down, shakes);
-    // FUN_1060_1cee (the lifts' second pass): dust falls off both ends every 16th moving frame.
-    // (Rows 0 and 3 of the table at 1170:09ce have the draw routine 1060:1cee at +0xc; the
-    // table is filled at run time, so it isn't in the EXE's data.)
-    if matches!(p.row, 0 | 3) && p.age % 0x10 == 0xf {
-        let mut lx = p.x - 1;
-        for a in 0..=1 {
-            let s = world.solidity_at(p.y + 2, lx);
-            if std::env::var_os("ET_DUST").is_some() {
-                eprintln!("DUST {} lift row {} at {},{} age {} lx {lx} solidity {s:#x} dir {}", ps.now, p.row, p.x, p.y, p.age, p.dir);
-            }
-            if s & 2 != 0 {
-                ps.p.group = 0;
-                ps.p.colour = 0x10;
-                ps.p.delay = 4;
-                ps.spawn_seq(0x1919, 8, 2, p.y + 2, lx, 1);
-                let g = rng.random(5) + 0x15;
-                ps.throw(g, 8, a * 0xb40);
-                ps.p.delay = 0;
-                ps.p.colour = 0;
-                ps.p.group = 1;
-                lx = p.x + p.width();
-            }
-        }
-    }
 }
 
 fn update_lift_move(
@@ -406,5 +381,34 @@ fn update_lift_move(
     if pillar != 0 && ranges_overlap(p.y + pillar, p.prev_y + pillar, hero.y + hero.dy, hero.y) {
         hero.dy = (p.y + pillar) - hero.y;
         stand(p, hero);
+    }
+}
+
+/// FUN_1060_1cee, a lift's draw routine (FUN_1060_14a7's second pass, after the hero): dust falls
+/// off both ends every 16th moving frame. Rows 0 and 3 of the table at 1170:09ce have it at +0xc
+/// (the table is filled at run time, so it isn't in the EXE's data).
+pub fn lift_dust(
+    p: &PlatObj,
+    world: &crate::world::World,
+    ps: &mut crate::particles::Particles,
+    rng: &mut crate::rng::PascalRandom,
+) {
+    if !(matches!(p.row, 0 | 3) && p.age % 0x10 == 0xf) {
+        return;
+    }
+    let mut lx = p.x - 1;
+    for a in 0..=1 {
+        if world.solidity_at(p.y + 2, lx) & 2 != 0 {
+            ps.p.group = 0;
+            ps.p.colour = 0x10;
+            ps.p.delay = 4;
+            ps.spawn_seq(0x1919, 8, 2, p.y + 2, lx, 1);
+            let g = rng.random(5) + 0x15;
+            ps.throw(g, 8, a * 0xb40);
+            ps.p.delay = 0;
+            ps.p.colour = 0;
+            ps.p.group = 1;
+            lx = p.x + p.width();
+        }
     }
 }
