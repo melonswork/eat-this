@@ -27,6 +27,7 @@ mod particles;
 mod palette;
 mod platobj;
 mod picture;
+mod plant;
 mod rng;
 mod sentry;
 mod smallbot;

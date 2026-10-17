@@ -229,6 +229,7 @@ impl Level {
             0x1428 => self.alien(id, env),
             0x1432 => self.bigali(id, env),
             0x141e => self.steam(id, env),
+            0x14fa => self.plant(id, env),
             0x14dc => {
                 // FUN_1070_a0a2: the effect named by +0x14 at its own position.
                 let o = self.o(id);

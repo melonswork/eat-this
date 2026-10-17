@@ -57,6 +57,17 @@ impl PascalRandom {
         r
     }
 
+    /// Runs `f` with RandSeed set to `seed`, then puts the seed (and the call count the CHECK
+    /// windows compare) back: the original does that around drawing code.
+    pub fn scoped<R>(&mut self, seed: u32, f: impl FnOnce(&mut Self) -> R) -> R {
+        let (s, c) = (self.seed, self.calls);
+        self.seed = seed;
+        let out = f(self);
+        self.seed = s;
+        self.calls = c;
+        out
+    }
+
     pub fn calls(&self) -> u32 {
         self.calls
     }
