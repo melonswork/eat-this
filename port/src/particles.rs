@@ -493,7 +493,29 @@ impl Particles {
         self.spawn_seq(0x190a, 2, 2, ly, lx, 1);
     }
 
-    /// FUN_1088_69d8: weapon 2's bullet (effect 81 where it lands).
+    /// FUN_1088_598e's torpedo: a homing missile that starts at rest and speeds up (callback 0xf9f).
+    pub fn torpedo(&mut self, y: i32, x: i32, angle: i32) {
+        self.p.group = 0;
+        self.p.hits = 0x10;
+        self.p.damage = 0xa0;
+        self.p.flags = 0x284;
+        self.p.homing = 0x10;
+        self.p.tiles = 0x143;
+        self.p.on_death = 0xe;
+        self.p.callback = 0xf9f;
+        self.spawn_seq(0x1932, 1, 0x100, y, x, 0);
+        self.rocket(0, angle);
+        self.last_mut().v.set(0x18, 0x100);
+        self.p.callback = 0;
+        self.p.on_death = 0;
+        self.p.tiles = 0x43;
+        self.p.flags = 0x84;
+        self.p.homing = 0;
+        self.p.damage = 0x10;
+        self.p.hits = 0;
+        self.p.group = 1;
+    }
+
     /// FUN_1088_678b's flame: a short-lived fire that follows its line and goes out in smoke
     /// (effect 37).
     pub fn flame(&mut self, y: i32, x: i32, angle: i32) {
@@ -513,6 +535,7 @@ impl Particles {
         self.p.hits = 0;
     }
 
+    /// FUN_1088_69d8: weapon 2's bullet (effect 81 where it lands).
     pub fn rapid(&mut self, y: i32, x: i32, aim: i32, parity: i32) {
         self.p.hits = 0x3000;
         self.p.damage = 0x10;
@@ -991,6 +1014,52 @@ impl Level {
                 m.set(0x2e, y - 3);
                 m.set(0x30, x + 3);
                 m.set(0x32, y + 3);
+            }
+            0xf9f => {
+                // FUN_1050_0f9f: the torpedo turns (at most 0x10) towards its target, speeds up,
+                // and leaves a trail.
+                let (cx, age) = (m.w(0x22), m.w(0x24));
+                let _ = cx;
+                let p = &mut self.particles.list[i];
+                let (m, v) = (&mut p.m, &mut p.v);
+                if v.w(0x18) != 0x100 {
+                    let a = trig::atan2(v.w(0x16), v.w(0x14));
+                    if v.w(0x10) != a {
+                        let d = ((a - v.w(0x10)) + 0x21c0) % 0x1680;
+                        let na = if d < 0xb40 {
+                            ((v.w(0x10) + 0x1680) - 0x10.min(0xb40 - d)) % 0x1680
+                        } else {
+                            (0x10.min(d - 0xb40) + v.w(0x10)) % 0x1680
+                        };
+                        v.set(0x10, na);
+                    }
+                    v.set(0x18, 0x100);
+                    v.set(0x1a, 0);
+                }
+                v.set(0x12, v.w(0x12) + 2);
+                v.set_l(8, (trig::cos(v.w(0x10)) * v.w(0x12)) / 4);
+                v.set_l(0xc, (trig::sin(v.w(0x10)) * v.w(0x12)) / -4);
+                let (x, y) = (m.w(8), m.w(0xa));
+                let _ = m;
+                let ps = &mut self.particles;
+                if age % 4 == 3 {
+                    ps.p.delay = 4;
+                    ps.p.group = 0;
+                    ps.p.colour = 0x28;
+                    ps.spawn_seq(0x1b19, 4, 5, y, x, 1);
+                    ps.p.colour = 0;
+                    ps.p.group = 1;
+                    ps.p.delay = 0;
+                }
+                if age % 7 == 6 {
+                    let sprite = f.rng.random(3) + 0x64b;
+                    if self.water + 0x10 <= y {
+                        let ps = &mut self.particles;
+                        ps.p.callback = 0x30f;
+                        ps.spawn(sprite, y, x);
+                        ps.p.callback = 0;
+                    }
+                }
             }
             0x30f => {
                 // FUN_1050_030f: a bubble rises through the water, slides round walls, and pops

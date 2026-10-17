@@ -140,8 +140,8 @@ pub struct Hero {
     /// The vehicle's speeds (4e86, 4e88), sub-pixel remainders (4e8a, 4e8c), bump counters
     /// (4e8e, 4e90) and the next time it may fire (4e94).
     pub veh: Veh,
-    /// 1170:4f07 in the vehicle: the right button was released since the last torpedo.
-    fire_ok_v: bool,
+    /// The vehicle fired this frame (1170:465e = 2).
+    pub veh_fired: bool,
     /// 1170:4e70: frames of the START intro's launch left (> 100: he is carried over the ship).
     pub launch: i32,
     /// 1170:4e9a: the launch's centre x. 4e96/4e98: the ship's position.
@@ -296,7 +296,7 @@ impl Hero {
             death: None,
             vehicle: false,
             veh: Veh::default(),
-            fire_ok_v: true,
+            veh_fired: false,
             launch: 0,
             launch_x0: 0,
             ship: (0, 0),
@@ -1324,6 +1324,7 @@ impl Hero {
     ) {
         let water = lv.water;
         let now = ps.now;
+        self.veh_fired = false;
         let old_facing = self.facing;
         self.half_width = 0x14;
         self.height = 0x1e;
@@ -1521,10 +1522,19 @@ impl Hero {
         rng: &mut PascalRandom,
         now: u32,
     ) {
-        if input[RIGHT_SHOOT] > 0 && self.fire_ok_v && self.veh.next_shot <= now {
-            eprintln!("warning: the vehicle's torpedo (FUN_1088_598e) not ported");
-            let _ = (ps, rng);
+        if !(input[RIGHT_SHOOT] > 0 && self.released[RIGHT_SHOOT] && self.veh.next_shot <= now) {
+            return;
         }
+        self.veh.next_shot = now.wrapping_add(0xc);
+        let aim = self.gun.aim;
+        let x = self.x + (10 * crate::trig::cos(aim)) / 0x4000;
+        let y = (self.y - 0xd) - (10 * crate::trig::sin(aim)) / 0x4000;
+        let a2 = (aim + 0x1680 - 0x20 + rng.random(0x41)) % 0x1680;
+        ps.torpedo(y, x, a2);
+        self.veh_fired = true;
+        self.released[RIGHT_SHOOT] = false;
+        self.veh.vx -= (crate::trig::cos(aim) * 0x40) / 0x4000;
+        self.veh.vy += (crate::trig::sin(aim) * 0x2a) / 0x4000;
     }
 
     /// FUN_1088_4a81: the vehicle takes damage.

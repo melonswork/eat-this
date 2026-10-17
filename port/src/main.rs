@@ -391,6 +391,9 @@ impl Game {
             self.level.blood_splat(&self.world, sprite, y, x);
         }
         self.level.hero_x = self.hero.x;
+        if self.hero.veh_fired {
+            noise = 2;
+        }
         if let Some((y, x, aim, parity)) = self.hero.gun.shot {
             self.level.particles.hero_fire(y, x, aim, parity);
             noise = 2;
