@@ -31,6 +31,7 @@ mod rng;
 mod sentry;
 mod smallbot;
 mod steam;
+mod storm;
 mod sprites;
 mod tileanim;
 mod trig;
@@ -555,6 +556,7 @@ impl Game {
         let cam_x = self.camera.x;
         self.level
             .update_grinder(&mut self.world, hero, cam_x, &mut self.rng, fx);
+        self.level.storm_frame(&mut self.rng);
         // START's foreground (FUN_1090_0ace): the ship the hero was thrown from is a platform
         // (FUN_1070_00b6 on each of sprite 0x3700's plain boxes).
         if self.hero.ship != (0, 0) {

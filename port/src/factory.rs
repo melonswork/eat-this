@@ -667,6 +667,9 @@ impl Level {
             let f = world.cell_function(tile, 0);
             self.icon(world, cx, tile, f, cell as i32 / w, cell as i32 % w);
         }
+        for c in std::mem::take(&mut fx.storm_cmds) {
+            self.storm_command(cx.rng, c);
+        }
         for (s, y, x) in std::mem::take(&mut fx.explodes) {
             crate::effects::explode_tile(self, world, s, 0xffff, y, x, cx.rng, fx);
         }

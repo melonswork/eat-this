@@ -58,6 +58,8 @@ pub struct Effects {
     pub hero_shift: i32,
     /// Script command 0x1c: launch the hero (the START intro).
     pub hero_launch: bool,
+    /// Script commands 0x0d / 0x16 (the storm), run with the Random() generator later.
+    pub storm_cmds: Vec<u8>,
     /// Negative tiles (FUN_1088_1364): explode the cell with this strength at (y, x).
     pub explodes: Vec<(i32, i32, i32)>,
     /// FUN_1070_00b6: the hero stands on a moving top at this y (gHeroGround = 0x16).
@@ -86,6 +88,8 @@ pub struct Level {
     /// Cells a finished platform pasted that may be levers (FUN_1088_12f9), for their scripts.
     pub pasted: Vec<u16>,
     pub tile_events: Vec<(u32, u16, u16, usize)>,
+    /// START's storm.
+    pub storm: crate::storm::Storm,
     pub now: u32,
     /// gHeroX as the objects and effects see it this frame.
     pub hero_x: i32,
@@ -151,6 +155,7 @@ impl Level {
             door_noise: false,
             pasted: Vec::new(),
             tile_events: Vec::new(),
+            storm: Default::default(),
             now: 0,
             hero_x: 0,
             cam: (0, 0),
@@ -392,6 +397,10 @@ impl Level {
                     let row = ((self.cam.1 - 15) as u16 >> 4) as i32;
                     fx.spawns.push((arg(2), (arg(1) as i32 % width + row * width) as u16));
                     lc += 3;
+                }
+                0x0d | 0x16 => {
+                    fx.storm_cmds.push(op as u8);
+                    lc += 1;
                 }
                 0x1c => {
                     fx.hero_launch = true;
