@@ -54,6 +54,8 @@ pub struct Effects {
     pub spawns: Vec<(u16, u16)>,
     /// Effects a script asked for (command 2, FUN_1040_60bb): (id, y, x).
     pub effects: Vec<(u16, i32, i32)>,
+    /// A bot carried the hero sideways (gHeroX += dx).
+    pub hero_shift: i32,
     /// FUN_1070_00b6: the hero stands on a moving top at this y (gHeroGround = 0x16).
     pub hero_stand: Option<i32>,
     /// Bonuses the hero caught in the air: (tile, y, x).

@@ -502,6 +502,7 @@ impl Game {
         if std::mem::take(&mut fx.hero_bounce) {
             self.hero.bounce(-0x32, 10);
         }
+        self.hero.x += std::mem::take(&mut fx.hero_shift);
         if let Some(y) = fx.hero_stand.take() {
             self.hero.stand_on(y);
         }

@@ -155,6 +155,9 @@ impl Level {
             o.set(8, y + 0x10);
         }
         self.actor_physics(id, env, 0x1e, 10, 6);
+        if std::env::var_os("ET_SPRING").is_some() {
+            eprintln!("SPRING {} id {id} at {},{} f1a {} hero {},{} prev {} facing {}", env.frame, self.o(id).w(0xe), self.o(id).w(0x10), self.o(id).w(0x1a), h.x, h.y, h.prev_x, h.facing);
+        }
         if self.o(id).w(0x1a) < 1 {
             let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
             if y - 0x1a < h.y && h.y - 0x20 < y {
@@ -162,13 +165,13 @@ impl Level {
                     let edge = x + 0x10;
                     if edge <= h.prev_x && h.x <= edge && open(env, -1) {
                         push = (h.x - 0x10) - x;
-                        env.fx.hero_lim.0 = Some((env.frame as i32 & 1) - 1);
+                        env.fx.hero_lim.0 = Some(((env.frame as i32 - 1) & 1) - 1);
                     }
                 } else {
                     let edge = x - 0x10;
                     if h.prev_x <= edge && edge <= h.x && open(env, 1) {
                         push = (h.x + 0x10) - x;
-                        env.fx.hero_lim.1 = Some(1 - (env.frame as i32 & 1));
+                        env.fx.hero_lim.1 = Some(1 - ((env.frame as i32 - 1) & 1));
                     }
                 }
             }
@@ -792,6 +795,7 @@ impl Level {
             crate::turret::KIND => self.turret_after_move(id, env),
             0x1428 => self.alien_after_move(id),
             crate::gunship::WRECK => self.wreck_after_move(id),
+            0x148c => self.spring_after_move(id),
             0x1432 => self.bigali_after_move(id, env),
             k => eprintln!("warning: move hook of {k:#x} not ported"),
         }

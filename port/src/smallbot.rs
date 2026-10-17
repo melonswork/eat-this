@@ -54,7 +54,7 @@ impl Level {
                 }
                 let o = self.o(id);
                 if o.w(10) == 0 {
-                    let riding = self.bot_carries_hero(id, x_start);
+                    let riding = self.bot_carries_hero(id, env, x_start);
                     self.bot_spot(id, env, riding);
                 } else if o.b(0x34) == 0 {
                     let to_hero = if h.x - o.w(0xe) < 0 { -1 } else { 1 };
@@ -81,7 +81,7 @@ impl Level {
                 o.set(4, -0x7fff);
                 o.set(6, 0x7fff);
                 o.set(8, 0x7fff);
-                self.bot_carries_hero(id, x_start);
+                self.bot_carries_hero(id, env, x_start);
                 let o = self.o(id);
                 o.set(0x2a, o.w(0x2a) + 1);
                 let t = o.w(0x2a);
@@ -130,7 +130,7 @@ impl Level {
                     o.set(0x24, 0);
                 }
                 if o.w(10) == 0 {
-                    let riding = self.bot_carries_hero(id, x_start);
+                    let riding = self.bot_carries_hero(id, env, x_start);
                     self.bot_spot(id, env, riding);
                 }
             }
@@ -293,11 +293,20 @@ impl Level {
     }
 
     /// FUN_1070_a18e: the wreck sprite 0x582d carries the hero standing on it.
-    fn bot_carries_hero(&mut self, id: usize, _x_start: i32) -> bool {
-        if self.o(id).w(0x32) == 0x582d {
-            eprintln!("warning: the hero riding a smallbot (FUN_1070_a18e) not ported");
+    fn bot_carries_hero(&mut self, id: usize, env: &mut Env, x_start: i32) -> bool {
+        // FUN_1070_a18e: the hero on top of the bot rides along.
+        let o = self.o(id);
+        if o.w(0x32) != 0x582d {
+            return false;
         }
-        false
+        let (x, y, last) = (o.w(0xe), o.w(0x10), o.w(0x22));
+        let riding = self.stand_on(env, y - 0xf, last - 0xf, x + 7, x - 7);
+        if riding {
+            let d = x - x_start;
+            env.fx.hero_shift += d;
+            env.h.x += d;
+        }
+        riding
     }
 
     /// FUN_1070_a0e9: the hero in range and in sight: start shooting.

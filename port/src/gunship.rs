@@ -409,6 +409,30 @@ impl Level {
     }
 
     /// FUN_1070_2379 (the wreck's move hook): landing after a fall raises dust (effect 2).
+    /// FUN_1070_d183: the springboard's move hook, a wreck's without the sound-less puff of 66d4.
+    pub fn spring_after_move(&mut self, id: usize) {
+        let o = self.o(id);
+        if o.w(0x1c) == 0 {
+            if o.w(0x1a) == 0 {
+                o.set(0x18, o.w(0x10));
+                o.set(0x14, -0x7fff);
+                o.set(0x16, 0x7fff);
+            }
+            o.set(0x1a, o.w(0x1a) + 1);
+            unbounded(o);
+        } else {
+            if o.w(0x1a) > 0xc {
+                let (x, y) = (o.w(0xe), o.w(0x10));
+                // FUN_1040_66d4: dust where it landed.
+                let ps = &mut self.particles;
+                ps.p.colour = 0x10;
+                ps.spawn_seq(0x6d00, 2, 0x13, y, x, 1);
+                ps.p.colour = 0;
+            }
+            self.o(id).set(0x1a, 0);
+        }
+    }
+
     pub fn wreck_after_move(&mut self, id: usize) {
         let o = self.o(id);
         if o.w(0x1c) == 0 {
@@ -433,7 +457,7 @@ impl Level {
     }
 }
 
-fn unbounded(o: &mut Obj) {
+pub(crate) fn unbounded(o: &mut Obj) {
     o.set(2, -0x7fff);
     o.set(4, -0x7fff);
     o.set(6, 0x7fff);

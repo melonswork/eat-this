@@ -556,6 +556,9 @@ impl Particles {
                 } else {
                     damage += m.w(0x38);
                 }
+                if std::env::var_os("ET_HIT2").is_some() {
+                    eprintln!("HIT2 {} box {left},{top},{right},{bottom} mask {mask:x} by {} <- {}", self.now, i, std::panic::Location::caller());
+                }
                 self.hit_mask |= m.w(0x34);
                 self.hit_index = i as i32;
                 if m.w(0x3e) >= 0 {

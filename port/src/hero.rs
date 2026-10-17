@@ -459,14 +459,6 @@ impl Hero {
         let mut friction = true;
         let mut walking = false;
         let (mut dx, mut dy) = (std::mem::take(&mut self.nudge), 0);
-        // Something solid beside him (a springboard he walked into) caps the carry.
-        if dx < self.lim.0 {
-            dx = self.lim.0;
-            self.lim.0 = -1;
-        } else if self.lim.1 < dx {
-            dx = self.lim.1;
-            self.lim.0 = 1;
-        }
         for (r, &v) in self.released.iter_mut().zip(&input) {
             if v < 1 {
                 *r = true;
@@ -1175,6 +1167,14 @@ impl Hero {
         self.head_blocked = 0;
         self.lever_reach &= 1;
         (dx, dy) = self.run_platforms(w, lv, &input, cam, ps, rng, plat_objs, dx, dy);
+        // Something solid beside him (a springboard he walked into) caps the carry.
+        if dx < self.lim.0 {
+            dx = self.lim.0;
+            self.lim.0 = -1;
+        } else if self.lim.1 < dx {
+            dx = self.lim.1;
+            self.lim.0 = 1;
+        }
         let (blocked, step_h) = self.move_and_collide(w, lv, dx, dy);
         self.prev_blocked = blocked;
         self.push_out_of_walls(w);
@@ -1356,6 +1356,9 @@ impl Hero {
             g.cooldown = 10;
             let x = self.x + g.muzzle.0 + (0x17 * c) / 0x4000;
             let y = self.y + g.muzzle.1 - 0x16 - (0x17 * s) / 0x4000;
+            if std::env::var_os("ET_SHOT").is_some() {
+                eprintln!("SHOT {now} hero {},{} facing {} muzzle {:?} aim {} pose {} -> {x},{y}", self.x, self.y, self.facing, g.muzzle, g.aim, g.pose);
+            }
             g.shot = Some((y, x, g.aim, g.shots & 1));
             g.shots += 1;
             g.shooting = true;
