@@ -522,6 +522,9 @@ impl Level {
             let f = world.cell_function(tile, 0);
             self.icon(world, cx, tile, f, cell as i32 / w, cell as i32 % w);
         }
+        for (id, y, x) in std::mem::take(&mut fx.effects) {
+            crate::effects::effect(self, world, id, y, x, cx.rng, fx);
+        }
     }
 
     /// FUN_1088_0d5a: one enemy icon. Returns whether the icon is consumed.

@@ -52,6 +52,8 @@ pub struct Effects {
     pub kills: i32,
     /// Object tiles a script placed (FUN_1088_0d5a): (tile, cell), spawned by `Level::flush_spawns`.
     pub spawns: Vec<(u16, u16)>,
+    /// Effects a script asked for (command 2, FUN_1040_60bb): (id, y, x).
+    pub effects: Vec<(u16, i32, i32)>,
     /// FUN_1070_00b6: the hero stands on a moving top at this y (gHeroGround = 0x16).
     pub hero_stand: Option<i32>,
     /// Bonuses the hero caught in the air: (tile, y, x).
@@ -416,7 +418,10 @@ impl Level {
                     lc += 4;
                 }
                 // Not ported yet; skipped with their sizes (tools/scripts.py COMMANDS).
-                0x02 => lc += 4,
+                0x02 => {
+                    fx.effects.push((arg(3), arg(2) as i16 as i32, arg(1) as i16 as i32));
+                    lc += 4;
+                }
                 0x0f => lc += 5,
                 0x0c | 0x11 | 0x15 | 0x17 | 0x19 => lc += 3,
                 0x12 | 0x1a => lc += 2,

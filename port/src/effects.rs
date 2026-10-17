@@ -79,6 +79,62 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
         }
         43 => wall_chunks(lv, world, y, x, rng, fx),
         72 => rubble(rng),
+        84 => {
+            // FUN_1040_34e3: chips thrown up (FUN_1040_31d4), maybe a late spark, a sound.
+            let ps = &mut lv.particles;
+            ps.p.group = 0;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            ps.p.callback = 0x177a;
+            ps.p.colour = 0x10;
+            for i in 0..=4 {
+                ps.p.delay = rng.random(4);
+                let px = x - 6 + i * 3;
+                let py = y - 2 + rng.random(4);
+                let steps = rng.random(2) + 3;
+                ps.spawn(0x7500, py, px);
+                ps.last_mut().m.set(0x26, steps);
+                ps.throw(7, 0x20, i * 0x80 + 0xfe0);
+            }
+            ps.p.colour = 0;
+            ps.p.callback = 0;
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            ps.p.group = 1;
+            ps.p.delay = 0;
+            if rng.random(2) != 0 {
+                ps.p.delay = rng.random(0x50) + 0x28;
+                ps.p.group = 0;
+                ps.p.on_spawn = 0x7576;
+                ps.spawn_seq(0x1928, 3, 4, y - 1, x, 1);
+                ps.p.on_spawn = 0;
+                ps.p.group = 1;
+                ps.p.delay = 0;
+            }
+            rng.random(0x29); // the sound's pitch
+            rng.random(0x40);
+            fx.shakes.push((0xc, 7));
+        }
+        85 => {
+            // FUN_1040_008d: a handful of sparks, each spawned after a delay.
+            let ps = &mut lv.particles;
+            ps.p.hits = 0x8000;
+            ps.p.callback = 0x2946;
+            let n = rng.random(2) + 5;
+            for _ in 0..=n {
+                ps.p.delay = rng.random(0x18);
+                let px = x - 8 + rng.random(0x10);
+                let py = y - rng.random(0xc);
+                let s = rng.random(3) * 2 + 0x331e;
+                ps.spawn(s, py, px);
+                let a = rng.random(0x500) + 800;
+                let speed = rng.random(10) + 8;
+                ps.line(speed, a);
+            }
+            ps.p.delay = 0;
+            ps.p.callback = 0;
+            ps.p.hits = 0;
+        }
         // Seen in GRINDER with no Random() calls in the tracer.
         76 => {}
         id if id >= 30000 => {}
