@@ -79,6 +79,36 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
         }
         43 => wall_chunks(lv, world, y, x, rng, fx),
         72 => rubble(rng),
+        88 => {
+            // FUN_1040_2a14: every 0x58th frame a spark column and, a while later, a bit that falls
+            // and goes off (effect 87).
+            if lv.now % 0x58 == 0 {
+                let ps = &mut lv.particles;
+                ps.p.group = 0;
+                ps.spawn_seq(0x5210, 0x1a, 2, y, x, 1);
+                ps.p.delay = 0x34;
+                ps.p.hits = 3;
+                ps.p.damage = 0;
+                ps.p.on_death = 0x57;
+                ps.p.callback = 0x1c92;
+                ps.spawn(0x520c, y + 1, x);
+                ps.throw(0x1c, 0, 0x10e0);
+                ps.p.callback = 0;
+                ps.p.on_death = 0;
+                ps.p.damage = 0x10;
+                ps.p.hits = 0;
+                ps.p.delay = 0;
+                ps.p.group = 1;
+            }
+        }
+        87 => {
+            // FUN_1040_2ab0: a spark and its sound.
+            let ps = &mut lv.particles;
+            ps.p.group = 0;
+            ps.spawn_seq(0x520d, 4, 3, y, x, 1);
+            ps.p.group = 1;
+            rng.random(0x80); // the sound's pitch
+        }
         37 => {
             // FUN_1040_3fff: a puff of smoke every other frame (1170:617e is even).
             if lv.now % 2 == 0 {

@@ -454,6 +454,17 @@ impl Level {
                 o.set(6, x + 0x80);
                 o.set(8, y + 0x30);
             }
+            0x14dc => {
+                // An effect emitter (FUN_1070_a0a2): effect word 0x10 of the record, each frame.
+                let o = base(kind, 0xd34, 0x16);
+                let id = self.from_rec(world, o, r);
+                let o = self.obj(id);
+                o.set(0x14, r.at(0x10));
+                o.set(2, r.at(8));
+                o.set(4, r.at(10));
+                o.set(6, r.at(0xc));
+                o.set(8, r.at(0xe));
+            }
             0x1450 => {
                 // A sound/light emitter (FUN_1070_9f35); it only draws, but its constructor draws a phase.
                 let o = base(kind, 0xdb0, 0x20);
