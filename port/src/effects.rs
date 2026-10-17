@@ -149,6 +149,23 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                 ps.p.colour = 0;
             }
         }
+        82 => {
+            // FUN_1040_328f: chips here and, over a neighbouring cracked tile (60302 / 60301),
+            // there too; that tile steps on.
+            chips(lv, rng, y, x);
+            let width = world.main().width;
+            for (dx, want) in [(0x10, 60302u16), (-0x10, 60301)] {
+                if world.tile_function_at(y, x + dx) == want {
+                    chips(lv, rng, y, x + dx);
+                    let c = (y >> 4) * width + ((x + dx) >> 4);
+                    let v = world.main().cells[c as usize];
+                    let off = world.cell_function(v, 2);
+                    lv.set_cell(world, v.wrapping_add(off), c as u16, fx);
+                }
+            }
+            rng.random(0x1f); // the sound's pitch
+            fx.shakes.push((0xc, 7));
+        }
         30 => {
             // FUN_1040_3683: a gate blows: the two tiles beside the cell step on and bits fly
             // out of both sides.
@@ -291,6 +308,31 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
         id if id >= 30000 => {}
         id => eprintln!("warning: effect {id} not ported"),
     }
+}
+
+/// FUN_1040_31d4(y, x): five chips of rubble thrown up, each after a short delay.
+fn chips(lv: &mut Level, rng: &mut PascalRandom, y: i32, x: i32) {
+    let ps = &mut lv.particles;
+    ps.p.group = 0;
+    ps.p.hits = 0x8000;
+    ps.p.on_death = 0x10;
+    ps.p.callback = 0x177a;
+    ps.p.colour = 0x10;
+    for i in 0..=4 {
+        ps.p.delay = rng.random(4);
+        let px = x - 6 + i * 3;
+        let py = y + rng.random(4);
+        let steps = rng.random(2) + 3;
+        ps.spawn(0x7500, py, px);
+        ps.last_mut().m.set(0x26, steps);
+        ps.throw(7, 0x20, i * 0x80 + 0xfe0);
+    }
+    ps.p.colour = 0;
+    ps.p.callback = 0;
+    ps.p.on_death = 0;
+    ps.p.hits = 0;
+    ps.p.group = 1;
+    ps.p.delay = 0;
 }
 
 /// FUN_1040_3b1f: a wall blowing up. The fire, debris and sprite objects it spawns aren't
