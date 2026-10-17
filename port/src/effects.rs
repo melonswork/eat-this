@@ -11,6 +11,57 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
     match id {
         0 => {}
         34 => explosion(lv, world, y, x, rng, fx),
+        69 => {
+            // FUN_1040_5c06: a big wall collapses: the tiles above step on, dust and rubble fly.
+            let (x1, y1, x2, y2) = clear_block(world, y, x);
+            let width = world.main().width;
+            for i in 0..4 {
+                let cell = (((y1 - 0x10) >> 4) * width + (x1 >> 4) + i) as usize;
+                if let Some(&v) = world.main().cells.get(cell) {
+                    let off = world.cell_function(v, 2);
+                    lv.set_cell(world, v.wrapping_add(off), cell as u16, fx);
+                }
+            }
+            let cx = ((x1 + x2 + 0xf) as u16 >> 1) as i32;
+            let cy = ((y1 + y2 + 0xf) as u16 >> 1) as i32;
+            let ps = &mut lv.particles;
+            ps.p.colour = 0x30;
+            for r in 0..2 {
+                for c in -1..=1 {
+                    ps.p.delay = rng.random(4);
+                    let px = c * 0x18 + cx - 6 + rng.random(0xc);
+                    let py = cy + r * -0x30 + 0x12 + rng.random(0xc);
+                    ps.spawn_seq(0x6d00, 2, 0x13, py, px, 1);
+                    let a = (rng.random(0x61) + 0x570) - c * 0xc0;
+                    let speed = (r * 2 + 2) * 0x10 + rng.random(0x11);
+                    ps.throw(0xe, speed, a);
+                }
+            }
+            ps.p.callback = 0x186e;
+            ps.p.colour = 4;
+            for r in -2..=2 {
+                for c in -1..=1 {
+                    ps.p.delay = rng.random(0xc);
+                    ps.p.draw = rng.random(2);
+                    let px = c * 0x18 + cx - 0xc + rng.random(0x18);
+                    let py = r * 0x11 + cy - 8 + rng.random(0x10);
+                    let steps = rng.random(6) + 2;
+                    ps.spawn(0x3302, py, px);
+                    ps.last_mut().m.set(0x26, steps);
+                    let a = (rng.random(0xc1) + 0x540) - c * 0xc0;
+                    let speed = rng.random(0x31) + 0x30;
+                    let g = rng.random(4) + 0xe;
+                    ps.throw(g, speed, a);
+                    let t = rng.random(0x201) + 0x100;
+                    ps.last_mut().m.set(0x40, t);
+                }
+            }
+            ps.p.delay = 0;
+            ps.p.draw = 0;
+            ps.p.callback = 0;
+            ps.p.colour = 0;
+            fx.shakes.push((0x20, 0x10));
+        }
         18 => {
             // FUN_1040_11b0: a tile falls to bits.
             fx.shakes.push((0x18, 8));
