@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-IGNORE = ("1070:8c72", "1070:34db", "1070:091f")  # draw-time Randoms under a saved seed (see windiff.py)
+IGNORE = ("1070:8c72", "1070:34db", "1070:091f", "1068:3112")  # draw-time Randoms under a saved seed (see windiff.py)
 d = sys.argv[1]
 tsv = ROOT / "work" / f"port_rng_{d}.tsv"
 subprocess.run(

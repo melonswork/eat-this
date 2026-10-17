@@ -69,14 +69,13 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
 ## State (2026-10-17, end)
 
 GRINDER 113/113, CITY01 (LEVEL1_2) 847/847, FOREST04 (LEVEL2_1) 616/616, FOREST03 (LEVEL2_2) 770/770,
-FORPLANE (LEVEL3_1) 352/352 and START (LEVEL1_1) 679/679 windows, and for these six `python3 tools/valdiff.py <DEMO>` (after a full
-`mise run trace -- <demo>`) reports 0 value mismatches over EVERY Random() call. LEVEL1_1 (START) is exact too now (679/679, value-exact): the launch (4e70, `Hero::start_launch`, the ship as a
-platform in main.rs), steam emitter 0x141e, effects 30/82/83/92, negative tiles as blasts, the wall kick, crates
-as platforms, lift dust (FUN_1060_1cee runs in the platform objects' SECOND pass, after the hero) and the storm
-(`storm.rs`, script commands 0x0d/0x16). Only LEVEL3_2 (HYDRO_02) is left: the hero rides a vehicle (1170:5127 == 2:
-HeroUpdateVehicle, first diff at frame 1) and its 192 plants (kind 0x14fa: ctor done in factory.rs; update
-FUN_1068_2ee8 and the burst FUN_1068_2cf3 are NOT ported: they hit-test sprite 0x3300 with 0x11fb and the hero's
-box, draw 6 Randoms under a seed kept in +0x1a). Setup is correct (CHECK[0] ok).
+FORPLANE (LEVEL3_1) 352/352, START (LEVEL1_1) 679/679 and HYDRO_02 (LEVEL3_2) 173/173 windows, and for these seven `python3 tools/valdiff.py <DEMO>` (after a full
+`mise run trace -- <demo>`) reports 0 value mismatches over EVERY Random() call. ALL SEVEN DEMOS are exact (every window, every Random() result via `tools/valdiff.py`, and the hero's x/y/state
+frame by frame via the tracer's `--watch gHeroX,gHeroY,gHeroState`): GRINDER, CITY01, FOREST04, FOREST03, FORPLANE,
+START (launch, ship platform, steam emitter 0x141e, storm in `storm.rs`, lift dust in the platform objects'
+second pass) and HYDRO_02 (the vehicle: `Hero::update_vehicle` = HeroUpdateVehicle, OBJECTS 0x271a starts it,
+0x2718/0x2719 give a sector its water line (`Level::water` = 4ec8, waves in `storm.rs::water_frame`), bubbles =
+callback 0x30f, the torpedo = `Particles::torpedo` + callback 0xf9f, the sea plants `plant.rs`).
 
 LESSONS (the expensive ones):
 - A matching RandSeed per window proves only the call COUNT (the LCG step ignores the range). Two calls swapped
@@ -96,6 +95,11 @@ LESSONS (the expensive ones):
 - Hero walk limits (4e16/4e18, springboards, bots) apply AFTER the platform objects, not at the top; spring parity
   is `(frame & 1)`; weapons 2/8 also add to the shot counter (4e6a, it feeds the flame's wobble) and set the
   4e56 pause of 10; weapon 1 = flame thrower (FUN_1088_678b, callback 0x4ff, death effect 37 = smoke when 617e is even).
+- Under a saved RandSeed (drawing code, the plants' burst) use `PascalRandom::scoped(seed, ..)`: it restores the seed AND the
+  call counter the CHECK windows compare. Draw-time Randoms the port doesn't make are skipped by the IGNORE sites in
+  windiff.py/valdiff.py (1070:8c72, 34db, 091f, 1068:3112).
+- Platform draw routines live in a table at 1170:09ce (filled at run time, not in the EXE's data): rows 0 and 3 (draw
+  1060:1cee) shed dust from lifts.
 - Ghidra's `FUN_x(a,b,c,d)` call text lists the parameters in [BP+6].. order = REVERSED Pascal order.
 
 Added after the CITY01 pass (all from the FOREST04 loop): ambient sound emitters (`ambient.rs`: audibility of
@@ -138,4 +142,5 @@ Still unported (warnings in the port run): the hero riding a smallbot (FUN_1070_
 effects 23 (FUN_1050_4a29 part)/53/54, bonus 0xd10 (6b03), levers needing a key, other weapons (1..3, 5..9), sideways
 shake 5c7d, frozen/burnt deaths, barrels >= 0xb, level-leaving teleports, hero on the big alien's shield (00b6 is
 now `Level::stand_on`, wire it there), wall chunks 60308/60304 (45db), 30070 particle spawn.
-Next: LEVEL1_1 / LEVEL3_2 (setup first), then the unported items below and run the daily loop on it.
+Next: nothing is left in the recorded demos. The game is not complete: see the unported items below (grep the
+port run for `warning:`), and the SDL front end/menus/sound. and run the daily loop on it.
