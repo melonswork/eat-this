@@ -1260,6 +1260,7 @@ impl Hero {
     /// Script command 0x1c: the START intro throws him out of the ship.
     pub fn start_launch(&mut self) {
         self.start_jump(-0x32, 7);
+        self.knocked = true; // HeroStartJump's first argument (1170:511f)
         self.vy += 10;
         self.launch = 0x82;
         self.launch_x0 = self.x + 0x16;
