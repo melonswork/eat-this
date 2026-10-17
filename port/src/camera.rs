@@ -75,6 +75,11 @@ impl Camera {
         self.vertical.strength - 1 == self.vertical.count
     }
 
+    /// 1170:45c0.
+    pub fn shake_amplitude(&self) -> i32 {
+        self.vertical.amplitude
+    }
+
     /// FUN_1050_5c7d.
     pub fn shake_sideways(&mut self, strength: i32, amplitude: i32) {
         self.horizontal.start(strength, amplitude);

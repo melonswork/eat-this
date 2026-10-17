@@ -20,6 +20,9 @@ pub struct Env<'a> {
     pub camera: (i32, i32),
     /// The hero itself, for the objects that hurt him on the spot (FUN_1088_3c32).
     pub hero_obj: &'a mut crate::hero::Hero,
+    /// A vertical screen shake started (1170:45bc - 1 == 45ba) and its amplitude (45c0).
+    pub shake_started: bool,
+    pub shake_amp: i32,
 }
 
 /// The hero globals the objects read.
@@ -223,6 +226,7 @@ impl Level {
             0x148c => self.springboard(id, env),
             0x140a => self.walker(id, env),
             0x13f6 => self.boss(id, env),
+            crate::tree::KIND => self.tree(id, env),
             crate::turret::KIND => self.turret(id, env),
             crate::boss::WRECK => self.boss_wreck(id, env),
             crate::decals::DROP => self.drop_decal(id, env),

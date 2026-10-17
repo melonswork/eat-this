@@ -33,6 +33,7 @@ mod sprites;
 mod tileanim;
 mod trig;
 mod boss;
+mod tree;
 mod turret;
 mod walker;
 mod world;
@@ -464,6 +465,8 @@ impl Game {
                 noise,
                 camera: cam,
                 hero_obj: &mut self.hero,
+                shake_started: self.camera.shake_started(),
+                shake_amp: self.camera.shake_amplitude(),
             };
             self.level.update_decals(&mut env, window);
         }
@@ -486,6 +489,8 @@ impl Game {
             noise,
             camera: cam,
             hero_obj: &mut self.hero,
+            shake_started: self.camera.shake_started(),
+            shake_amp: self.camera.shake_amplitude(),
         };
         self.level.update_actors(&mut env, window);
         if std::mem::take(&mut fx.hero_bounce) {

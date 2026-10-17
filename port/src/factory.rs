@@ -454,6 +454,13 @@ impl Level {
                     let s = world.sector_at(o.w(4), o.w(2));
                     self.add_to(s, list::L66, o);
                 }
+                0x1446 => {
+                    let w = &*world;
+                    let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
+                    let (k, x, y, len) = (g(1) & 0xff, g(2), g(3), g(4));
+                    let _ = w;
+                    self.make_tree(world, k, x, y, len);
+                }
                 0x14c8 => {
                     let w = &*world;
                     self.plat_objs.push(crate::platobj::PlatObj::lift(&rec, |y, x| w.sector_at(y, x)));
@@ -493,7 +500,9 @@ impl Level {
                 f if f < 61000 => false,
                 61700 => false, // sector icons: Level::new
                 62000 | 62001 => {
-                    eprintln!("warning: icon {f} (FUN_1070_fab2) not ported");
+                    let k = (f as i32 - 62000) * 2 + 5;
+                    let x = (f as i32 - 62000) + col * 16 + 7;
+                    self.make_tree(world, k, x, row * 16 + 4, 9);
                     false
                 }
                 61800 => false,
