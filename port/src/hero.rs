@@ -1041,6 +1041,7 @@ impl Hero {
                 if (held(UP) && self.released[UP]) || input[LEFT] == 1 || input[RIGHT] == 1 {
                     self.released[UP] = false;
                     self.start_jump(-0x32, 6);
+                    self.knocked = true; // HeroStartJump(1, ..)
                     dx += self.facing * 4;
                     self.shakes.push((0xe, 4));
                 }
