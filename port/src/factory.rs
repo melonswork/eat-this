@@ -385,6 +385,93 @@ impl Level {
                 o.set(6, o.w(0xe) + 0x20);
                 o.set(8, o.w(0x10) + 0x10);
             }
+            0x14be => {
+                // Aliens (and bots) riding a carrier: the icons to its right (plane 2) become its
+                // passengers and are cleared. Its behaviour isn't ported yet.
+                let mut o = actor(kind, 0xc84, 0x62);
+                o.set(0x22, 0);
+                o.set(0x20, 0);
+                o.set(0x24, 0xff);
+                o.set(0x26, 0xc0);
+                o.set(0x28, 0);
+                o.set(0xc, 0);
+                o.set(0x60, -1);
+                let id = self.from_rec(world, o, r);
+                let o = self.obj(id);
+                let (x, y) = (o.w(0xe), o.w(0x10));
+                o.set(0x5e, y);
+                let mut count = 0usize;
+                let mut cx_ = x;
+                let width = world.planes[2].as_ref().map_or(1, |p| p.width);
+                let mut riders: Vec<[i32; 4]> = Vec::new(); // kind, dx, dy, sprite
+                loop {
+                    cx_ += 0x10;
+                    let f = world.tile_function_in(2, y, cx_);
+                    if f < 61000 {
+                        break;
+                    }
+                    let (k, spr) = if f == 61300 { (0x1432, 0x5b4b) } else { (0x1428, 0x57cd) };
+                    riders.push([k, 0, -9, spr]);
+                    let cell = ((y >> 4) * width + (cx_ >> 4)) as usize;
+                    world.planes[2].as_mut().unwrap().cells[cell] = 0;
+                    count += 1;
+                    if count >= 5 {
+                        break;
+                    }
+                }
+                let n = count as i32;
+                for a in (0..count).rev() {
+                    riders[a][1] = ((n - 1) * -0x17) / n + (a as i32 * 0x2e) / n;
+                }
+                let mut dist = vec![0i32; count];
+                for a in (0..count).rev() {
+                    dist[a] = ((n - 1) * -0xa0) / n + (a as i32 * 0x140) / n;
+                }
+                for a in 0..2 {
+                    cx_ += 0x10;
+                    let f = world.tile_function_in(2, y + 0x10, cx_);
+                    if f == 61100 {
+                        let k = riders.len() as i32;
+                        riders.push([0x145a, a * 0x20 - 0x10, 0xb, 0x5820]);
+                        dist.push(a * 200 - 100);
+                        let _ = k;
+                        let cell = (((y + 0x10) >> 4) * width + (cx_ >> 4)) as usize;
+                        world.planes[2].as_mut().unwrap().cells[cell] = 0;
+                    }
+                }
+                let o = self.obj(id);
+                o.set(0x2a, riders.len() as i32);
+                for (k, rd) in riders.iter().enumerate() {
+                    let b = 0x2c + 10 * k;
+                    o.set(b, rd[0]);
+                    o.set(b + 2, rd[1]);
+                    o.set(b + 4, rd[2]);
+                    o.set(b + 6, rd[3]);
+                    o.set(b + 8, dist[k]);
+                }
+                o.set(2, x - 0x80);
+                o.set(4, y - 0x80);
+                o.set(6, x + 0x80);
+                o.set(8, y + 0x30);
+            }
+            0x1450 => {
+                // A sound/light emitter (FUN_1070_9f35); it only draws, but its constructor draws a phase.
+                let o = base(kind, 0xdb0, 0x20);
+                let mut o = o;
+                o.set(0x14, r.at(8));
+                o.set(0x16, r.at(10));
+                o.set(0x18, r.at(0xc));
+                let id = self.from_rec(world, o, r);
+                let phase = rng.random(0x30);
+                let o = self.obj(id);
+                o.set(0x1a, phase);
+                o.set(0x1c, -1);
+                o.set(0x1e, if r.count >= 8 { r.at(0xe) } else { 0 });
+                o.set(2, o.w(0xe) - 0x160);
+                o.set(4, o.w(0x10) - 0x9c);
+                o.set(6, o.w(0xe) + 0x160);
+                o.set(8, o.w(0x10) + 0x9c);
+            }
             0x14aa => {
                 let o = base(kind, 0xd24, 0x18);
                 let id = self.from_rec(world, o, r);
@@ -549,6 +636,9 @@ impl Level {
         row: i32,
         col: i32,
     ) -> bool {
+        if std::env::var_os("ET_ICON").is_some() {
+            eprintln!("ICON row {row} col {col} cell {c:#x} f {f} main {:#x} mainf {}", world.main().get(col, row), world.cell_function(world.main().get(col, row), 0));
+        }
         let x = col * 16;
         let (xc, y, yb) = (x + 7, row * 16, row * 16 + 0xf);
         let param = world.cell_function(c, 2) as i16;

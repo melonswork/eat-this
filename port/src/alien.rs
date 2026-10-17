@@ -233,6 +233,9 @@ impl Level {
                 None => 0,
             };
             if damage > 0 {
+                if std::env::var_os("ET_ALIENHIT").is_some() {
+                    eprintln!("ALIENHIT {} id {id} damage {damage} hp {}", env.frame, self.o(id).w(0x36));
+                }
                 let push = self.particles.hit_direction();
                 let o = self.o(id);
                 o.set(0x36, o.w(0x36) - damage);

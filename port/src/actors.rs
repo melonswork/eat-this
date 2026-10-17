@@ -225,7 +225,7 @@ impl Level {
             crate::gunship::WRECK => self.wreck(id, env),
             0x1428 => self.alien(id, env),
             0x1432 => self.bigali(id, env),
-            0x14aa => {} // FUN_1070_a06a: draws a sprite
+            0x14aa | 0x1450 => {} // FUN_1070_a06a / FUN_1070_9f35: draw a sprite or play a sound
             0x148c => self.springboard(id, env),
             0x140a => self.walker(id, env),
             0x13f6 => self.boss(id, env),
