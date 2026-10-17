@@ -506,15 +506,6 @@ impl Hero {
             self.crouch_down();
         }
 
-        // HeroTouchTiles (1088:5847).
-        self.touched.clear();
-        if w.tile_function_at(self.y - 0x1c, self.x) == crate::level::SENSITIVE_LEVER {
-            self.touched.push(((self.y - 0x1c) >> 4, self.x >> 4));
-        }
-        if w.tile_function_at(self.y - 0xc, self.x) == crate::level::SENSITIVE_LEVER {
-            self.touched.push(((self.y - 0xc) >> 4, self.x >> 4));
-        }
-
         // Landing: the previous frame's collision found a floor.
         if self.ground > 0 && self.vy >= 0 && self.state >= 0 {
             self.vy = ON_GROUND_VY;

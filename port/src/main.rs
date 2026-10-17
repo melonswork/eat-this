@@ -191,23 +191,7 @@ impl Game {
             -1
         };
         camera.first_frame(&world, (hero.x, hero.y), grinder);
-        // The end of LevelFirstFrame: the hero may start inside a wall that blows up.
-        if world.solidity_at(hero.y - 0x10, hero.x) & 0x80 != 0 {
-            crate::effects::explode_tile(
-                &mut level,
-                &mut world,
-                0x60,
-                0x104,
-                hero.y - 0x10,
-                hero.x,
-                &mut rng,
-                &mut fx,
-            );
-        }
-        for &(a, b) in &fx.shakes {
-            camera.shake(a, b);
-        }
-        Game {
+        let mut g = Game {
             camera,
             world,
             level,
@@ -216,7 +200,27 @@ impl Game {
             frame: 0,
             demo,
             report: CheckReport::default(),
+        };
+        // LevelFirstFrame runs a frame without the hero (as after a teleport).
+        let hero_at = (g.hero.x, g.hero.y);
+        g.level.doors_near_hero(&mut g.world, hero_at, true);
+        let mut cx = factory::Ctx { hero_x: g.hero.x, rng: &mut g.rng };
+        g.level.update_doors(&mut g.world, hero_at, true, &mut cx);
+        let mut noise = g.camera.shake_started() as i32;
+        if std::mem::take(&mut g.level.door_noise) {
+            noise = 3;
         }
+        let window = (g.camera.x, g.camera.y, g.camera.x + 0x13f, g.camera.y + 199);
+        g.world_update(&mut fx, noise, false, window);
+        // The end of LevelFirstFrame: the hero may start inside a wall that blows up.
+        if g.world.solidity_at(g.hero.y - 0x10, g.hero.x) & 0x80 != 0 {
+            let (y, x) = (g.hero.y - 0x10, g.hero.x);
+            crate::effects::explode_tile(&mut g.level, &mut g.world, 0x60, 0x104, y, x, &mut g.rng, &mut fx);
+        }
+        for &(a, b) in &fx.shakes {
+            g.camera.shake(a, b);
+        }
+        g
     }
 
     fn demo_done(&self) -> bool {
@@ -333,6 +337,17 @@ impl Game {
         if std::env::var("ET_CAM").is_ok() {
             eprintln!("CAM {} {} {}", self.frame, cam.0, cam.1);
         }
+        // HeroTouchTiles (1088:5847) comes early in HeroUpdate: a sensitive lever at his body
+        // height goes off before the rest of his update draws its Random() calls.
+        {
+            let (hy, hx) = (self.hero.y, self.hero.x);
+            for dy in [0x1c, 0xc] {
+                if self.world.tile_function_at(hy - dy, hx) == level::SENSITIVE_LEVER {
+                    self.level.touch_sensitive(&mut self.world, (hy - dy) >> 4, hx >> 4, &mut self.rng, &mut fx);
+                }
+            }
+            self.flush_spawns(&mut fx);
+        }
         let mut ps = std::mem::take(&mut self.level.particles);
         let mut plat_objs = std::mem::take(&mut self.level.plat_objs);
         self.hero.update(
@@ -404,10 +419,6 @@ impl Game {
         if let Some((dir, y, x)) = self.hero.push {
             let hy = self.hero.y;
             self.level.push_block(&mut self.world, hy, dir, y, x, &mut fx);
-        }
-        for (ty, tx) in std::mem::take(&mut self.hero.touched) {
-            self.level
-                .touch_sensitive(&mut self.world, ty, tx, &mut self.rng, &mut fx);
         }
         self.flush_spawns(&mut fx);
         // After HeroUpdate: its camera nudges and shakes, then FUN_1088_0a3b(1) .. FUN_1088_0c82.
