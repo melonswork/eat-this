@@ -149,6 +149,52 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                 ps.p.colour = 0;
             }
         }
+        30 => {
+            // FUN_1040_3683: a gate blows: the two tiles beside the cell step on and bits fly
+            // out of both sides.
+            let width = world.main().width;
+            let mut c = (y >> 4) * width + (x >> 4);
+            let f = world.cell_function(world.main().cells[(c - 1) as usize], 0);
+            let step = |lv: &mut Level, world: &mut World, c: i32, fx: &mut Effects| {
+                let v = world.main().cells[c as usize];
+                let off = world.cell_function(v, 2);
+                lv.set_cell(world, v.wrapping_add(off), c as u16, fx);
+            };
+            if f == 60300 || f == 60601 {
+                step(lv, world, c - 1, fx);
+                c -= 2;
+                step(lv, world, c, fx);
+            } else {
+                step(lv, world, c + 1, fx);
+                step(lv, world, c + 2, fx);
+            }
+            let px = (c % width) * 0x10;
+            let ps = &mut lv.particles;
+            ps.p.group = 0;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            ps.p.callback = 0x177a;
+            ps.p.colour = 0x10;
+            for (dir, bx) in [(-1, px + 7), (1, px + 0x27)] {
+                for i in 0..=5 {
+                    ps.p.delay = rng.random(4);
+                    let py_x = bx - 2 + rng.random(6);
+                    let py = y + rng.random(4);
+                    ps.spawn(0x7500, py, py_x);
+                    ps.last_mut().m.set(0x26, 3);
+                    let a = 0x10e0 + dir * (i * 0x80 - 0xc0 + rng.random(0x71));
+                    ps.throw(7, 0x20, a);
+                }
+            }
+            ps.p.colour = 0;
+            ps.p.callback = 0;
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            ps.p.group = 1;
+            ps.p.delay = 0;
+            rng.random(0x1f); // the sound's pitch
+            fx.shakes.push((0xc, 7));
+        }
         83 => {
             // FUN_1040_34a7: chips (FUN_1040_31d4), a sound, a shake and maybe a late spark.
             let ps = &mut lv.particles;
