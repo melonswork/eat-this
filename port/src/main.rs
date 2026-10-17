@@ -187,6 +187,9 @@ impl Game {
         if std::mem::take(&mut fx.hero_launch) {
             hero.start_launch();
         }
+        if level.vehicle {
+            hero.start_vehicle();
+        }
         let mut camera = Camera::new();
         let grinder = level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
         let cam = world.sectors[sector].cam;
@@ -226,6 +229,19 @@ impl Game {
             g.camera.shake(a, b);
         }
         g
+    }
+
+    /// HeroTouchTiles (1088:5847): a sensitive lever at his body height goes off. It comes early
+    /// in HeroUpdate (before the rest of it draws its Random() calls); the vehicle does it after
+    /// moving.
+    fn touch_tiles(&mut self, fx: &mut Effects) {
+        let (hy, hx) = (self.hero.y, self.hero.x);
+        for dy in [0x1c, 0xc] {
+            if self.world.tile_function_at(hy - dy, hx) == level::SENSITIVE_LEVER {
+                self.level.touch_sensitive(&mut self.world, (hy - dy) >> 4, hx >> 4, &mut self.rng, fx);
+            }
+        }
+        self.flush_spawns(fx);
     }
 
     fn demo_done(&self) -> bool {
@@ -345,16 +361,8 @@ impl Game {
         if std::env::var("ET_CAM").is_ok() {
             eprintln!("CAM {} {} {}", self.frame, cam.0, cam.1);
         }
-        // HeroTouchTiles (1088:5847) comes early in HeroUpdate: a sensitive lever at his body
-        // height goes off before the rest of his update draws its Random() calls.
-        {
-            let (hy, hx) = (self.hero.y, self.hero.x);
-            for dy in [0x1c, 0xc] {
-                if self.world.tile_function_at(hy - dy, hx) == level::SENSITIVE_LEVER {
-                    self.level.touch_sensitive(&mut self.world, (hy - dy) >> 4, hx >> 4, &mut self.rng, &mut fx);
-                }
-            }
-            self.flush_spawns(&mut fx);
+        if !self.hero.vehicle {
+            self.touch_tiles(&mut fx);
         }
         let mut ps = std::mem::take(&mut self.level.particles);
         let mut plat_objs = std::mem::take(&mut self.level.plat_objs);
@@ -370,6 +378,9 @@ impl Game {
         );
         self.level.plat_objs = plat_objs;
         self.level.particles = ps;
+        if self.hero.vehicle {
+            self.touch_tiles(&mut fx);
+        }
         if let Some((y, x)) = self.hero.death.take() {
             self.level.gibs_rng(y - 0x19, x, 0x20, true, &mut self.rng);
             alien::smoke_sprite(&mut self.level.particles, y, x);
@@ -569,6 +580,7 @@ impl Game {
         self.level
             .update_grinder(&mut self.world, hero, cam_x, &mut self.rng, fx);
         self.level.storm_frame(&mut self.rng);
+        self.level.water_frame(&self.world);
         // START's foreground (FUN_1090_0ace): the ship the hero was thrown from is a platform
         // (FUN_1070_00b6 on each of sprite 0x3700's plain boxes).
         if self.hero.ship != (0, 0) {

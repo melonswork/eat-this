@@ -135,6 +135,13 @@ pub struct Hero {
     /// Blood splats the hero's hits ask for (FUN_1058_0218): (sprite, y, x).
     pub splats: Vec<(i32, i32, i32)>,
     pub death: Option<(i32, i32)>,
+    /// The hero rides a vehicle (1170:5127 == 2, OBJECTS 0x271a): HeroUpdateVehicle.
+    pub vehicle: bool,
+    /// The vehicle's speeds (4e86, 4e88), sub-pixel remainders (4e8a, 4e8c), bump counters
+    /// (4e8e, 4e90) and the next time it may fire (4e94).
+    pub veh: Veh,
+    /// 1170:4f07 in the vehicle: the right button was released since the last torpedo.
+    fire_ok_v: bool,
     /// 1170:4e70: frames of the START intro's launch left (> 100: he is carried over the ship).
     pub launch: i32,
     /// 1170:4e9a: the launch's centre x. 4e96/4e98: the ship's position.
@@ -188,6 +195,17 @@ pub struct Gun {
     /// FUN_1088_678b's flame: (y, x, angle).
     pub flame: Option<(i32, i32, i32)>,
     flame_aim: i32, // 4e4a: the aim the flame follows
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Veh {
+    pub vx: i32,
+    pub vy: i32,
+    pub rx: i32,
+    pub ry: i32,
+    pub bump_x: i32,
+    pub bump_y: i32,
+    pub next_shot: u32,
 }
 
 /// A weapon record (1170:1656 + 0xd * id).
@@ -276,6 +294,9 @@ impl Hero {
             levers: Vec::new(),
             splats: Vec::new(),
             death: None,
+            vehicle: false,
+            veh: Veh::default(),
+            fire_ok_v: true,
             launch: 0,
             launch_x0: 0,
             ship: (0, 0),
@@ -491,6 +512,10 @@ impl Hero {
             if self.hurt_blink > 0 {
                 self.hurt_blink -= 1;
             }
+        }
+        if self.vehicle {
+            self.update_vehicle(w, lv, &input, mouse, cam, ps, rng);
+            return;
         }
         let cleared = std::cell::Cell::new(usize::MAX);
         let held = |k: usize| input[k] > 0 && cleared.get() != k;
@@ -1268,6 +1293,257 @@ impl Hero {
             }
         }
         (dx, dy)
+    }
+
+    /// FUN_1088_191d (OBJECTS 0x271a): the hero rides a vehicle.
+    pub fn start_vehicle(&mut self) {
+        self.veh = Veh::default();
+        self.select_weapon(3);
+        self.vehicle = true;
+    }
+
+    /// FUN_1040_60e9(sprite, y, x): a bubble, if it is under the water (with the current group).
+    fn bubble(ps: &mut crate::particles::Particles, water: i32, sprite: i32, y: i32, x: i32) {
+        if water + 0x10 <= y {
+            ps.p.callback = 0x30f;
+            ps.spawn(sprite, y, x);
+            ps.p.callback = 0;
+        }
+    }
+
+    /// HeroUpdateVehicle (1088:5b62).
+    fn update_vehicle(
+        &mut self,
+        w: &World,
+        lv: &Level,
+        input: &[i8; 9],
+        mouse: (i32, i32),
+        cam: (i32, i32),
+        ps: &mut crate::particles::Particles,
+        rng: &mut PascalRandom,
+    ) {
+        let water = lv.water;
+        let now = ps.now;
+        let old_facing = self.facing;
+        self.half_width = 0x14;
+        self.height = 0x1e;
+        self.gun.aim = crate::trig::atan2(mouse.1 - ((self.y - 0xd) - cam.1), mouse.0 - (self.x - cam.0));
+        self.gun.mouse = mouse;
+        self.gun.cam = cam;
+        let aim = self.gun.aim;
+        if self.state == DEAD {
+            if self.anim > 0 {
+                self.anim -= 1;
+                if self.anim > 0x9d && self.anim % 0xc == 0 {
+                    let t = 0x15e - self.anim;
+                    rng.random(0x20);
+                    rng.random(0x40);
+                    let px = self.x - 0x10 + rng.random(0x21);
+                    let py = (self.y - 0x16 - 0x10) + rng.random(0x21);
+                    ps.spawn_seq(0x7000, 2, 0x18, py, px, 1);
+                    let b = rng.random(100) + t * 2 + 400;
+                    let m = &mut ps.last_mut().m; // FUN_1050_4a29(b, b)
+                    m.set(0x1c, b);
+                    m.set(0x1e, b);
+                    m.set(0x42, 0x2148);
+                }
+            }
+        } else {
+            self.frame = 0x3400;
+            self.vehicle_weapon(input, ps, rng, now);
+            if input[LEFT_SHOOT] > 0 {
+                self.veh.vx += (crate::trig::cos(aim) * 4) / 0x4000;
+                self.veh.vy -= (crate::trig::sin(aim) * 4) / 0x4000;
+                self.facing = if self.x - cam.0 < mouse.0 { 1 } else { -1 };
+            }
+            if input[LEFT] >= 1 {
+                if input[RIGHT] <= 0 {
+                    self.veh.vx -= 4;
+                    self.facing = -1;
+                }
+            } else if input[RIGHT] >= 1 {
+                self.veh.vx += 4;
+                self.facing = 1;
+            }
+            if input[UP] >= 1 {
+                if input[DOWN] <= 0 {
+                    self.veh.vy -= 4;
+                }
+            } else if input[DOWN] >= 1 {
+                self.veh.vy += 4;
+            }
+            let mut kind = 0;
+            if self.prev_blocked != 0 {
+                if self.veh.bump_x >= 2 {
+                    kind = 1;
+                    self.veh.vx = -self.veh.vx;
+                }
+                self.veh.bump_x = 0;
+            }
+            if self.ceiling != 0 {
+                if self.veh.bump_y > 2 {
+                    kind = 2;
+                    self.veh.vy = (-self.veh.vy * 2) / 3;
+                }
+                self.veh.bump_y = 0;
+            }
+            if kind > 0 {
+                if kind != 2 {
+                    ps.p.group = 0;
+                    let n = rng.random(4);
+                    for _ in 0..n {
+                        let r = rng.random(10);
+                        let px = self.x + self.facing * (0x10 - r);
+                        let py = (self.y - 6) - rng.random(0x10);
+                        let sprite = rng.random(3) + 0x64b;
+                        Self::bubble(ps, water, sprite, py, px);
+                    }
+                    ps.p.group = 1;
+                }
+                let old = self.health;
+                self.health = (self.health - 10).max(0);
+                let _ = old; // FUN_1088_5b41: HeroDamage(-12) is a score entry
+                self.shakes.push((10, 4));
+            }
+        }
+        if self.veh.vx != 0 {
+            if self.veh.vx.abs() <= 0x80 {
+                self.veh.bump_x = 0;
+            } else {
+                self.veh.vx = self.veh.vx.signum() << 7;
+                self.veh.bump_x += 1;
+            }
+            self.veh.rx += self.veh.vx;
+            self.frame = (self.veh.vx.abs() * 5) / 0x80 + 0x3418;
+            self.veh.vx -= if self.veh.vx < 0 { -1 } else { 1 };
+        }
+        let dx = self.veh.rx / 0x80;
+        self.veh.rx %= 0x80;
+        if self.veh.vy != 0 {
+            if self.veh.vy.abs() <= 0x55 {
+                self.veh.bump_y = 0;
+            } else {
+                self.veh.vy = if self.veh.vy < 0 { -1 } else { 1 } * 0x55;
+                self.veh.bump_y += 1;
+            }
+            self.veh.ry += self.veh.vy;
+            self.veh.vy -= if self.veh.vy < 0 { -1 } else { 1 };
+        }
+        let dy = (self.veh.ry + 0x10) / 0x80;
+        self.veh.ry = (self.veh.ry + 0x10) % 0x80;
+        if self.facing != old_facing {
+            if self.turn == NO_TURN {
+                self.turn = 1;
+            } else {
+                let s = if self.turn < 0 { -1 } else if self.turn < 1 { 0 } else { 1 };
+                self.turn = s * 0x22 - self.turn;
+            }
+        }
+        if self.turn != NO_TURN {
+            self.frame = self.turn.abs() / 2 + 0x3403;
+            self.turn += if self.turn < 0 { -1 } else { 1 };
+            if self.turn.abs() > 0x21 {
+                self.turn = NO_TURN;
+            }
+        }
+        if self.state == DEAD {
+            self.frame = 0x3401;
+        } else if self.veh.vx.abs() > 100 && now % 6 == 0 {
+            ps.p.colour = 0x28;
+            ps.p.group = 0;
+            ps.spawn_seq(0x1b0a, 3, 3, self.y - 0x19, self.x + self.facing * -0x17, 1);
+            ps.p.group = 1;
+            ps.p.colour = 0;
+        }
+        self.prev = (self.x, self.y);
+        let saved = (self.state, self.collide_flags);
+        self.state = 0x78;
+        self.collide_flags = 3;
+        let (blocked, _) = self.move_and_collide(w, lv, dx, dy);
+        self.state = saved.0;
+        self.collide_flags = saved.1;
+        self.push_out_of_walls(w);
+        self.prev_blocked = blocked;
+        // The water line: he can't leave it, and breaking through it splashes.
+        let prev_y = self.prev.1;
+        if self.y < water + 0x12 {
+            self.y = water + 0x12;
+        }
+        if water + 0x1c <= prev_y && self.y < water + 0x1c {
+            rng.random(0x50);
+        }
+        if self.state != DEAD {
+            let v = self.veh;
+            if v.vy > 0x20 && v.bump_y > 2 && v.bump_y < 0x40 && v.bump_y % 3 == 0 {
+                if v.bump_y == 3 {
+                    rng.random(2);
+                    rng.random(0x50);
+                }
+                ps.p.group = 0;
+                let px = (self.x - 0xc) + rng.random(0x18);
+                let py = (self.y - 10) - rng.random(0x1c);
+                let sprite = rng.random(3) + 0x64b;
+                Self::bubble(ps, water, sprite, py, px);
+                ps.p.group = 1;
+            }
+            if now % 0xf0 < 0x14 && now % 5 == 0 {
+                if now % 0xf0 == 0 {
+                    rng.random(0x80);
+                    rng.random(0x60);
+                }
+                ps.p.group = 0;
+                let px = (self.x - 8) + rng.random(0x10);
+                let py = (self.y - 0x18) - rng.random(2);
+                let sprite = rng.random(3) + 0x64b;
+                Self::bubble(ps, water, sprite, py, px);
+                ps.p.group = 1;
+            }
+            let d = ps.hit_test_sprite((self.frame, self.x, self.y, 1, 0), 0x3a2);
+            if d > 0 {
+                self.vehicle_hit(d, rng);
+                if ps.hit_index >= 0 {
+                    let m = &ps.list[ps.hit_index as usize].m;
+                    let a = crate::trig::atan2(m.w(0xa) - self.y, m.w(8) - self.x);
+                    self.veh.vx -= (crate::trig::cos(a) * 0x100) / 0x4000;
+                    self.veh.vy += (crate::trig::sin(a) * 0xaa) / 0x4000;
+                }
+                self.veh.bump_x = 0;
+                self.veh.bump_y = 0;
+            }
+        }
+    }
+
+    /// FUN_1088_598e: the right button fires a homing torpedo every 12 frames.
+    fn vehicle_weapon(
+        &mut self,
+        input: &[i8; 9],
+        ps: &mut crate::particles::Particles,
+        rng: &mut PascalRandom,
+        now: u32,
+    ) {
+        if input[RIGHT_SHOOT] > 0 && self.fire_ok_v && self.veh.next_shot <= now {
+            eprintln!("warning: the vehicle's torpedo (FUN_1088_598e) not ported");
+            let _ = (ps, rng);
+        }
+    }
+
+    /// FUN_1088_4a81: the vehicle takes damage.
+    fn vehicle_hit(&mut self, damage: i32, _rng: &mut PascalRandom) {
+        if self.hurt < 1 {
+            let left = self.health - damage;
+            if left < 1 {
+                eprintln!("warning: the vehicle's destruction (FUN_1088_4a34) not ported");
+                self.hurt = 0x7fff;
+                self.anim = 0x15e;
+                self.state = DEAD;
+                self.turn = NO_TURN;
+                self.health = left;
+            } else {
+                self.health = left;
+                self.hurt = 0x52;
+                self.hurt_blink = 0x52;
+            }
+        }
     }
 
     /// Script command 0x1c: the START intro throws him out of the ship.

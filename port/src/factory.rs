@@ -622,6 +622,17 @@ impl Level {
                 k if (100..=199).contains(&k) => {
                     eprintln!("warning: OBJECTS type {k} (FUN_1060_0166) not ported")
                 }
+                0x2718 => {
+                    let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
+                    let s = world.sector_at(g(3), g(2));
+                    world.sectors[s].water[..4].copy_from_slice(&[g(2), g(3), g(4), g(5)]);
+                }
+                0x2719 => {
+                    let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
+                    let s = world.sector_at(g(3), g(2));
+                    world.sectors[s].water[4] = ((g(3) - 100) >> 1) + 100;
+                }
+                0x271a => self.vehicle = true,
                 0x44c | 0x44d | 0x2724 => {}
                 k => eprintln!("warning: OBJECTS type {k:#x} not ported"),
             }

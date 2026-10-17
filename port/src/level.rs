@@ -90,6 +90,10 @@ pub struct Level {
     pub tile_events: Vec<(u32, u16, u16, usize)>,
     /// START's storm.
     pub storm: crate::storm::Storm,
+    /// OBJECTS 0x271a: the hero rides a vehicle (FUN_1088_191d); Game::new passes it on.
+    pub vehicle: bool,
+    /// 1170:4ec8: the water line (the hero's sector, with its waves), computed by the foreground.
+    pub water: i32,
     pub now: u32,
     /// gHeroX as the objects and effects see it this frame.
     pub hero_x: i32,
@@ -156,6 +160,8 @@ impl Level {
             pasted: Vec::new(),
             tile_events: Vec::new(),
             storm: Default::default(),
+            vehicle: false,
+            water: 0x7fff,
             now: 0,
             hero_x: 0,
             cam: (0, 0),

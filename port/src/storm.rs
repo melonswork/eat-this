@@ -58,3 +58,20 @@ impl Level {
         }
     }
 }
+
+impl Level {
+    /// FUN_1090_009c (the water foreground): the water line of the hero's sector plus its waves.
+    pub fn water_frame(&mut self, world: &crate::world::World) {
+        let s = &world.sectors[self.sector.unwrap_or(0)];
+        let line = s.water[1];
+        if line == 0x7fff {
+            return;
+        }
+        let mut water = line;
+        if s.water[2] > 0 {
+            let idx = self.now.wrapping_mul(2).wrapping_mul(0x10) % 0x1680;
+            water += (crate::trig::sin(idx as i32) * s.water[2]) / 0x4000;
+        }
+        self.water = water as i16 as i32;
+    }
+}

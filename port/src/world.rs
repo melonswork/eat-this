@@ -65,6 +65,9 @@ pub struct Sector {
     pub cam: (i32, i32, i32, i32),
     /// Map cell of the sector's SECTOR icon (+0x12), or -1.
     pub icon: i32,
+    /// Water (OBJECTS 0x2718 / 0x2719): +0x14 (draw), +0x16 the water line (0x7fff: none),
+    /// +0x18 the wave height, +0x1a (draw), +0x1c (draw).
+    pub water: [i32; 5],
 }
 
 pub struct World {
@@ -220,6 +223,7 @@ impl World {
             },
             cam: (x1, y1, x2, y2),
             icon: -1,
+            water: [0, 0x7fff, 0, 0, -1],
         }
     }
 
