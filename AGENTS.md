@@ -68,12 +68,31 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
 
 ## State (2026-10-17, end)
 
-CITY01 (LEVEL1_2.DMO) is exact for ALL 847 windows, GRINDER 113/113. FOREST04 (LEVEL2_1.DMO) is exact for ALL 616 windows (trees, pipes, ladders, death gibs and the dead hero's state 100 included).
-LEVEL2_2 (FOREST03) is exact for ALL 770 windows. LEVEL1_1 (0 windows: the START intro, script command 0x1c launches the hero out
-of a ship, 4e70/4e96..4e9a), LEVEL3_1 34, LEVEL3_2 0 (level setup draws 402 Randoms) still need their own
-`windiff` loops (`/tmp`-free recipe: `mise run trace -- work/cd/BIN/USERMAPS/<DEMO>.DMO --windows N+2`, then
-`python3 tools/windiff.py <DEMO> N`, then `ET_RNG=<frame-1>` in the port). A matching RandSeed does not prove the hero is
-in the right place: also compare `--dump` with the tracer's `--watch gHeroX,gHeroY,gHeroState`.
+GRINDER 113/113, CITY01 (LEVEL1_2) 847/847, FOREST04 (LEVEL2_1) 616/616, FOREST03 (LEVEL2_2) 770/770 and
+FORPLANE (LEVEL3_1) 352/352 windows, and for these five `python3 tools/valdiff.py <DEMO>` (after a full
+`mise run trace -- <demo>`) reports 0 value mismatches over EVERY Random() call. LEVEL1_1 (START: window 1 draws 290
+Randoms, the port 161; script command 0x1c launches the hero out of a ship, 4e70/4e96..4e9a) and LEVEL3_2 (HYDRO_02:
+setup draws 402, the port 22; CHECK[0] "differs") are the demos left; everything else below is the recipe.
+
+LESSONS (the expensive ones):
+- A matching RandSeed per window proves only the call COUNT (the LCG step ignores the range). Two calls swapped
+  inside a window, or a setup that draws the right number of values for the wrong objects, leave all windows green
+  and wrong. `tools/valdiff.py` compares ranges AND results; run it whenever a demo is "exact".
+- `CHECK[0] (after level setup): differs` means the setup Randoms are wrong; the port then ADOPTS the demo's seed
+  and everything downstream looks fine until a value (an alien's hit points) matters. Fix the setup first
+  (`ET_ICON=1` lists the icons in creation order; the frame-0 calls of calls.tsv are the setup). Icons that
+  FUN_1068 constructors consume (the carrier 0x14be eats the aliens/bots to its right) must be cleared in order.
+- Tile cells: `cell >> 8` is the group number and goes beyond 15 (LEVEL3_1 has 17 groups); never mask it.
+- The tracer labels hero calls with the port's frame and object calls one frame earlier; `ET_RNG_TSV` + valdiff
+  sidestep labels. LevelFirstFrame also runs a world update without the hero (Game::new, like `teleport`).
+- HeroTouchTiles (sensitive levers) is EARLY in HeroUpdate: its scripts/spawns draw Randoms before the hero's idle
+  Random(8) at the end (main.rs runs it before `hero.update`). Other level events recorded by `Hero::update`
+  (levers, pushes, pick-ups) are still processed after it: if a Random order swap shows up around those, split
+  the update there too.
+- Hero walk limits (4e16/4e18, springboards, bots) apply AFTER the platform objects, not at the top; spring parity
+  is `(frame & 1)`; weapons 2/8 also add to the shot counter (4e6a, it feeds the flame's wobble) and set the
+  4e56 pause of 10; weapon 1 = flame thrower (FUN_1088_678b, callback 0x4ff, death effect 37 = smoke when 617e is even).
+- Ghidra's `FUN_x(a,b,c,d)` call text lists the parameters in [BP+6].. order = REVERSED Pascal order.
 
 Added after the CITY01 pass (all from the FOREST04 loop): ambient sound emitters (`ambient.rs`: audibility of
 FUN_10e0_016b needs the listener = camera centre; the first deadlines 4ec0/4ebc are the boot-seed values 509/329, the
@@ -115,4 +134,4 @@ Still unported (warnings in the port run): the hero riding a smallbot (FUN_1070_
 effects 23 (FUN_1050_4a29 part)/53/54, bonus 0xd10 (6b03), levers needing a key, other weapons (1..3, 5..9), sideways
 shake 5c7d, frozen/burnt deaths, barrels >= 0xb, level-leaving teleports, hero on the big alien's shield (00b6 is
 now `Level::stand_on`, wire it there), wall chunks 60308/60304 (45db), 30070 particle spawn.
-Next: LEVEL3_1 (FORPLANE), then LEVEL1_1 / LEVEL3_2 and run the daily loop on it.
+Next: LEVEL1_1 / LEVEL3_2 (setup first), then the unported items below and run the daily loop on it.
