@@ -454,6 +454,23 @@ impl Level {
                 o.set(6, x + 0x80);
                 o.set(8, y + 0x30);
             }
+            0x14fa => {
+                // A plant (FUN_1068_2ee8) that bursts when shot or touched; each has its own
+                // draw-time seed (+0x1a) and sway phase (+0x18).
+                let o = base(kind, 0xc08, 0x1c);
+                let id = self.from_rec(world, o, r);
+                let phase = rng.random(0x1680);
+                let seed = rng.random(0xffff);
+                let o = self.obj(id);
+                o.set(0x14, r.at(8));
+                o.set(0x18, phase);
+                o.set(0x1a, seed);
+                o.set(0x16, 1);
+                o.set(2, o.w(0xe) - 0x20);
+                o.set(4, o.w(0x10) - 0x20 - o.w(0x14) * 8);
+                o.set(6, o.w(0xe) + 0x20);
+                o.set(8, o.w(0x10) + 0x10);
+            }
             0x14dc => {
                 // An effect emitter (FUN_1070_a0a2): effect word 0x10 of the record, each frame.
                 let o = base(kind, 0xd34, 0x16);
