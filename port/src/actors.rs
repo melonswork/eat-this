@@ -399,12 +399,18 @@ impl Level {
             o.set(0x22, 3);
             env.fx.shakes.push((0xc, 5));
         }
-        // The hero standing on it.
+        // The hero standing on it (FUN_1070_0078 allows it unless he is rising or climbing).
         let o = self.o(id);
         let top = o.w(0x10) - height;
-        let (hx, hy, _) = env.hero;
-        if o.w(0xe) - half - 9 <= hx && hx <= o.w(0xe) + half + 10 && (top..top + 0x10).contains(&hy) {
-            eprintln!("warning: the hero standing on a crate not ported");
+        let h = env.h;
+        let can = (h.state >= 1 && h.vy >= 0) || (h.state < 1 && !(-5..=-1).contains(&h.state));
+        if o.w(0xe) - half - h.half_width <= h.x
+            && h.x <= o.w(0xe) + half + 1 + h.half_width
+            && h.prev_y <= top
+            && top <= h.y
+            && can
+        {
+            env.fx.hero_stand = Some(top);
         }
     }
 
