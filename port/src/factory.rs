@@ -578,6 +578,9 @@ impl Level {
         }
         for rec in world.map.object_records() {
             let kind = rec[0] as u16;
+            if std::env::var_os("ET_REC").is_some() {
+                eprintln!("REC {kind:#x} {:?}", rec);
+            }
             let r = Rec {
                 w: &rec,
                 count: rec.len() as i32,

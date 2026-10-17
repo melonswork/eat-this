@@ -288,6 +288,41 @@ pub fn update_lift(
     down: bool,
     released_down: &mut bool,
     shakes: &mut Vec<(i32, i32)>,
+    ps: &mut crate::particles::Particles,
+) {
+    update_lift_move(p, hero, world, rng, down, released_down, shakes);
+    // FUN_1060_1cee (the lifts' second pass): dust falls off both ends every 16th moving frame.
+    if ds_word(0x9da + p.row * 14) == 0x1cee && p.age % 0x10 == 0xf {
+        let mut lx = p.x - 1;
+        for a in 0..=1 {
+            let s = world.solidity_at(p.y + 2, lx);
+            if std::env::var_os("ET_DUST").is_some() {
+                eprintln!("DUST {} lift row {} at {},{} age {} lx {lx} solidity {s:#x} dir {}", ps.now, p.row, p.x, p.y, p.age, p.dir);
+            }
+            if s & 2 != 0 {
+                ps.p.group = 0;
+                ps.p.colour = 0x10;
+                ps.p.delay = 4;
+                ps.spawn_seq(0x1919, 8, 2, p.y + 2, lx, 1);
+                let g = rng.random(5) + 0x15;
+                ps.throw(g, 8, a * 0xb40);
+                ps.p.delay = 0;
+                ps.p.colour = 0;
+                ps.p.group = 1;
+                lx = p.x + p.width();
+            }
+        }
+    }
+}
+
+fn update_lift_move(
+    p: &mut PlatObj,
+    hero: &mut HeroSide,
+    world: &crate::world::World,
+    rng: &mut crate::rng::PascalRandom,
+    down: bool,
+    released_down: &mut bool,
+    shakes: &mut Vec<(i32, i32)>,
 ) {
     p.prev_y = p.y;
     let rel = (hero.x + hero.dx) - p.x;
