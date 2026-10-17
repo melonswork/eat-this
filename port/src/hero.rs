@@ -491,6 +491,17 @@ impl Hero {
         let cleared = std::cell::Cell::new(usize::MAX);
         let held = |k: usize| input[k] > 0 && cleared.get() != k;
 
+        if self.state == DEAD {
+            // HeroUpdate's state 100: the death timer runs out into a HeroDamage call.
+            if self.anim > 0 {
+                self.anim -= 1;
+                if self.anim == 0 {
+                    rng.random(6);
+                }
+            }
+            self.run_platforms(w, lv, &input, cam, ps, rng, plat_objs, 0, 0);
+            return;
+        }
         // A ceiling right above the head forces a crouch.
         if w.solidity_at(self.y - 0x2b, self.x) & solid::WALL != 0 {
             self.head_blocked = 1;
@@ -1163,6 +1174,35 @@ impl Hero {
         self.ground = 0;
         self.head_blocked = 0;
         self.lever_reach &= 1;
+        (dx, dy) = self.run_platforms(w, lv, &input, cam, ps, rng, plat_objs, dx, dy);
+        let (blocked, step_h) = self.move_and_collide(w, lv, dx, dy);
+        self.prev_blocked = blocked;
+        self.push_out_of_walls(w);
+        if self.ground == 5 {
+            // A conveyor belt (tile function 11000) carries him next frame (1170:4e06).
+            self.nudge = self.belt;
+            self.belt_dir = self.belt;
+        }
+        let posed = self.end_of_frame(walking, blocked, step_h, rng);
+        self.lim = (-0x7fff, 0x7fff);
+        self.gun_end(posed, &input, rng, ps.now);
+        self.pick_up(w);
+        self.take_hits(ps, rng);
+    }
+
+    /// FUN_1060_145a: the platform objects of the default sector and of his own, which carry him.
+    fn run_platforms(
+        &mut self,
+        w: &World,
+        lv: &Level,
+        input: &[i8; 9],
+        cam: (i32, i32),
+        ps: &mut crate::particles::Particles,
+        rng: &mut PascalRandom,
+        plat_objs: &mut [crate::platobj::PlatObj],
+        mut dx: i32,
+        mut dy: i32,
+    ) -> (i32, i32) {
         // FUN_1060_145a: the platform objects of the default sector and of his own, which carry him.
         {
             let window = (cam.0, cam.1, cam.0 + 0x13f, cam.1 + 199);
@@ -1198,19 +1238,7 @@ impl Hero {
                 self.ground = g;
             }
         }
-        let (blocked, step_h) = self.move_and_collide(w, lv, dx, dy);
-        self.prev_blocked = blocked;
-        self.push_out_of_walls(w);
-        if self.ground == 5 {
-            // A conveyor belt (tile function 11000) carries him next frame (1170:4e06).
-            self.nudge = self.belt;
-            self.belt_dir = self.belt;
-        }
-        let posed = self.end_of_frame(walking, blocked, step_h, rng);
-        self.lim = (-0x7fff, 0x7fff);
-        self.gun_end(posed, &input, rng, ps.now);
-        self.pick_up(w);
-        self.take_hits(ps, rng);
+        (dx, dy)
     }
 
     /// FUN_1088_55f0's end: shots against the body's and the arm's sprites (mask 0x3a2), the

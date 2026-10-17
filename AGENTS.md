@@ -68,9 +68,8 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
 
 ## State (2026-10-17, end)
 
-CITY01 (LEVEL1_2.DMO) is exact for ALL 847 windows, GRINDER 113/113. FOREST04 (LEVEL2_1.DMO) is exact for 400 of
-616 windows (next: the trees, object kind 0x1446, VMT 0xd90, update FUN_1070_9420, ctor in EnemyFactory line ~25477,
-icons 62000/62001 = FUN_1070_fab2). LEVEL1_1 (0 windows: the START intro, script command 0x1c launches the hero out
+CITY01 (LEVEL1_2.DMO) is exact for ALL 847 windows, GRINDER 113/113. FOREST04 (LEVEL2_1.DMO) is exact for ALL 616 windows (trees, pipes, ladders, death gibs and the dead hero's state 100 included).
+LEVEL1_1 (0 windows: the START intro, script command 0x1c launches the hero out
 of a ship, 4e70/4e96..4e9a), LEVEL2_2 43, LEVEL3_1 34, LEVEL3_2 0 (level setup draws 402 Randoms) still need their own
 `windiff` loops (`/tmp`-free recipe: `mise run trace -- work/cd/BIN/USERMAPS/<DEMO>.DMO --windows N+2`, then
 `python3 tools/windiff.py <DEMO> N`, then `ET_RNG=<frame-1>` in the port). A matching RandSeed does not prove the hero is
@@ -116,4 +115,4 @@ Still unported (warnings in the port run): the hero riding a smallbot (FUN_1070_
 effects 23 (FUN_1050_4a29 part)/53/54, bonus 0xd10 (6b03), levers needing a key, other weapons (1..3, 5..9), sideways
 shake 5c7d, frozen/burnt deaths, barrels >= 0xb, level-leaving teleports, hero on the big alien's shield (00b6 is
 now `Level::stand_on`, wire it there), wall chunks 60308/60304 (45db), 30070 particle spawn.
-Next: pick the demo with the most windows left (LEVEL2_1/LEVEL2_2) and run the daily loop on it.
+Next: LEVEL2_2 (window 46: original 86 calls, port 45) and run the daily loop on it.
