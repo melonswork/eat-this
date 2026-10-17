@@ -437,6 +437,9 @@ impl Level {
         let h = env.h;
         let o = self.o(id);
         if env.noise < 1 && o.w(0x3c) < 10 {
+            if std::env::var_os("ET_LISTEN").is_some() {
+                eprintln!("LISTEN {} id {id} sees {} at {},{} hero {},{} face {} 3c {}", env.frame, o.b(0x4a), o.w(0xe), o.w(0x10), h.x, h.y, o.w(0x20), o.w(0x3c));
+            }
             if o.b(0x4a) != 0 {
                 let a = trig::atan2(h.y - o.w(0x10), h.x - o.w(0xe));
                 let hears = if o.w(0x20) < 1 { a < 0xe60 && a > 0x820 } else { a < 800 || a > 0x1360 };
@@ -1032,7 +1035,13 @@ impl Level {
     /// FUN_1068_0a54(y2, x2, y1, x1): nothing with solidity 0x40 on the line, tested once a tile.
     pub(crate) fn line_of_sight(&self, env: &Env, y2: i32, x2: i32, y1: i32, x1: i32) -> bool {
         let (dx, dy) = (x2 - x1, y2 - y1);
-        let s = |y: i32, x: i32| crate::hero::Hero::solidity_all(env.world, self, y, x) & 0x40 != 0;
+        let s = |y: i32, x: i32| {
+            let v = crate::hero::Hero::solidity_all(env.world, self, y, x);
+            if std::env::var_os("ET_LOS").is_some() && v & 0x40 != 0 {
+                eprintln!("LOS {} blocked at y={y} x={x} solidity {v:#x} tilefn {} cell {:#x} f1 {:#x} f2 {} f3 {} f4 {}", env.frame, env.world.tile_function_at(y, x), env.world.cell_at(1, y, x).unwrap_or(0), env.world.cell_function(env.world.cell_at(1, y, x).unwrap_or(0), 1), env.world.cell_function(env.world.cell_at(1, y, x).unwrap_or(0), 2), env.world.cell_function(env.world.cell_at(1, y, x).unwrap_or(0), 3), env.world.cell_function(env.world.cell_at(1, y, x).unwrap_or(0), 4));
+            }
+            v & 0x40 != 0
+        };
         if dy.abs() < dx.abs() {
             let mut lx = (x1 & !15) + 7;
             if x1 < x2 {

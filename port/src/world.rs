@@ -88,6 +88,9 @@ impl World {
                     .transpose()
             })
             .collect::<io::Result<_>>()?;
+        if std::env::var_os("ET_GROUPS").is_some() {
+            eprintln!("GROUPS {:?} (background {})", map.groups, map.background);
+        }
         let mut planes: Vec<Option<Plane>> = vec![None; PLANE_SLOTS];
         for (i, p) in map.planes.iter().enumerate() {
             planes[i] = Some(Plane {
@@ -111,7 +114,7 @@ impl World {
         if cell == 0 || cell & 0x8000 != 0 {
             return 0;
         }
-        match &self.groups[(cell >> 8) as usize & 15] {
+        match self.groups.get((cell >> 8) as usize).unwrap_or(&None) {
             Some(g) if ((cell & 0xff) as usize) < g.len() => g.function((cell & 0xff) as usize, n),
             _ => 0,
         }
@@ -123,7 +126,7 @@ impl World {
         if c & 0x8000 != 0 {
             return None;
         }
-        let g = self.groups[(c >> 8) as usize & 15].as_ref()?;
+        let g = self.groups.get((c >> 8) as usize)?.as_ref()?;
         g.infos.get((c & 0xff) as usize * 16).copied()
     }
 

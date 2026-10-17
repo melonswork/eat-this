@@ -769,7 +769,10 @@ impl Graphics {
                     if cell == 0 || cell & 0x8000 != 0 {
                         continue;
                     }
-                    let gi = (cell >> 8) as usize & 15;
+                    let gi = (cell >> 8) as usize;
+                    if gi >= map.groups.len() {
+                        continue;
+                    }
                     let hidden = map.groups[gi]
                         .as_deref()
                         .is_some_and(|n| n.contains("ICON"));
