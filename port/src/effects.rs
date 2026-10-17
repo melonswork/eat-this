@@ -79,6 +79,18 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
         }
         43 => wall_chunks(lv, world, y, x, rng, fx),
         72 => rubble(rng),
+        37 => {
+            // FUN_1040_3fff: a puff of smoke every other frame (1170:617e is even).
+            if lv.now % 2 == 0 {
+                let ps = &mut lv.particles;
+                ps.p.colour = 0x10;
+                ps.spawn_seq(0x5111, 3, 9, y, x, 1);
+                let a = rng.random(0x81) + 0x560;
+                let speed = rng.random(0x10) + 0x10;
+                ps.line(speed, a);
+                ps.p.colour = 0;
+            }
+        }
         84 => {
             // FUN_1040_34e3: chips thrown up (FUN_1040_31d4), maybe a late spark, a sound.
             let ps = &mut lv.particles;

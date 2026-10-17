@@ -494,6 +494,25 @@ impl Particles {
     }
 
     /// FUN_1088_69d8: weapon 2's bullet (effect 81 where it lands).
+    /// FUN_1088_678b's flame: a short-lived fire that follows its line and goes out in smoke
+    /// (effect 37).
+    pub fn flame(&mut self, y: i32, x: i32, angle: i32) {
+        self.p.hits = 0x48;
+        self.p.damage = 4;
+        self.p.on_death = 0x25;
+        self.p.flags = 0x94;
+        self.p.tiles = 0x413;
+        self.p.callback = 0x4ff;
+        self.spawn_seq(0x1a00, 1, 0x11, y, x, 0);
+        self.line(0x60, angle);
+        self.p.callback = 0;
+        self.p.tiles = 0x43;
+        self.p.flags = 0x84;
+        self.p.on_death = 0;
+        self.p.damage = 0x10;
+        self.p.hits = 0;
+    }
+
     pub fn rapid(&mut self, y: i32, x: i32, aim: i32, parity: i32) {
         self.p.hits = 0x3000;
         self.p.damage = 0x10;
@@ -972,6 +991,21 @@ impl Level {
                 m.set(0x2e, y - 3);
                 m.set(0x30, x + 3);
                 m.set(0x32, y + 3);
+            }
+            0x4ff => {
+                // FUN_1050_04ff: the flame's picture (age / 2 into its frames) and its box.
+                let (x, y) = (m.w(8), m.w(0xa));
+                let frame = (m.uw(0x24) >> 1) as i32 + m.w(0x14);
+                m.set(0x16, frame);
+                if let Some((l, t, r, b)) = crate::sprites::draw_box(frame) {
+                    m.set(0x2c, x + l);
+                    m.set(0x2e, y + t);
+                    m.set(0x30, x + r);
+                    m.set(0x32, y + b);
+                } else {
+                    m.set(0x2c, x);
+                    m.set(0x2e, y);
+                }
             }
             CB_CRITTER => {
                 // FUN_1050_1656 (drawing): its frame, which the shots' hit test uses.

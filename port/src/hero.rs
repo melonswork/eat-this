@@ -180,6 +180,9 @@ pub struct Gun {
     pub rapid: Option<(i32, i32, i32, i32)>,
     /// FUN_1088_6cf0's three rockets: (y, x, angle).
     pub rockets: Option<(i32, i32, i32)>,
+    /// FUN_1088_678b's flame: (y, x, angle).
+    pub flame: Option<(i32, i32, i32)>,
+    flame_aim: i32, // 4e4a: the aim the flame follows
 }
 
 /// A weapon record (1170:1656 + 0xd * id).
@@ -428,6 +431,7 @@ impl Hero {
         self.gun.shell7 = None;
         self.gun.rapid = None;
         self.gun.rockets = None;
+        self.gun.flame = None;
         self.push = None;
         if mouse != self.gun.mouse {
             self.gun.shooting = true;
@@ -1361,6 +1365,9 @@ impl Hero {
             }
             g.shot = Some((y, x, g.aim, g.shots & 1));
             g.shots += 1;
+            if std::env::var_os("ET_SHOT").is_some() {
+                eprintln!("SHOTS {now} -> {}", g.shots);
+            }
             g.shooting = true;
         }
         // (*1170:4dee)(): the right button's weapon (table 1170:188a).
@@ -1423,6 +1430,42 @@ impl Hero {
     fn right_weapon(&mut self, input: &[i8; 9], rng: &mut PascalRandom, now: u32) {
         match self.weapon {
             -1 => {}
+            // FUN_1088_678b: the flame thrower follows the aim a little behind.
+            1 => {
+                let g = &mut self.gun;
+                if !g.armed || input[RIGHT_SHOOT] < 1 {
+                    g.flame_aim = g.aim;
+                } else {
+                    if g.aim != g.flame_aim {
+                        let d = (g.aim - g.flame_aim + 0x1680 + 0xb40) % 0x1680 - 0xb40;
+                        if d.abs() > 0x3c0 {
+                            g.flame_aim = g.aim;
+                        } else if d < 0 {
+                            g.flame_aim = (g.flame_aim + 0x1680 - (-d).min(0x40)) % 0x1680;
+                        } else {
+                            g.flame_aim = (d.min(0x40) + g.flame_aim) % 0x1680;
+                        }
+                    }
+                    if self.weapons[1].ammo > 0 {
+                        let g = &mut self.gun;
+                        let k = g.shots % 6 + 0x17;
+                        let a = g.flame_aim;
+                        let x = self.x + g.muzzle.0 + (k * crate::trig::cos(a)) / 0x4000;
+                        let y = self.y + g.muzzle.1 - 0x16 - (k * crate::trig::sin(a)) / 0x4000;
+                        let wobble = (crate::trig::sin(g.shots * 0x100 % 0x1680) * 0x40) / 0x4000;
+                        if std::env::var_os("ET_FLAME").is_some() {
+                            eprintln!("FLAME {now} aim {} a4a {a} shots {} muzzle {:?} hero {},{} -> {x},{y} angle {}", g.aim, g.shots, g.muzzle, self.x, self.y, (a + wobble + 0x1680) % 0x1680);
+                        }
+                        g.flame = Some((y, x, (a + wobble + 0x1680) % 0x1680));
+                        g.shots += 1;
+                        g.shooting = true;
+                        self.weapons[1].ammo -= 1;
+                        if self.weapons[1].ammo < 1 {
+                            self.next_weapon();
+                        }
+                    }
+                }
+            }
             // FUN_1088_64fe: a grenade, thrown 0x50 either side of the aim.
             0 => {
                 if self.use_ammo(0xc, input, now) {
@@ -1457,6 +1500,8 @@ impl Hero {
                     g.rockets = Some((y, x, g.aim));
                     rng.random(0x30); // the sound's pitch
                     g.pose = 4;
+                    g.shots += 1;
+                    g.cooldown = 10;
                     g.shooting = true;
                     self.released[RIGHT_SHOOT] = false;
                 }
@@ -1470,6 +1515,7 @@ impl Hero {
                     let y = self.y + g.muzzle.1 - 0x16 - (0x17 * s) / 0x4000;
                     g.rapid = Some((y, x, g.aim, g.shots & 1));
                     g.shots += 1;
+                    g.cooldown = 10;
                     g.shooting = true;
                 }
             }

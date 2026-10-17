@@ -37,6 +37,8 @@ pub struct HitBox {
 #[derive(Clone, Debug)]
 struct Frame {
     height: i32,
+    width: i32,
+    hotspot: (i32, i32),
     boxes: Vec<HitBox>,
 }
 
@@ -81,7 +83,7 @@ fn load(slot: u16) -> Boxes {
                     }
                 })
                 .collect();
-            Some(Frame { height: s.height, boxes })
+            Some(Frame { height: s.height, width: s.width, hotspot: s.hotspot, boxes })
         })
         .collect()
 }
@@ -104,6 +106,13 @@ fn frame(id: i32) -> Option<Frame> {
     let mut m = GROUPS.get_or_init(Default::default).lock().unwrap();
     let boxes = m.entry(slot).or_insert_with(|| load(slot));
     boxes.get((id & 0xff) as usize).cloned().flatten()
+}
+
+/// FUN_10f0_1fbe's extent of sprite `id` drawn at the origin: (left, top, right, bottom).
+pub fn draw_box(id: i32) -> Option<(i32, i32, i32, i32)> {
+    let f = frame(id)?;
+    let (l, t) = f.hotspot;
+    Some((l, t, l + f.width - 1, t + f.height - 1))
 }
 
 /// FUN_10f0_1f8e: the sprite's height.

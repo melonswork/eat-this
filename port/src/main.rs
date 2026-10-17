@@ -364,6 +364,10 @@ impl Game {
             self.level.particles.rockets(a, y, x);
             noise = 2;
         }
+        if let Some((y, x, a)) = self.hero.gun.flame {
+            self.level.particles.flame(y, x, a);
+            noise = 2;
+        }
         if let Some((y, x, a, parity)) = self.hero.gun.rapid {
             self.level.particles.rapid(y, x, a, parity);
             noise = 2;
