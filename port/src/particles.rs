@@ -992,6 +992,60 @@ impl Level {
                 m.set(0x30, x + 3);
                 m.set(0x32, y + 3);
             }
+            0x30f => {
+                // FUN_1050_030f: a bubble rises through the water, slides round walls, and pops
+                // at the surface.
+                let water = self.water;
+                let (x, y) = (m.w(8), m.w(0xa));
+                let life = m.w(0x22);
+                let sprite = m.w(0x14);
+                if y < water {
+                    m.set(0x24, life);
+                    let ps = &mut self.particles;
+                    ps.p.group = 0;
+                    ps.p.colour = 0x10;
+                    ps.spawn_seq(0x64e, 4, 4, water - 1, x, 1);
+                    ps.p.colour = 0;
+                    ps.p.group = 1;
+                    if sprite == 0x64b {
+                        f.rng.random(0x80); // the pops' pitches
+                        f.rng.random(0x80);
+                    }
+                } else {
+                    let w = &*f.world;
+                    let mut done = false;
+                    if w.solidity_at(y, x) & 0x40 == 0 {
+                        m.set(0xa, y - 1);
+                    } else if w.solidity_at(y + 1, x) & 0x40 != 0 {
+                        m.set(0x24, life);
+                        done = true;
+                    } else {
+                        let mut k = 0x10;
+                        while k < 0x50 {
+                            if w.solidity_at(y, (x + 9) - k) & 0x40 == 0 {
+                                m.set(8, x - 1);
+                                break;
+                            }
+                            if w.solidity_at(y, x + k) & 0x40 == 0 {
+                                m.set(8, x + 1);
+                                break;
+                            }
+                            k += 0x10;
+                        }
+                        if k > 0x4f {
+                            m.set(0x24, life);
+                            done = true;
+                        }
+                    }
+                    if !done {
+                        let (x, y) = (m.w(8), m.w(0xa));
+                        let (cx, cy) = f.camera;
+                        if x - cx < -0x100 || y - cy < -0x100 || 0x23f < x - cx || 0x1c7 < y - cy {
+                            m.set(0x24, life);
+                        }
+                    }
+                }
+            }
             0x4ff => {
                 // FUN_1050_04ff: the flame's picture (age / 2 into its frames) and its box.
                 let (x, y) = (m.w(8), m.w(0xa));
