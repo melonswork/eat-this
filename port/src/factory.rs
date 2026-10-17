@@ -265,6 +265,18 @@ impl Level {
                 let (y, x) = (o.w(0x10), o.w(0xe));
                 self.add_actor(world, o, y, x);
             }
+            0x14f0 => {
+                let o = actor(kind, 0xc70, 0x26);
+                let id = self.from_rec(world, o, r);
+                let o = self.obj(id);
+                o.set(0x22, 0);
+                o.set(0x24, 0);
+                o.set(0x20, 0x50);
+                o.set(2, o.w(0xe) - 0x40);
+                o.set(4, o.w(0x10) - 0x60);
+                o.set(6, o.w(0xe) + 0x40);
+                o.set(8, o.w(0x10) + 0x10);
+            }
             0x13d8 => {
                 let o = actor(kind, 0xc5c, 0x24);
                 let id = self.from_rec(world, o, r);

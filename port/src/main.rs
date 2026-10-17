@@ -28,6 +28,7 @@ mod palette;
 mod platobj;
 mod picture;
 mod rng;
+mod sentry;
 mod smallbot;
 mod sprites;
 mod tileanim;

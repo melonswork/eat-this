@@ -230,6 +230,7 @@ impl Level {
             0x140a => self.walker(id, env),
             0x13f6 => self.boss(id, env),
             crate::tree::KIND => self.tree(id, env),
+            crate::sentry::KIND => self.sentry(id, env),
             crate::turret::KIND => self.turret(id, env),
             crate::boss::WRECK => self.boss_wreck(id, env),
             crate::decals::DROP => self.drop_decal(id, env),
@@ -738,7 +739,7 @@ impl Level {
     fn after_move(&mut self, id: usize, env: &mut Env) {
         let kind = self.objects[id].as_ref().unwrap().kind;
         match kind {
-            0x145a | 0x143c | 0x140a | crate::decals::DROP | crate::decals::SHELL => {
+            0x145a | 0x143c | 0x140a | crate::sentry::KIND | crate::decals::DROP | crate::decals::SHELL => {
                 let o = self.o(id);
                 if o.w(0x1c) == 0 {
                     if o.w(0x1a) == 0 {
