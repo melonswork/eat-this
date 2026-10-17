@@ -68,18 +68,16 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
 
 ## State (2026-10-17, end)
 
-GRINDER 113/113, CITY01 (LEVEL1_2) 847/847, FOREST04 (LEVEL2_1) 616/616, FOREST03 (LEVEL2_2) 770/770 and
-FORPLANE (LEVEL3_1) 352/352 windows, and for these five `python3 tools/valdiff.py <DEMO>` (after a full
-`mise run trace -- <demo>`) reports 0 value mismatches over EVERY Random() call. LEVEL1_1 (START) and LEVEL3_2 (HYDRO_02) are the demos left; both set up correctly now (CHECK[0] ok) and fail in window 1:
-- LEVEL1_1: the intro. Script command 0x1c (FUN_1088_a9af): HeroStartJump(1,-50,7); vy += 10; 4e70 = 0x82;
-  4e9a = x + 0x16; x -= 0x8a; 4e96/4e98 = x/y (the ship at sprites 0x3700/0x3800, FUN_1090_0ace; its boxes are
-  platforms for the hero, FUN_1070_00b6). While 4e70 > 100 HeroUpdate (decomp ~37208..37380) replaces the jump:
-  x = 4e9a - 0xa0 + (long div, see the asm), frame 0x7fff, a screen shake every 4th frame, 4e70 counts down; later
-  4e70 > 0 also blocks the landing effects (~36347/36399). Frame 1 already has the hero's Random(8) (state != 0), frame
-  11 has effect 34 (FUN_1040_3b1f) when he lands. 7 effects are unported (54, 92, 30, wall chunks 60304).
-- LEVEL3_2: the hero rides a vehicle (1170:5127 == 2: HeroUpdateVehicle, its Randoms are the first diff at frame 1)
-  and 192 plants (kind 0x14fa: ctor done in factory.rs; update FUN_1068_2ee8 and the burst FUN_1068_2cf3 are NOT
-  ported: they hit-test sprite 0x3300 with 0x11fb and the hero's box, draw 6 Randoms under a seed kept in +0x1a).
+GRINDER 113/113, CITY01 (LEVEL1_2) 847/847, FOREST04 (LEVEL2_1) 616/616, FOREST03 (LEVEL2_2) 770/770,
+FORPLANE (LEVEL3_1) 352/352 and START (LEVEL1_1) 679/679 windows, and for these six `python3 tools/valdiff.py <DEMO>` (after a full
+`mise run trace -- <demo>`) reports 0 value mismatches over EVERY Random() call. LEVEL1_1 (START) is exact too now (679/679, value-exact): the launch (4e70, `Hero::start_launch`, the ship as a
+platform in main.rs), steam emitter 0x141e, effects 30/82/83/92, negative tiles as blasts, the wall kick, crates
+as platforms, lift dust (FUN_1060_1cee runs in the platform objects' SECOND pass, after the hero) and the storm
+(`storm.rs`, script commands 0x0d/0x16). Only LEVEL3_2 (HYDRO_02) is left: the hero rides a vehicle (1170:5127 == 2:
+HeroUpdateVehicle, first diff at frame 1) and its 192 plants (kind 0x14fa: ctor done in factory.rs; update
+FUN_1068_2ee8 and the burst FUN_1068_2cf3 are NOT ported: they hit-test sprite 0x3300 with 0x11fb and the hero's
+box, draw 6 Randoms under a seed kept in +0x1a). Setup is correct (CHECK[0] ok).
+
 LESSONS (the expensive ones):
 - A matching RandSeed per window proves only the call COUNT (the LCG step ignores the range). Two calls swapped
   inside a window, or a setup that draws the right number of values for the wrong objects, leave all windows green
