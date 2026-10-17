@@ -30,6 +30,7 @@ mod picture;
 mod rng;
 mod sentry;
 mod smallbot;
+mod steam;
 mod sprites;
 mod tileanim;
 mod trig;
@@ -182,6 +183,9 @@ impl Game {
         if let (Some(g), Some(i)) = (level.grinder.as_mut(), fx.grinder_platform) {
             g.platform = Some(i);
         }
+        if std::mem::take(&mut fx.hero_launch) {
+            hero.start_launch();
+        }
         let mut camera = Camera::new();
         let grinder = level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
         let cam = world.sectors[sector].cam;
@@ -248,6 +252,9 @@ impl Game {
     }
 
     fn flush_spawns(&mut self, fx: &mut Effects) {
+        if std::mem::take(&mut fx.hero_launch) {
+            self.hero.start_launch();
+        }
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.flush_spawns(&mut self.world, &mut cx, fx);
     }

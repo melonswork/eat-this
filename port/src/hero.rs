@@ -135,6 +135,11 @@ pub struct Hero {
     /// Blood splats the hero's hits ask for (FUN_1058_0218): (sprite, y, x).
     pub splats: Vec<(i32, i32, i32)>,
     pub death: Option<(i32, i32)>,
+    /// 1170:4e70: frames of the START intro's launch left (> 100: he is carried over the ship).
+    pub launch: i32,
+    /// 1170:4e9a: the launch's centre x. 4e96/4e98: the ship's position.
+    pub launch_x0: i32,
+    pub ship: (i32, i32),
     /// Cells whose scripts a keyless lever runs, and key slots a key opens (FUN_1088_13dc).
     pub script_cells: Vec<u16>,
     pub cell_steps: Vec<u16>,
@@ -271,6 +276,9 @@ impl Hero {
             levers: Vec::new(),
             splats: Vec::new(),
             death: None,
+            launch: 0,
+            launch_x0: 0,
+            ship: (0, 0),
             script_cells: Vec::new(),
             cell_steps: Vec::new(),
             health: HEALTH,
@@ -1041,7 +1049,16 @@ impl Hero {
                 self.state_before_jump = 5;
             }
         }
-        if self.state > 0 {
+        if self.state > 0 && self.launch > 0x64 {
+            self.launch -= 1;
+            let k = 0x82 - self.launch;
+            self.x = self.launch_x0 - 0xa0 + (crate::trig::sin(k << 5) * 0xa0) / 0x4000;
+            self.frame = NONE;
+            self.ship.0 = self.x;
+            if ps.now & 3 == 0 {
+                self.shakes.push((0x10, 3));
+            }
+        } else if self.state > 0 {
             if held(LEFT) {
                 dx -= 2;
                 self.facing = -1;
@@ -1083,6 +1100,10 @@ impl Hero {
                     self.frame = (self.anim >> 1) % 0x10 + 300;
                     self.anim += 1;
                     self.height = 0x1b;
+                    if self.launch > 0 {
+                        self.launch -= 1;
+                        dx = 2;
+                    }
                 } else if self.state == 6 {
                     self.frame = 0x13b - (self.anim >> 1) % 0x10;
                     self.anim += 1;
@@ -1234,6 +1255,16 @@ impl Hero {
             }
         }
         (dx, dy)
+    }
+
+    /// Script command 0x1c: the START intro throws him out of the ship.
+    pub fn start_launch(&mut self) {
+        self.start_jump(-0x32, 7);
+        self.vy += 10;
+        self.launch = 0x82;
+        self.launch_x0 = self.x + 0x16;
+        self.x -= 0x8a;
+        self.ship = (self.x, self.y);
     }
 
     /// FUN_1088_55f0's end: shots against the body's and the arm's sprites (mask 0x3a2), the
@@ -1611,10 +1642,15 @@ impl Hero {
             let n = rng.random((d / 16 + 1).min(8) as u16);
             spawn_dust(w, n, self.y, self.x, rng);
         }
-        if d >= FATAL_FALL || self.prev_state == KNOCKED_BACK {
+        if d >= FATAL_FALL || self.prev_state == KNOCKED_BACK || self.launch > 0 {
             self.state = KNOCKED_DOWN;
             if d < FATAL_FALL {
-                self.anim = 0x14;
+                if self.launch < 1 {
+                    self.anim = 0x14;
+                } else {
+                    self.launch = 0;
+                    self.anim = 0x46;
+                }
                 self.flat = true;
             } else {
                 self.anim = ((d - FATAL_FALL) >> 1) + 100;

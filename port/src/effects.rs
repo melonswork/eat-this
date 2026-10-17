@@ -79,6 +79,34 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
         }
         43 => wall_chunks(lv, world, y, x, rng, fx),
         72 => rubble(rng),
+        92 => {
+            // FUN_1040_3325: a blast of burning bits, and a steam emitter where it happened
+            // (the START intro's ship).
+            let ps = &mut lv.particles;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            ps.p.callback = 0x177a;
+            ps.p.colour = 0x10;
+            for i in 0..=0x14 {
+                ps.p.delay = rng.random(5);
+                let px = x - 4 + (i >> 1);
+                let py = y - rng.random(6);
+                let steps = rng.random(2) + 3;
+                ps.spawn(0x7500, py, px);
+                ps.last_mut().m.set(0x26, steps);
+                let v = rng.random(0x21) + 0x20;
+                ps.throw(7, v, i * 0x30);
+            }
+            ps.p.colour = 0;
+            ps.p.callback = 0;
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            ps.p.delay = 0;
+            fx.shakes.push((0x20, 0x10));
+            let rec = [0i16, 2, 0x172, 0x223];
+            let mut cx = crate::factory::Ctx { hero_x: lv.hero_x, rng };
+            lv.factory(world, &mut cx, 0x141e, &crate::factory::Rec { w: &rec, count: 4 });
+        }
         88 => {
             // FUN_1040_2a14: every 0x58th frame a spark column and, a while later, a bit that falls
             // and goes off (effect 87).

@@ -454,6 +454,21 @@ impl Level {
                 o.set(6, x + 0x80);
                 o.set(8, y + 0x30);
             }
+            0x141e => {
+                // A smoke/steam emitter (FUN_1070_5280): byte 2 of the record is its kind.
+                let mut o = base(kind, 0xd14, 0x16);
+                o.set(10, r.byte2());
+                o.set(0xe, r.at(4));
+                o.set(0x10, r.at(6) - 7);
+                o.set(0x12, 0);
+                o.set(0x14, -1);
+                o.set(2, o.w(0xe) - 0x160);
+                o.set(4, o.w(0x10) - 0x9c);
+                o.set(6, o.w(0xe) + 0x160);
+                o.set(8, o.w(0x10) + 0x9c);
+                let (y, x) = (o.w(0x10), o.w(0xe));
+                self.add_actor(world, o, y, x);
+            }
             0x14fa => {
                 // A plant (FUN_1068_2ee8) that bursts when shot or touched; each has its own
                 // draw-time seed (+0x1a) and sway phase (+0x18).
@@ -648,6 +663,9 @@ impl Level {
             let w = world.main().width;
             let f = world.cell_function(tile, 0);
             self.icon(world, cx, tile, f, cell as i32 / w, cell as i32 % w);
+        }
+        for (s, y, x) in std::mem::take(&mut fx.explodes) {
+            crate::effects::explode_tile(self, world, s, 0xffff, y, x, cx.rng, fx);
         }
         for (id, y, x) in std::mem::take(&mut fx.effects) {
             crate::effects::effect(self, world, id, y, x, cx.rng, fx);

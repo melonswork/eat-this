@@ -56,6 +56,10 @@ pub struct Effects {
     pub effects: Vec<(u16, i32, i32)>,
     /// A bot carried the hero sideways (gHeroX += dx).
     pub hero_shift: i32,
+    /// Script command 0x1c: launch the hero (the START intro).
+    pub hero_launch: bool,
+    /// Negative tiles (FUN_1088_1364): explode the cell with this strength at (y, x).
+    pub explodes: Vec<(i32, i32, i32)>,
     /// FUN_1070_00b6: the hero stands on a moving top at this y (gHeroGround = 0x16).
     pub hero_stand: Option<i32>,
     /// Bonuses the hero caught in the air: (tile, y, x).
@@ -192,6 +196,16 @@ impl Level {
 
     /// FUN_1088_1364 + FUN_1088_12f9: put a tile in a main-plane cell; levers run their scripts.
     pub fn set_cell(&mut self, world: &mut World, tile: u16, cell: u16, fx: &mut Effects) {
+        if (tile as i16) < 0 {
+            // A negative tile is a blast of strength -tile * 0x10 on a breakable cell.
+            let cur = world.main().cells[cell as usize];
+            if world.cell_function(cur, 1) & 0x80 != 0 {
+                let w = world.main().width;
+                let (row, col) = (cell as i32 / w, cell as i32 % w);
+                fx.explodes.push((-(tile as i16 as i32) * 0x10, row << 4, col << 4));
+            }
+            return;
+        }
         world.main_mut().cells[cell as usize] = tile;
         if std::env::var("ET_CMD").is_ok() {
             eprintln!("SETCELL {} cell {cell} tile {tile:#x} f0 {}", self.now, world.cell_function(tile, 0));
@@ -378,6 +392,10 @@ impl Level {
                     let row = ((self.cam.1 - 15) as u16 >> 4) as i32;
                     fx.spawns.push((arg(2), (arg(1) as i32 % width + row * width) as u16));
                     lc += 3;
+                }
+                0x1c => {
+                    fx.hero_launch = true;
+                    lc += 1;
                 }
                 0x1d => {
                     fx.grinder_slow = true;
