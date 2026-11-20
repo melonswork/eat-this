@@ -531,6 +531,24 @@ impl Level {
                 o.set(6, o.w(0xe));
                 o.set(8, o.w(0x10));
             }
+            crate::weight::KIND => {
+                let mut o = base(kind, 0xbe8, 0x1c);
+                let t = r.byte2();
+                o.set(10, t);
+                o.set(0xe, r.at(4));
+                o.set(0x10, r.at(6));
+                o.set(0x16, 0x17);
+                o.set(0x14, 0);
+                o.set(0x1a, 0);
+                o.set(0x18, crate::weight::table(t, 2));
+                let (half, height) = (crate::weight::table(t, 0), crate::weight::table(t, 1));
+                o.set(2, (o.w(0xe) - half) - 0x10);
+                o.set(4, (o.w(0x10) - height) - 0x10);
+                o.set(6, o.w(0xe) + half + 0x10);
+                o.set(8, o.w(0x10) + 0x80);
+                let (y, x) = (o.w(0x10), o.w(0xe));
+                self.add_actor(world, o, y, x);
+            }
             crate::wallgun::KIND => {
                 let mut o = base(kind, 0xcbc, 0x24);
                 o.set(10, r.byte2());
@@ -818,7 +836,14 @@ impl Level {
                 let w = four(param, xc, yb);
                 self.factory(world, cx, 0x14f0, &Rec { w: &w, count: 4 });
             }
-            61000..=61099 => eprintln!("warning: icon {f} (FUN_1070_fa6a, 0x13a6) not ported"),
+            61000..=61099 => {
+                // FUN_1070_fa6a: the weight's record, placed by its type's offset (1170:0c38).
+                let t = (f - 61000) as i32;
+                let off = crate::world::ds_word(0xc38 + t as usize * 0x12);
+                let (dx, dy) = ((off & 0xff) as i8 as i32, (off >> 8) as i8 as i32);
+                let w = [0, t as i16, (x + dx) as i16, (y + dy) as i16];
+                self.factory(world, cx, crate::weight::KIND, &Rec { w: &w, count: 4 });
+            }
             _ => {}
         }
         true

@@ -18,7 +18,7 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 | 2 | ~~carrier 0x14be~~ (icon 61600, VMT 0xc84, update FUN_1070_0cce, move hook 0b02) | | CITY02, CITY_I00, CITY_I06, FOREST03, FOREST05, STONES | DONE (`carrier.rs`, CARRIER1: flight, drops, shot down, crash); + splashes (FUN_1070_0105 for aliens/big aliens, the hero's in HeroUpdate), effects 7/23 in the table. Not exercised: blowing up in the air (0b70), the hero riding it |
 | 3 | ~~OBJECTS 0x13ec~~ the gun turret (VMT 0xcbc, FUN_1070_2550) | EnemyFactory | CITYRAIN, FOREST02, FOREST05, CITY02, CITY_I01 | DONE (`wallgun.rs`, WALLGUN1: firing cycle, killed, broken apart; effect 65 = FUN_1040_105d). Not exercised: aiming at a visible hero (FOREST02's sits in the trunk), the lever (CITY02/CITY_I01) |
 | 4 | ~~OBJECTS type 100~~ path platforms (FUN_1060_0166 kind 0, update FUN_1060_0819) | | CITY_I04 5, CITYHS 6, CITY_I01 5, GRANNY 2 | DONE (`PlatObj::path`, `platobj::update_path`, PATHPLAT1). Still warn if met: modes 0x4000 (bobbing), 0x680 (driven by the hero: 5123/5124/4e5a), 0x8000 (slowing at the ends); the lever (GRANNY's) is in but untested; kinds 2/3 (falling, sinking) unported |
-| 5 | icons 61000/61001 (FUN_1070_fa6a, kind 0x13a6) | SpawnFromIconTiles | CITY02, CITYHS, CITY_I03 | |
+| 5 | ~~icons 61000/61001~~ falling weights (FUN_1070_fa6a, kind 0x13a6, VMT 0xbe8, FUN_1068_215e) | SpawnFromIconTiles | CITY02, CITYHS, CITY_I03 | DONE (`weight.rs`, WEIGHT1: drop, chain bits, crush = hero hit kind 2, planks = effect 50 with its nested negative-tile blasts; the hero now falls from any state < 1 but -1..-5). Not exercised: the press (61001: animation, standing on it, FUN_1040_677d), shooting a landed weight broken |
 | 6 | OBJECTS 0x146e (VMT 0xdf8 shared with 0x1478, FUN_1068_0d84) | EnemyFactory | CITY_I00, F_LAST | enemy (4eb2) |
 | 7 | OBJECTS 0x1414 (VMT 0xd04) | EnemyFactory | BUTCHERY | calls FUN_1070_4b4e per 32 px |
 | 8 | OBJECTS 0x14a0 (VMT 0xbd8, update FUN_1068_1f3c = hero hit kind 2) | EnemyFactory | GRANNY | |
@@ -47,6 +47,8 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
 - Gun turret (FUN_1070_2550): 0x65 each shot; killed 100; hit 1 (dead) or 0x49 alive, unless the hit mask is
   0x48 or it still flashes (+0x1c >= 0x7e); broken apart 0x4a. Effect 65 (its pieces): 0x4b at pitch
   0xf6 + Random(0x14) (drawn).
+- Weights (FUN_1068_215e): 0x19 on the drop; landing 0x18 (weight) / 0x1c (press); the press 0x1f each cycle
+  ((0x1a % ((frames-1)*speed)) == 0, type 1). Effect 50 (planks, FUN_1040_50cf): 0x26 and 0x1c at half volume.
 - Splashes (FUN_1070_0105 / HeroUpdate): 0x6f at (water line, x), pitch 0xd0 + Random(0x50) (drawn in
   `Level::splash` / `Hero::update`), volume 1ab8 = 0xaa (alien), 0x100 (big alien), 0x180 (215e), the hero
   min(fall*2 + 0x80, 0x100).

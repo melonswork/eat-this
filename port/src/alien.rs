@@ -1164,7 +1164,7 @@ impl Level {
 }
 
 /// FUN_1040_66d4: landing dust.
-fn dust(ps: &mut crate::particles::Particles, y: i32, x: i32) {
+pub(crate) fn dust(ps: &mut crate::particles::Particles, y: i32, x: i32) {
     ps.p.colour = 0x10;
     ps.spawn_seq(0x6d00, 2, 0x13, y, x, 1);
     ps.p.colour = 0;

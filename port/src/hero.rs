@@ -1037,7 +1037,8 @@ impl Hero {
         }
 
         // Walked off an edge.
-        if self.ground == 0 && self.state < 1 && matches!(self.state, GROUND | CROUCH) {
+        // (Not while hanging or climbing: the 1170:160a set test is -state in 1..5.)
+        if self.ground == 0 && self.state < 1 && !(-5..=-1).contains(&self.state) {
             self.start_jump(1, FALL);
             if self.prev_ground == 5 {
                 // Off the end of a conveyor belt: thrown along its way.
@@ -1675,6 +1676,16 @@ impl Hero {
     /// 1 (hurt) or 2 (killed).
     pub fn hurt(&mut self, damage: i32, rng: &mut PascalRandom) -> i32 {
         self.hit(damage, 1, rng)
+    }
+
+    /// FUN_1088_3c32(damage) with 1170:162a = 2: crushed (a falling weight).
+    pub fn crushed(&mut self, damage: i32, rng: &mut PascalRandom) -> i32 {
+        self.hit(damage, 2, rng)
+    }
+
+    /// 1170:4e2a >= 1: invulnerable after a hit.
+    pub fn invulnerable(&self) -> bool {
+        self.hurt >= 1
     }
 
     /// FUN_1088_3c32(damage) with 1170:162a = `kind` (1 shot, 4 burnt): 0 invulnerable, 1 hurt,

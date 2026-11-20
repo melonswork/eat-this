@@ -83,6 +83,7 @@ streams and EVERY CHECK, so the method is the original's own.
 | `CARRIER1` | CITY02, start moved to (1020,1039) | the carrier 0x14be (FUN_1070_0cce, `carrier.rs`): flies bobbing, drops its three aliens by distance, shot down it falls and crashes (0a34: dust, plates, blast); water splashes of aliens and the hero (FUN_1070_0105) | exact |
 | `WALLGUN1` | FOREST02, start moved to (650,1340) | the gun turret 0x13ec (FUN_1070_2550, `wallgun.rs`) by the trunk: fires on its cycle, ~110 pistol shots kill it (smoke, gun pieces) and break it (-0x80: plates, pieces with effect 65 = FUN_1040_105d) | exact |
 | `PATHPLAT1` | CITY_I01, start moved onto a platform (2680,1135) | path platforms (OBJECTS type 100, kind 0, `platobj::update_path` = FUN_1060_0819): mode 4 loops round the rectangle carrying the hero, jumps on it, steps off | exact |
+| `WEIGHT1` | CITY_I03, start moved to (1960,881) | the falling weight (icon 61000, kind 0x13a6, FUN_1068_215e, `weight.rs`): drops on the hero (hit kind 2, knocked flat), breaks the plank bridge (effect 50, nested FUN_1088_1364 negative-tile blasts), he falls through (any state < 1 but -1..-5 falls) | exact |
 
 ## Tools (non-obvious usage)
 
@@ -283,7 +284,7 @@ on 10, stops on 100; the end-of-level video/stats screen 1080:172a and the menu'
 
 Done 2026-11-20 (second pass): weapons 6 and 9 (WEAPON6/WEAPON9), the next level after a level end, effects 27
 (FUN_1040_2f98), 53/54 (tile steps), 93 (FUN_1040_341a, `Level::tries` = 4dc2), the wall's effect-23 flash, hero
-hit kinds 2/3 in `Hero::hit` (UNTESTED: their callers FUN_1068_1f3c, FUN_1068_215e (kind 2), FUN_1070_9a66,
+hit kinds 2/3 in `Hero::hit` (kind 2 tested by WEIGHT1; their callers FUN_1068_1f3c, FUN_1068_215e (kind 2), FUN_1070_9a66,
 FUN_1070_b9d3 (kind 3, b9d3 also kind 0) are objects not ported yet; port one with a scenario to test them).
 
 Still unported (warnings in the port run): the hero riding a smallbot (FUN_1070_a18e), objects of VMT 0xc84
