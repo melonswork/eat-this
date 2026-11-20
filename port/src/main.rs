@@ -168,6 +168,10 @@ struct Game {
     report: CheckReport,
     /// This frame's sound events for the mixer (drained by the window loop or a capture).
     sound: Vec<sound::Ev>,
+    /// Live play: the cursor in game-screen pixels (FUN_1088_42a3), None = not moved yet.
+    live_mouse: Option<(i32, i32)>,
+    /// Live play: a weapon key went down (ReadGameInput: 0..9 = keys 1..9 0, 10 PgUp, 11 PgDn).
+    weapon_key: Option<usize>,
 }
 
 #[derive(Default)]
@@ -242,6 +246,8 @@ impl Game {
             end: 0,
             report: CheckReport::default(),
             sound: Vec::new(),
+            live_mouse: None,
+            weapon_key: None,
         };
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
         let hero_at = (g.hero.x, g.hero.y);
@@ -377,7 +383,25 @@ impl Game {
                 }
                 k
             }
-            None => keys,
+            None => {
+                // ReadGameInput: keys 1..9 0 select gWeaponForDigitKey's weapon, PgUp/PgDn the
+                // one before/after the current (SelectWeapon does nothing in the vehicle).
+                if let Some(k) = self.weapon_key.take() {
+                    if !self.hero.vehicle {
+                        let at = self.hero.weapon_slot();
+                        let slot = match k {
+                            10 => (at + 9) % 10,
+                            11 => (at + 1) % 10,
+                            d => d,
+                        };
+                        self.hero.select_weapon(hero::WEAPON_FOR_DIGIT[slot]);
+                    }
+                }
+                if let Some(m) = self.live_mouse {
+                    mouse_now = m;
+                }
+                keys
+            }
         };
         if std::env::var("ET_PART").ok().and_then(|v| v.parse::<u32>().ok()).is_some_and(|f| self.frame >= f && self.frame < f + 12) {
             for p in &self.level.particles.list {
@@ -1317,6 +1341,8 @@ fn run_window(
     let mut fb = vec![0u8; (W * H) as usize];
     let mut rgb = vec![0u8; (W * H * 3) as usize];
     let mut counters = [-1i8; 9];
+    let mut buttons = (false, false);
+    let mut button_counts = [0i8; 2];
     // gKeyMap defaults: arrows, Insert (LeftShoot), Space (RightShoot), Tab (SwitchWeapon).
     let keymap = [
         Scancode::Up,
@@ -1344,6 +1370,22 @@ fn run_window(
                     repeat: false,
                     ..
                 } => gfx.show_hud = !gfx.show_hud,
+                Event::KeyDown {
+                    scancode: Some(sc),
+                    repeat: false,
+                    ..
+                } if weapon_key(sc).is_some() => game.weapon_key = weapon_key(sc),
+                Event::MouseMotion { x, y, .. } => {
+                    game.live_mouse = Some((x.clamp(0, W - 1) * 319 / W, y.clamp(0, H - 1) * 199 / H));
+                }
+                Event::MouseButtonDown { mouse_btn, .. } | Event::MouseButtonUp { mouse_btn, .. } => {
+                    let down = matches!(e, Event::MouseButtonDown { .. });
+                    match mouse_btn {
+                        sdl2::mouse::MouseButton::Left => buttons.0 = down,
+                        sdl2::mouse::MouseButton::Right => buttons.1 = down,
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         }
@@ -1352,6 +1394,14 @@ fn run_window(
             let mut keys = [0i8; 9];
             for (i, sc) in keymap.iter().enumerate() {
                 keys[i] = key_poll(&mut counters[i], ks.is_scancode_pressed(*sc));
+            }
+            // ReadGameInput: the mouse buttons (1 the frame they go down, then 2) fire when the
+            // shoot keys are up.
+            for (n, down) in [(0, buttons.0), (1, buttons.1)] {
+                button_counts[n] = if down { if button_counts[n] >= 1 { 2 } else { 1 } } else { 0 };
+                if keys[4 + n] < 1 {
+                    keys[4 + n] = button_counts[n];
+                }
             }
             if !game.demo_done() {
                 game.step(keys);
@@ -1426,6 +1476,26 @@ fn screenshot(mut game: Game, gfx: &Graphics, frames: u32, path: &Path) -> std::
     let mut out = format!("P6\n{W} {H}\n255\n").into_bytes();
     out.extend(&rgb);
     std::fs::write(path, out)
+}
+
+/// ReadGameInput's weapon keys: 1..9 0 (gWeaponForDigitKey slots 0..9), PgUp 10, PgDn 11.
+fn weapon_key(sc: sdl2::keyboard::Scancode) -> Option<usize> {
+    use sdl2::keyboard::Scancode::*;
+    Some(match sc {
+        Num1 => 0,
+        Num2 => 1,
+        Num3 => 2,
+        Num4 => 3,
+        Num5 => 4,
+        Num6 => 5,
+        Num7 => 6,
+        Num8 => 7,
+        Num9 => 8,
+        Num0 => 9,
+        PageUp => 10,
+        PageDown => 11,
+        _ => return None,
+    })
 }
 
 fn main() -> Result<(), Box<dyn Error>> {

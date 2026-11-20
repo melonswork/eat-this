@@ -252,7 +252,7 @@ pub struct Weapon {
 const WEAPON_AMMO: [(i32, i32); 10] =
     [(6, 99), (400, 799), (50, 249), (10, 99), (10, 99), (10, 99), (50, 249), (5, 99), (10, 99), (5, 99)];
 /// 1170:162c: the weapon for each digit key.
-const WEAPON_FOR_DIGIT: [i32; 10] = [2, 6, 1, 5, 3, 8, 0, 4, 7, 9];
+pub const WEAPON_FOR_DIGIT: [i32; 10] = [2, 6, 1, 5, 3, 8, 0, 4, 7, 9];
 /// Tile function of the pick-ups (in plane 2).
 const PICKUP: u16 = 30000;
 /// The effect of a weapon pick-up (FUN_1040_0312).
@@ -2043,6 +2043,11 @@ impl Hero {
                 return;
             }
         }
+    }
+
+    /// FUN_1088_0688: the current weapon's digit-key slot (0 = key 1, 9 = key 0).
+    pub fn weapon_slot(&self) -> usize {
+        (0..10).rev().find(|&d| WEAPON_FOR_DIGIT[d] == self.weapon).unwrap_or(0)
     }
 
     /// SelectWeapon (1088:71ef). (4e32 = -14 starts the weapon display, 4e4a keeps the aim.)

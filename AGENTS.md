@@ -145,6 +145,9 @@ streams and EVERY CHECK, so the method is the original's own.
   area, heart pick-up = bios sphere); totals from plane 2 + the setup's enemy objects (`frontend::level_totals`).
 - Savings (the original's only save): the next level of a finished MAPS/ level is copied to `SAVINGS/<NAME>/`
   (cwd, `ET_SAVINGS`) and listed under START USER MAP. Settings: `EatThis.ini` in the cwd (`ET_INI`).
+- Live input (ReadGameInput): the cursor aims (`Game::live_mouse`, x*319/320; moving it sets gHeroShooting), the mouse
+  buttons fill LeftShoot/RightShoot when those keys are up, keys 1..9 0 / PgUp / PgDn select weapons
+  (`Game::weapon_key`, gWeaponForDigitKey; like the original they select weapons not owned too). Same in `--map`.
 - Test without a window: `ET_FE_SHOT="30;2 Return;50;shot a.ppm;levelend;300;shot b.ppm" ./target/release/eatthis`
   (`N keys...` = SDL scancode names held N frames, `move/click X Y`, `levelend`). Videos are not decoded (skipped).
 

@@ -1187,7 +1187,7 @@ fn shot(data: &Path, script: &str) -> Result<(), Box<dyn Error>> {
                 let n: u32 = n.parse().map_err(|_| format!("ET_FE_SHOT: bad step {step}"))?;
                 let keys: Vec<Scancode> = words[1..].iter().filter_map(|k| Scancode::from_name(k)).collect();
                 for k in &keys {
-                    if matches!(k, Scancode::Escape | Scancode::F3 | Scancode::F4 | Scancode::F5 | Scancode::F6 | Scancode::F7) {
+                    if matches!(k, Scancode::Escape | Scancode::F3 | Scancode::F4 | Scancode::F5 | Scancode::F6 | Scancode::F7) || crate::weapon_key(*k).is_some() {
                         fe.key_down(*k);
                     }
                 }
@@ -1213,6 +1213,14 @@ impl FrontEnd {
                     self.show(Id::Main);
                 } else {
                     self.resume();
+                }
+            }
+            Scancode::Num1 | Scancode::Num2 | Scancode::Num3 | Scancode::Num4 | Scancode::Num5 | Scancode::Num6
+            | Scancode::Num7 | Scancode::Num8 | Scancode::Num9 | Scancode::Num0 | Scancode::PageUp | Scancode::PageDown
+                if self.in_game =>
+            {
+                if let Some(r) = self.level.as_mut() {
+                    r.game.weapon_key = crate::weapon_key(sc);
                 }
             }
             Scancode::F3 => self.hotkey(Id::UserMaps),
@@ -1249,7 +1257,18 @@ impl FrontEnd {
                 let down = vk_scancode(*vk).is_some_and(|sc| pressed(sc));
                 keys[n] = crate::key_poll(&mut self.game_keys[n], down);
             }
+            // ReadGameInput: the mouse buttons fire when the shoot keys are up; the cursor
+            // (x * 319 / width, FUN_1088_42a3) aims.
+            let i = &self.ui.input;
+            if keys[4] < 1 {
+                keys[4] = i.lmb as i8;
+            }
+            if keys[5] < 1 {
+                keys[5] = i.rmb as i8;
+            }
+            let mouse = (i.mx * 319 / W, i.my * 199 / H);
             let r = self.level.as_mut().unwrap();
+            r.game.live_mouse = Some(mouse);
             if !r.game.demo_done() {
                 r.game.step(keys);
             }
