@@ -132,6 +132,33 @@ streams and EVERY CHECK, so the method is the original's own.
   teleport records 1000; after a teleport LevelFirstFrame runs a frame without the hero
   (`world_update`). Doors: `doors.rs` (segment 10a8).
 
+## Sound (2026-11-20, re/sound.md)
+
+Effects are SOUNDS/*.WAV (ids = ETMAIN.SCR's `LoadWAV=` lines in order), played through DiamondWare
+(DWS_DPLAY record at DS:5d7e: lvol/rvol/pitch, 0x100 = unchanged). Music = CD audio tracks:
+`python3 -I tools/extract_audio.py "iso/Eat This.cue" work/cd/AUDIO` once (TRACK02..07.WAV; the port reads
+`<data>/../AUDIO`); a level's `CDTrack=N,loop` plays CD track N.
+- Port: `port/src/sound.rs` = front end (`play_at`, `play_at_pitch`, `set_volume` = 1ab8, `audible`/`audible_box`
+  = 0073/016b, `keep(key, id)` = the loop helper 0408, `discard` = 05e0, `stop`), mixer, music, `--wav`.
+  Sound calls only READ simulation state; every Random they use was already drawn by the port (`let p =
+  rng.random(n); sound::play_at_pitch(id, p + base, y, x)`). Never add or move a Random for sound.
+  The listener is set at the end of the camera update (FUN_1088_0c82), not at frame start.
+- Off in `--headless` (no events) unless `--wav FILE` (offline render) or `ET_SOUND_TSV=file` (log).
+  Window mode opens SDL2 audio (`--mute` to skip). Captures to listen to: `work/audio/CITY01_excerpt.wav`
+  (60 s of LEVEL1_2 with Cityviol), `work/audio/GRINDER.wav`.
+- Oracle: every `mise run trace` now writes `work/tracer/<DEMO>/sounds.tsv` (each SoundPlay/SoundSetInfo/loop stop
+  with lvol/rvol/pitch and the caller). `python3 tools/sounddiff.py DEMO [--all]`: matched/missing/extra plays and
+  value mismatches; the missing list by caller is the to-do list. State: GRINDER 98/99 exact, LEVEL1_2 1276/1801,
+  LEVEL2_1 539/905, 0 extras. Done: grinder, platforms (sets at 1170:0ec4), doors, hero moves/landing/ledges,
+  weapons fire + switch, pick-ups and plain effect sounds (`effects::PLAIN_SOUNDS`), effects 75/82/84/87/30/83,
+  particle hits (0fcc, 0c4d, 45a3, 0a80, 556e, 1481/188c bounces, 0cf8 sparks), the drone, ambient emitters
+  (plain loops, 10000, birds 0x2711, rain/thunder 0x2712, 0x2713), the hero's death cry.
+- Left (biggest first in sounddiff): enemies in segment 1070 (1b00, 4051, 30b6, 7eb2, a3cf, 60ca, 90f1, 5911,
+  8cd7, 5ce1, 5b08, 02b3, af70, the voices FUN_1070_584e = pitch from obj+0x26), the hero's hurt cry (3c05 from
+  other callers), effects 06d4/075a (bullet hits, Random(0xc) gate), 2046/22c1 (napalm), 1050_14bd fire crawlers,
+  1060 lifts (152f/15a6), the HUD message blip (FUN_1088_0fa4, 87 when 16d8), vehicle (HeroUpdateVehicle),
+  START's background (FUN_1090_0292). The pitch direction (higher = faster) is assumed, see re/sound.md.
+
 ## Renderer (2026-11-20)
 
 `port/src/render.rs` (sprite bank by slot, 10f0:2670's draw modes 1ae0, tables) and `port/src/draw.rs`

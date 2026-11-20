@@ -1675,7 +1675,9 @@ impl Hero {
         }
         self.health -= damage;
         if self.health < 1 {
-            rng.random(0x20); // FUN_1088_3c05: the cry's pitch
+            let p = rng.random(0x20); // FUN_1088_3c05: the cry
+            sound::discard(0x1a);
+            sound::play_at_pitch(0x1a, p + 0xf0, self.y, self.x);
             self.death = Some((self.y, self.x)); // main: the gibs, smoke and a splat (FUN_1068_186c, 637a, 0218)
             self.hurt = 0x7fff;
             self.anim = 0x8c;
