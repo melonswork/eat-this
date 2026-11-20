@@ -31,7 +31,8 @@ tools/checkall.sh [DEMO...]   # every oracle demo: windows, where it ended, vald
 `tools/checkall.sh` needs a full `mise run trace -- ... --watch gHeroX,gHeroY,gHeroState` of each demo
 (work/tracer/<DEMO>/); rerun the trace whenever a scenario changes.
 Script lines: `level GRINDER` (a CD demo folder) or `level MAPS/BOMS02.MAP` (any map under
-work/cd/BIN), `name X`, `mouse X Y` (game-screen pixels, from the next frame on), `N keys...` (hold
+work/cd/BIN), `start X Y` / `cell PLANE TX TY VALUE` (patch the demo's COPY of the map: the hero's
+start in MAP HEADER, a cell; tools/mapedit.py, a literal-only LZW the original reads fine), `name X`, `mouse X Y` (game-screen pixels, from the next frame on), `N keys...` (hold
 these for N frames; none = all up). Keys: up down left right fire alt key6 key7 switch (gKeyMap),
 kp8 kp2 kp4 kp6 kp0 (numpad: these report 0 on release; BROYEUR was played with them), lmb rmb.
 Script frame i = game frame i+1 = port frame i. `mkdemo.py LEVEL --from-rec X.REC` prints a script
@@ -58,6 +59,16 @@ streams and EVERY CHECK, so the method is the original's own.
 - Nothing carries over between levels: every level start from the menu (FUN_1080_16b7 -> FUN_1088_d4b2)
   sets RandSeed 0x3e00 and runs HeroReset (health 0x2c6, every weapon's ammo/owned zeroed, the kill/secret
   counters). A demo or a recording always stops at the level end, so no oracle crosses a level change.
+  The NEXT level goes the same way: 4e60 = 100 -> stats screen 1080:172a (4dc2 = 0) -> its handler 1080:1ab2
+  -> FUN_1080_17fa(4c3a = the script's NextLevelMap=, beside the map else MAPS/, 8.3-truncated) -> 16b7 ->
+  d4b2, then LevelInit's Randomize: the original's state after the change is time-seeded, not reproducible.
+  "NEXT EPISODE" (4d97) shows the episode screen, an empty name goes to the menu. Port: `next_level` in
+  main.rs, the window loop loads it; `ET_NEXT=N` plays N idle frames of the next level after a demo that
+  ends its level (e.g. EXIT1 -> F_JUMP).
+- To reach a pick-up no route leads to, move the start (`start X Y`): ET_PICKUPS lists pick-ups, start,
+  exits and NEXT; CITY_I04 has weapons 6 and 9 on crates in small rooms at x 983..999.
+- dumpframe.py takes `--overlay` (work/demos by default for demos there). The tracer's `--particles` writes
+  nothing now (1170:0918 reads 0 at its hook, even in GRINDER): fix before relying on it.
 
 | scenario | level | what it checks | port |
 |---|---|---|---|
@@ -66,6 +77,8 @@ streams and EVERY CHECK, so the method is the original's own.
 | `EXIT1` | GRINDER | BROYEUR's own input + 100 frames: the recorder stops itself at the level exit (4e60 = 100, frame 3968); the port must stop there too | exact |
 | `DEATH2` | GRINDER | DEATH1 + key 6 while dead: the restart (4e60 = 10) stops the recording at frame 1801 | exact |
 | `WEAPON5` | BOMS02 | weapon-5 pick-up, four rockets (FUN_1088_6deb, callback 0xd83 = the torpedo's 0xf9f without bubbles, effect 14, rubble effect 75) | exact |
+| `WEAPON6` | CITY_I04, start moved to (940,95) | weapon-6 pick-up on the crate, step down (too low to stand there: crouched the hero can't fire), six spreads of three bullets (FUN_1088_70b8/7020, effect 62); no Random: checked with dumpframe | exact |
+| `WEAPON9` | CITY_I04, start moved to (940,191) | weapon-9 pick-up, balls standing (Random(0xa1)) and crouched (laid flat), mover 1050:3044, callback 16cc, effect 56 (bounce, +8 frames, blast) | exact |
 
 ## Tools (non-obvious usage)
 
@@ -143,7 +156,7 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   (totals 4eb2/4eae/4eaa unknown in the port), platform objects of unported kinds sit at their start.
   Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`.
 
-## State (2026-10-17, end)
+## State (2026-11-20: + WEAPON6/WEAPON9, next level; all oracle demos exact via tools/checkall.sh)
 
 GRINDER 113/113, CITY01 (LEVEL1_2) 847/847, FOREST04 (LEVEL2_1) 616/616, FOREST03 (LEVEL2_2) 770/770,
 FORPLANE (LEVEL3_1) 352/352, START (LEVEL1_1) 679/679 and HYDRO_02 (LEVEL3_2) 173/173 windows, and for these seven `python3 tools/valdiff.py <DEMO>` (after a full
@@ -218,15 +231,17 @@ Done since (2026-11-20, scenarios): weapon 3 (WEAPON3), the level end through a 
 the restart key while dead (EXIT1, DEATH2: `Hero::level_end` = 4e60; a demo stops, window mode reloads the map
 on 10, stops on 100; the end-of-level video/stats screen 1080:172a and the menu's next level are front end).
 
-Still unported (warnings in the port run): the hero riding a smallbot (FUN_1070_a18e), the hero's death
-outside the grinder (kinds 2/3 of FUN_1088_3c32 untested), objects of VMT 0xc84 (kind 0x14be, icon 61600, FUN_1070_0cce), kinds 0x14d2/0x14f0 icons,
-effects 23 (FUN_1050_4a29 part)/53/54, bonus 0xd10 (6b03), levers needing a key, weapons 6 (FUN_1088_70b8: three bullets
-FUN_1088_7020 at aim-0x80/+0x80/aim, speed 0x60, effect 0x3e) and 9 (FUN_1088_6649: a bounce FUN_1050_46d9(7,0x20)
-with callback 0x16cc, effect 0x38; crouched it is laid flat at 0/0xb40). No pick-up of 6/9 is near a start: tried
-FOREST03 from LEVEL2_2's frame 2100 at (690,319) under the weapon-9 platform at (695,151) (walking left falls);
-FOREST04's 9s at (151..167,743) are in a room left only by a one-way door; also LEVEL2_2 frame 24953 at (942,906)
-is 130 px under the 9s at (967..983,775). Sideways
-shake 5c7d, frozen/burnt deaths, barrels >= 0xb, hero on the big alien's shield (00b6 is
-now `Level::stand_on`, wire it there), wall chunks 60308/60304 (45db), 30070 particle spawn.
+Done 2026-11-20 (second pass): weapons 6 and 9 (WEAPON6/WEAPON9), the next level after a level end, effects 27
+(FUN_1040_2f98), 53/54 (tile steps), 93 (FUN_1040_341a, `Level::tries` = 4dc2), the wall's effect-23 flash, hero
+hit kinds 2/3 in `Hero::hit` (UNTESTED: their callers FUN_1068_1f3c, FUN_1068_215e (kind 2), FUN_1070_9a66,
+FUN_1070_b9d3 (kind 3, b9d3 also kind 0) are objects not ported yet; port one with a scenario to test them).
+
+Still unported (warnings in the port run): the hero riding a smallbot (FUN_1070_a18e), objects of VMT 0xc84
+(kind 0x14be, icon 61600, FUN_1070_0cce), kinds 0x14d2/0x14f0 icons, OBJECTS types 100 (FUN_1060_0166, CITY_I04,
+CITYHS), 0x14b4, 0x13ec, 0x1414, 0x1482, 0x2716, 0x272e (decor), icon 61000/61001 (FUN_1070_fa6a), bonus 0xd10
+(6b03), levers needing a key, pick-up effects 3/74, particle spawn effects 30064/30065/30070, particle procedure
+1050:19f8, a platform's shake/dust (flags 8), frozen/burnt deaths, barrels >= 0xb, hero on the big alien's shield
+(00b6 is now `Level::stand_on`, wire it there), wall chunks 60308/60304 (45db). Census: run every demo in
+work/cd and work/demos and `grep warning` (the P*.DMO probes in work/demos have no trace yet).
 Next: nothing is left in the recorded demos; write scenarios (tools/scenarios) for the unported features. The game is not complete: see the unported items below (grep the
 port run for `warning:`), and the SDL front end/menus/sound. and run the daily loop on it.
