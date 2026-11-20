@@ -78,6 +78,8 @@ impl Level {
         let rise = ((crate::trig::sin(tip_angle) * len) / 0x4000).max(1 - len);
         let tip_y = y - rise;
         let top = tip_y - self.o(id).w(0x1e);
+        // For the draw pass: the trunk's tip and the crown's anchor.
+        self.o(id).looks = vec![Obj::look(0, tip_x, tip_y), Obj::look(0, tip_x, top)];
         if env.shake_started {
             let strength = if self.o(id).w(0x14) < 1 {
                 (env.shake_amp * 0x50) / 0x10

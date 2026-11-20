@@ -370,6 +370,48 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
             let t = (o.w(0x1a) as u32).wrapping_add(p.frame);
             p.flame(o.w(0x16), o.w(0x14), t, x, y);
         }
+        // FUN_1070_9420: a tree: the trunk as a line (colour +0x20) to its swaying tip, then the
+        // crown of its stage (1170:0e9a), with a glow for stages flagged 2; a burning stump once
+        // cut (+0x14 < 1). The tip comes from the update.
+        crate::tree::KIND => {
+            let (Some(tip), Some(crown)) = (o.looks.first(), o.looks.get(1)) else { return };
+            let (cx, cy) = p.cam;
+            p.line((x - cx, y - cy), (tip.x - cx, tip.y - cy), o.b(0x20));
+            if o.w(0x14) < 1 {
+                p.mode = 0x10;
+                p.flame(0x600, 0x700, p.frame, tip.x, tip.y);
+                p.mode = 0;
+            } else {
+                let k = o.w(10) as usize;
+                let flags = crate::world::ds_word(0xe98 + 4 * k) & 0xff;
+                if flags & 2 == 2 {
+                    p.at_mode(0x28, 0x1b04, tip.x, crown.y + 7);
+                }
+                p.at_flash(o.w(0x16) > 0, crate::world::ds_word(0xe9a + 4 * k), tip.x, crown.y);
+            }
+        }
+        // FUN_1068_2ee8: a sea plant: its stalk's segments (picked with Random(2) under its own
+        // seed +0x1a, as the burst does), the bulb at the tip, the root.
+        0x14fa => {
+            let segs = o.w(0x14);
+            if o.w(0x16) > 0 && segs > 0 {
+                let (phase, seed) = (o.w(0x18), o.w(0x1a));
+                let now = p.frame as i64;
+                let t = ((now * 0x20 + phase as i64) % 0x1680) as i32;
+                let idx = (((segs << 9) as i16 as i32) + t) % 0x1680;
+                let tip_x = x + (crate::trig::sin(idx) * 6) / 0x4000;
+                let idx2 = ((now * 28 + 0x5a0 + phase as i64) % 0x1680) as i32;
+                let rise = (segs << 3) + (crate::trig::sin(idx2) * 6) / 0x4000;
+                let mut rng = crate::rng::PascalRandom::new(seed as i16 as i32 as u32);
+                for k in 1..segs {
+                    let off = (crate::trig::sin(((k << 9) + t) % 0x1680) * ((k * 6) / segs)) / 0x4000;
+                    let s = rng.random(2) + 0x3301;
+                    p.at(s, x + off, y - (k * rise) / segs);
+                }
+                p.at(0x3300, tip_x, y - rise - 8);
+            }
+            p.at(0x3303, x, y);
+        }
         // FUN_1070_06f6: a sentry.
         crate::sentry::KIND => p.at_flash(o.w(0x22) > 0, 0x5212 + (per(p, 4) & 1), x, y),
         _ if std::env::var("ET_DRAW").is_ok() => {

@@ -304,6 +304,19 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// `FUN_10f0_3da`: a one-pixel line in colour `c` between two screen points.
+    pub fn line(&mut self, (x1, y1): (i32, i32), (x2, y2): (i32, i32), c: u8) {
+        let n = (x2 - x1).abs().max((y2 - y1).abs()).max(1);
+        for i in 0..=n {
+            let x = x1 + (x2 - x1) * i / n;
+            let y = y1 + (y2 - y1) * i / n;
+            let (c0, c1, c2, c3) = self.clip;
+            if x >= c0 && x <= c2 && y >= c1 && y <= c3 {
+                self.fb[(y * W + x) as usize] = c;
+            }
+        }
+    }
+
     /// A filled rectangle in screen coordinates (the HUD's bars).
     pub fn rect(&mut self, x: i32, y: i32, w: i32, h: i32, c: u8) {
         for yy in y.max(0)..(y + h).min(H) {
