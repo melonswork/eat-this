@@ -817,10 +817,24 @@ def dos(emu):
     elif ah == 0x45:
         h = fs.dup(emu["bx"])
         emu["ax"] = h
-    elif ah == 0x41:
-        err(5)
-    elif ah == 0x56:
-        err(5)
+    elif ah == 0x41:  # delete: only files the game wrote (in the overlay)
+        p = fs.writable(emu.cstr(emu["ds"], emu["dx"]))
+        emu.log(f"DOS delete {emu.cstr(emu['ds'], emu['dx'])!r} -> {p}")
+        if p is None:
+            err(5)
+        else:
+            p.unlink()
+    elif ah == 0x56:  # rename ds:dx -> es:di, inside the overlay
+        a = fs.writable(emu.cstr(emu["ds"], emu["dx"]))
+        b = fs.full(emu.cstr(emu["es"], emu["di"]))
+        emu.log(f"DOS rename {a} -> {b}")
+        gd = fs.game_dir.upper()
+        if a is None or not b.startswith(gd + "\\"):
+            err(5)
+        else:
+            target = fs.overlay / b[len(gd) + 1 :].replace("\\", "/")
+            target = next((c for c in target.parent.iterdir() if c.name.upper() == target.name.upper()), target)
+            a.rename(target)
     elif ah == 0x36:
         emu["ax"], emu["bx"], emu["cx"], emu["dx"] = 64, 0x7FFF, 512, 0xFFFF
     elif ah == 0x4E:
@@ -916,6 +930,13 @@ class FileSystem:
                 return r[0]
         return None
 
+    def writable(self, name):
+        """The host file for `name` if it exists in the overlay (a file the game may change)."""
+        p = self.resolve(name)
+        if p is None or p.is_dir() or self.overlay.resolve() not in p.resolve().parents:
+            return None
+        return p
+
     def isdir(self, full):
         p = self.resolve(full)
         return p is not None and p.is_dir()
@@ -935,7 +956,7 @@ class FileSystem:
             p = self.resolve(name)
             if p is None or p.is_dir():
                 return None
-            f = open(p, "rb")
+            f = open(p, "r+b" if mode == 2 and self.writable(name) else "rb")  # read/write opens of files the game wrote
         h = 5
         while h in self.files:
             h += 1

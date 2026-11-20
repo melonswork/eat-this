@@ -98,6 +98,7 @@ def main():
     ap.add_argument("--platforms", action="store_true", help="log the first 0x40 bytes (as i16) of every platform (gPlatforms, 1170:4662) at the start of every game frame into platforms.tsv")
     ap.add_argument("--particles", default="", metavar="A-B", help="dump the particle array (1170:25b0, count 1170:0918) at the start of frames A..B into particles.tsv: frame, index, x, y, age, life, mask(+34), state(+3e), callback(+42), mover(+4a), box +2c +2e +30 +32")
     ap.add_argument("--writes", default="", help="comma-separated globals; log every write to them (frame, CS:IP, function, new value) into writes.tsv")
+    ap.add_argument("--overlay", default="work/tracer/overlay", help="folder over work/cd (read first, writes go here); work/demos for demos made by tools/mkdemo.py")
     ap.add_argument("-v", "--verbose", action="store_true", help="log file opens and Windows calls")
     o = ap.parse_args()
 
@@ -111,7 +112,7 @@ def main():
 
     log = print if o.verbose else (lambda *a: None)
     emu = Win16(CD / "ETLAUNCH.EXE", log=log)
-    fs = FileSystem(CD, Path("work/tracer/overlay"))
+    fs = FileSystem(CD, Path(o.overlay))
     for kv in o.ini:
         k, v = kv.split("=", 1)
         fs.ini[k.upper()] = v

@@ -72,6 +72,10 @@ run = "cargo run --release -- --headless --demo"
 description = "Run the original game under an x86 emulator on a demo and log every Random call: mise run trace -- work/cd/BIN/USERMAPS/GRINDER.DMO"
 run = "uv run python tools/tracer.py"
 
+[tasks.mkdemo]
+description = "Record a new oracle demo with the original game from a scenario script: mise run mkdemo -- work/scenarios/X.txt (-> work/demos/BIN/USERMAPS/X.DMO)"
+run = "uv run python tools/mkdemo.py"
+
 [env]
 # SDL2 (built from source by the sdl2 crate) still declares cmake_minimum_required < 3.5
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"
