@@ -437,6 +437,10 @@ impl Hero {
         self.gun.mouse
     }
 
+    pub fn set_mouse(&mut self, m: (i32, i32)) {
+        self.gun.mouse = m;
+    }
+
     /// HeroAimAtMouse (1088:420b).
     fn aim_at_mouse(&mut self) {
         let g = &mut self.gun;
@@ -479,6 +483,7 @@ impl Hero {
         self.gun.rocket5 = None;
         self.gun.flame = None;
         self.push = None;
+        if std::env::var_os("ET_MOUSE").is_some() { eprintln!("MOUSE {} {:?} {:?} cam {:?}", ps.now, mouse, self.gun.mouse, cam); }
         if mouse != self.gun.mouse {
             self.gun.shooting = true;
         }

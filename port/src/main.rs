@@ -178,6 +178,11 @@ impl Game {
         let mut rng = PascalRandom::new(seed);
         let mut level = Level::new(&mut world);
         let mut hero = Hero::new(world.map.start, 1);
+        // DemoLoad: gMouseX/Y start at the demo's first mouse entry (no "mouse moved" on frame 0).
+        if let Some(d) = &demo {
+            let m = d.input(0).1;
+            hero.set_mouse((m.0 as i32, m.1 as i32));
+        }
         // LevelInit: icons and OBJECTS records become objects (their constructors draw Random).
         level.spawn_all(&mut world, hero.x, &mut rng);
         // LevelFirstFrame (1088:b4db): enter the start sector (its scripts run), face its far side.
