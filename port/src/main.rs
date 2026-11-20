@@ -492,6 +492,9 @@ impl Game {
         for &(a, b) in &self.hero.shakes {
             self.camera.shake(a, b);
         }
+        for &(a, b) in &self.hero.side_shakes {
+            self.camera.shake_sideways(a, b);
+        }
         let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
         self.camera
             .update(&self.world, (self.hero.x, self.hero.y), true, grinder);

@@ -97,6 +97,8 @@ pub struct Hero {
     pub half_width: i32,
     /// ScreenShake calls made this frame, in order: (strength, amplitude).
     pub shakes: Vec<(i32, i32)>,
+    /// Sideways shakes (FUN_1050_5c7d) made this frame: (strength, amplitude).
+    pub side_shakes: Vec<(i32, i32)>,
     /// Changes to the camera's resting point (1170:4e34/4e36) made this frame.
     pub cam_nudge: (i32, i32),
     pub gun: Gun,
@@ -299,6 +301,7 @@ impl Hero {
             height: HEIGHT,
             half_width: 6,
             shakes: Vec::new(),
+            side_shakes: Vec::new(),
             cam_nudge: (0, 0),
             gun: Gun::default(),
             weapon: -1,
@@ -522,6 +525,7 @@ impl Hero {
         self.half_width = 6;
         self.height = HEIGHT - (self.ground == 1) as i32;
         self.shakes.clear();
+        self.side_shakes.clear();
         self.cam_nudge = (0, 0);
         self.hit_mask = 0;
         let mut friction = true;
@@ -1686,6 +1690,23 @@ impl Hero {
                     self.throw_back();
                 }
                 self.shakes.push((0x10, 8));
+            }
+            // Kinds 2 and 3 (FUN_1068_1f3c/215e, FUN_1070_9a66/b9d3, none ported yet: untested).
+            2 => {
+                rng.random(0x20);
+                self.shakes.push((0x10, 8));
+                if self.state < 1 {
+                    self.state = KNOCKED_DOWN;
+                    self.anim = 0x3c;
+                    self.flat = true;
+                } else {
+                    self.throw_back();
+                }
+            }
+            3 => {
+                rng.random(0x20);
+                self.throw_back();
+                self.side_shakes.push((0x32, 0x12));
             }
             k => eprintln!("warning: hero hit kind {k} not ported"),
         }
