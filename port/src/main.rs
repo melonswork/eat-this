@@ -428,6 +428,10 @@ impl Game {
             self.level.particles.shell7(a, y, x);
             noise = 2;
         }
+        if let Some((y, x, a)) = self.hero.gun.rocket3 {
+            self.level.particles.rocket3(y, x, a);
+            noise = 2;
+        }
         if let Some((y, x, a)) = self.hero.gun.rocket5 {
             self.level.particles.rocket5(y, x, a);
             noise = 2;
@@ -1327,6 +1331,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _ = sprites::LEVEL_RAW.set(raw);
     let world = World::load(&map_path, &o.data.join("TILES"))?;
     if std::env::var_os("ET_PICKUPS").is_some() {
+        println!("START {:?}", world.map.start);
         // Weapon pick-ups: plane-2 cells with function 30000 and effect 67; weapon = function 3 - 0x1e.
         if let Some(Some(p)) = world.planes.get(2) {
             for ty in 0..p.height {

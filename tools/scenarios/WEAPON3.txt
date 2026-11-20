@@ -1,0 +1,24 @@
+# BOMS02: climb the ladder at x 1336 to the ledge, walk left to the weapon-3 pick-up at (1303, 263),
+# then fire it with the right button: at the left wall, up at the ceiling, down at the floor.
+level MAPS/BOMS02.MAP
+mouse 200 100
+10
+30 right
+8 right up
+60 up
+10
+20 left
+mouse 40 60
+10
+5 rmb
+25
+5 rmb
+25
+mouse 120 10
+5 rmb
+25
+mouse 200 190
+5 rmb
+25
+5 rmb
+120

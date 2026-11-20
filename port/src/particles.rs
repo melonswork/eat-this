@@ -539,6 +539,26 @@ impl Particles {
         self.spawn_seq(0x190a, 2, 2, y, x, 1);
     }
 
+    /// FUN_1088_6b1f's rocket (weapon 3): homing at a steady speed of 0x30, leaving smoke
+    /// (callback 0x586); effect 14 when it hits.
+    pub fn rocket3(&mut self, y: i32, x: i32, angle: i32) {
+        self.p.hits = 0x10;
+        self.p.damage = 0x80;
+        self.p.homing = 0x10;
+        self.p.tiles = 0x143;
+        self.p.on_death = 0xe;
+        self.p.callback = 0x586;
+        self.spawn_seq(0x1932, 1, 0x100, y, x, 0);
+        self.rocket(0x30, angle);
+        self.p.callback = 0;
+        self.p.on_death = 0;
+        self.p.tiles = 0x43;
+        self.p.homing = 0;
+        self.p.damage = 0x10;
+        self.p.hits = 0;
+        self.spawn_seq(0x190a, 2, 2, y, x, 1);
+    }
+
     /// FUN_1088_678b's flame: a short-lived fire that follows its line and goes out in smoke
     /// (effect 37).
     pub fn flame(&mut self, y: i32, x: i32, angle: i32) {
@@ -1084,6 +1104,43 @@ impl Level {
                         ps.spawn(sprite, y, x);
                         ps.p.callback = 0;
                     }
+                }
+            }
+            0x586 => {
+                // FUN_1050_0586 (weapon 3's rocket): it turns (at most 0x40) towards its target
+                // at a steady speed, leaves smoke, and goes off when its life runs out.
+                let p = &mut self.particles.list[i];
+                let (m, v) = (&mut p.m, &mut p.v);
+                if v.w(0x18) != 0x140 {
+                    let a = trig::atan2(v.w(0x16), v.w(0x14));
+                    if v.w(0x10) != a {
+                        let d = ((a - v.w(0x10)) + 0x21c0) % 0x1680;
+                        let na = if d < 0xb40 {
+                            ((v.w(0x10) + 0x1680) - 0x40.min(0xb40 - d)) % 0x1680
+                        } else {
+                            (0x40.min(d - 0xb40) + v.w(0x10)) % 0x1680
+                        };
+                        v.set(0x10, na);
+                        v.set_l(8, (trig::cos(na) * v.w(0x12)) / 4);
+                        v.set_l(0xc, (trig::sin(na) * v.w(0x12)) / -4);
+                    }
+                    v.set(0x18, 0x140);
+                    v.set(0x1a, 0);
+                }
+                let (x, y, age, life) = (m.w(8), m.w(0xa), m.w(0x24), m.w(0x22));
+                if age % 4 == 3 {
+                    let ps = &mut self.particles;
+                    ps.p.delay = 4;
+                    ps.p.group = 0;
+                    ps.spawn_seq(0x5111, 3, 9, y, x, 1);
+                    ps.p.group = 1;
+                    ps.p.delay = 0;
+                }
+                let m = &mut self.particles.list[i].m;
+                if life <= age && m.w(0x3e) > -10 {
+                    m.set(0x3e, -1);
+                    m.set(0x10, x);
+                    m.set(0x12, y);
                 }
             }
             0x30f => {

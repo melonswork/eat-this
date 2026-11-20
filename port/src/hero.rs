@@ -208,6 +208,8 @@ pub struct Gun {
     pub rockets: Option<(i32, i32, i32)>,
     /// FUN_1088_6deb's accelerating rocket: (y, x, angle).
     pub rocket5: Option<(i32, i32, i32)>,
+    /// Weapon 3's homing rocket (y, x, angle): FUN_1088_6b1f.
+    pub rocket3: Option<(i32, i32, i32)>,
     /// FUN_1088_678b's flame: (y, x, angle).
     pub flame: Option<(i32, i32, i32)>,
     flame_aim: i32, // 4e4a: the aim the flame follows
@@ -481,6 +483,7 @@ impl Hero {
         self.gun.rapid = None;
         self.gun.rockets = None;
         self.gun.rocket5 = None;
+        self.gun.rocket3 = None;
         self.gun.flame = None;
         self.push = None;
         if std::env::var_os("ET_MOUSE").is_some() { eprintln!("MOUSE {} {:?} {:?} cam {:?}", ps.now, mouse, self.gun.mouse, cam); }
@@ -1862,6 +1865,22 @@ impl Hero {
                     let y = self.y + g.muzzle.1 - 0x16 - (0x17 * s) / 0x4000;
                     let a = (g.aim + 0x1680 - 0x20 + rng.random(0x41) as i32) % 0x1680;
                     g.rocket5 = Some((y, x, a));
+                    g.pose = 4;
+                    g.shots += 1;
+                    g.cooldown = 10;
+                    g.shooting = true;
+                    self.released[RIGHT_SHOOT] = false;
+                }
+            }
+            // FUN_1088_6b1f: a homing rocket at a steady speed, aimed 0x20 either side of the aim.
+            3 => {
+                if self.use_ammo(8, input, now) {
+                    let g = &mut self.gun;
+                    let (c, s) = (crate::trig::cos(g.aim), crate::trig::sin(g.aim));
+                    let x = self.x + g.muzzle.0 + (0x17 * c) / 0x4000;
+                    let y = self.y + g.muzzle.1 - 0x16 - (0x17 * s) / 0x4000;
+                    let a = (g.aim + 0x1680 - 0x20 + rng.random(0x41) as i32) % 0x1680;
+                    g.rocket3 = Some((y, x, a));
                     g.pose = 4;
                     g.shots += 1;
                     g.cooldown = 10;
