@@ -531,6 +531,26 @@ impl Level {
                 o.set(6, o.w(0xe));
                 o.set(8, o.w(0x10));
             }
+            crate::wallgun::KIND => {
+                let mut o = base(kind, 0xcbc, 0x24);
+                o.set(10, r.byte2());
+                o.set(0xe, r.at(4));
+                o.set(0x10, r.at(6));
+                o.set(0x14, r.at(8));
+                o.set(0x16, if r.count > 5 { r.at(10) } else { 0 });
+                o.set(0x1e, if r.count > 6 { r.at(0xc) } else { 0 });
+                o.set(0x22, if r.count > 7 { r.at(0xe) } else { 0 });
+                o.set(0x20, o.w(0x1e));
+                o.set(0x18, 0);
+                o.set(0x1a, 0xc0);
+                o.set(0x1c, 0);
+                o.set(2, o.w(0xe) - 0x20);
+                o.set(4, o.w(0x10) - 0x20);
+                o.set(6, o.w(0xe) + 0x20);
+                o.set(8, o.w(0x10) + 0x20);
+                let (y, x) = (o.w(0x10), o.w(0xe));
+                self.add_actor(world, o, y, x);
+            }
             crate::granny::KIND => {
                 let mut o = walker(kind, 0xe0c, 0x3c);
                 o.set(10, r.byte2());

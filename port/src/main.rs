@@ -46,6 +46,7 @@ mod boss;
 mod tree;
 mod turret;
 mod walker;
+mod wallgun;
 mod world;
 
 use camera::Camera;

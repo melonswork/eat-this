@@ -81,6 +81,7 @@ streams and EVERY CHECK, so the method is the original's own.
 | `WEAPON9` | CITY_I04, start moved to (940,191) | weapon-9 pick-up, balls standing (Random(0xa1)) and crouched (laid flat), mover 1050:3044, callback 16cc, effect 56 (bounce, +8 frames, blast) | exact |
 | `GRANNY1` | GRANNY, weapon-3 pick-up copied to (19,30) | the granny 0x1482 (FUN_1070_cb38, `granny.rs`): pistol hits knock her over (hat 0x510a, bleeding ca36), lying, stomps; rockets blow two apart (red gibs, smoke, splat) | exact |
 | `CARRIER1` | CITY02, start moved to (1020,1039) | the carrier 0x14be (FUN_1070_0cce, `carrier.rs`): flies bobbing, drops its three aliens by distance, shot down it falls and crashes (0a34: dust, plates, blast); water splashes of aliens and the hero (FUN_1070_0105) | exact |
+| `WALLGUN1` | FOREST02, start moved to (650,1340) | the gun turret 0x13ec (FUN_1070_2550, `wallgun.rs`) by the trunk: fires on its cycle, ~110 pistol shots kill it (smoke, gun pieces) and break it (-0x80: plates, pieces with effect 65 = FUN_1040_105d) | exact |
 
 ## Tools (non-obvious usage)
 

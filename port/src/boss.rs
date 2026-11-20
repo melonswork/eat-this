@@ -334,7 +334,7 @@ impl Level {
 }
 
 /// FUN_1040_6405: four puffs of smoke.
-fn smoke4(ps: &mut crate::particles::Particles, y: i32, x: i32) {
+pub(crate) fn smoke4(ps: &mut crate::particles::Particles, y: i32, x: i32) {
     puff(ps, y, x - 4);
     ps.p.delay += 7;
     puff(ps, y - 5, x + 1);
