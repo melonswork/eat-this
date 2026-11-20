@@ -2,7 +2,7 @@
 scripted input, with its own recorder (DemoStartRecording / DemoRecordFrame / DemoSave), so the
 .REC it writes has the original's CHECK entries (RandSeed every 35 frames).
 
-    uv run python tools/mkdemo.py work/scenarios/DEATH1.txt [--out work/demos]
+    uv run python tools/mkdemo.py tools/scenarios/DEATH1.txt [--out work/demos]
 
 writes work/demos/BIN/USERMAPS/<NAME>.DMO/{<MAP>.MAP,<MAP>.SCR,<NAME>.REC}. Replay it with the
 tracer (`--overlay work/demos`) and the port (`--demo ../work/demos/BIN/USERMAPS/<NAME>.DMO`).

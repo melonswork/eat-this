@@ -34,6 +34,8 @@ def main():
             orig[fr] += 1
             callers[fr].append(f"{f[2]}({f[5]})")
     demo = ROOT / "work/cd/BIN/USERMAPS" / f"{name}.DMO"
+    if not demo.exists():  # a demo made by tools/mkdemo.py
+        demo = ROOT / "work/demos/BIN/USERMAPS" / f"{name}.DMO"
     out = subprocess.run(
         [str(ROOT / "port/target/release/eatthis"), "--headless", "--demo", str(demo), "--trace", str(a), str(b + 1)],
         capture_output=True, text=True, cwd=ROOT / "port",

@@ -12,9 +12,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 IGNORE = ("1070:8c72", "1070:34db", "1070:091f", "1068:3112")  # draw-time Randoms under a saved seed (see windiff.py)
 d = sys.argv[1]
+# CD demos, or the ones tools/mkdemo.py made
+DEMO = next(p for p in (ROOT / "work/cd/BIN/USERMAPS" / f"{d}.DMO", ROOT / "work/demos/BIN/USERMAPS" / f"{d}.DMO") if p.exists())
 tsv = ROOT / "work" / f"port_rng_{d}.tsv"
 subprocess.run(
-    f"cd {ROOT}/port && ET_RNG_TSV={tsv} ./target/release/eatthis --headless --demo ../work/cd/BIN/USERMAPS/{d}.DMO >/dev/null 2>&1",
+    f"cd {ROOT}/port && ET_RNG_TSV={tsv} ./target/release/eatthis --headless --demo {DEMO} >/dev/null 2>&1",
     shell=True,
 )
 o = []

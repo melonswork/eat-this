@@ -1613,18 +1613,20 @@ impl Hero {
         }
     }
 
-    /// FUN_1088_3c32(damage) from an object: a shot-like hit.
-    pub fn hurt(&mut self, damage: i32, rng: &mut PascalRandom) {
-        self.hit(damage, 1, rng);
+    /// FUN_1088_3c32(damage) from an object: a shot-like hit. Returns 0 (invulnerable),
+    /// 1 (hurt) or 2 (killed).
+    pub fn hurt(&mut self, damage: i32, rng: &mut PascalRandom) -> i32 {
+        self.hit(damage, 1, rng)
     }
 
-    /// FUN_1088_3c32(damage) with 1170:162a = `kind` (1 shot, 4 burnt).
-    fn hit(&mut self, damage: i32, kind: i32, rng: &mut PascalRandom) {
+    /// FUN_1088_3c32(damage) with 1170:162a = `kind` (1 shot, 4 burnt): 0 invulnerable, 1 hurt,
+    /// 2 killed.
+    fn hit(&mut self, damage: i32, kind: i32, rng: &mut PascalRandom) -> i32 {
         if std::env::var("ET_HIT").is_ok() {
             eprintln!("HIT damage {damage} kind {kind} health {} hurt {} mask {:x}", self.health, self.hurt, self.hit_mask);
         }
         if self.hurt >= 1 {
-            return;
+            return 0;
         }
         self.health -= damage;
         if self.health < 1 {
@@ -1633,7 +1635,7 @@ impl Hero {
             self.hurt = 0x7fff;
             self.anim = 0x8c;
             self.state = DEAD;
-            return;
+            return 2;
         }
         self.hurt = 0x52;
         match kind {
@@ -1657,6 +1659,7 @@ impl Hero {
             k => eprintln!("warning: hero hit kind {k} not ported"),
         }
         self.hurt_blink = self.hurt;
+        1
     }
 
     /// FUN_1088_3bee: thrown back unless the head is against a ceiling.

@@ -247,6 +247,17 @@ impl Game {
         self.flush_spawns(fx);
     }
 
+    /// The rest of FUN_1088_3c32's kill: the gibs (FUN_1068_186c), the smoke (FUN_1040_637a)
+    /// and a blood splat (FUN_1058_0218).
+    fn hero_death_effects(&mut self) {
+        if let Some((y, x)) = self.hero.death.take() {
+            self.level.gibs_rng(y - 0x19, x, 0x20, true, &mut self.rng);
+            alien::smoke_sprite(&mut self.level.particles, y, x);
+            let r = self.rng.random(5);
+            self.level.blood_splat(&self.world, 0x531e + r, y - 0x24, x);
+        }
+    }
+
     fn demo_done(&self) -> bool {
         self.demo.as_ref().is_some_and(|d| self.frame >= d.frames)
     }
@@ -384,12 +395,7 @@ impl Game {
         if self.hero.vehicle {
             self.touch_tiles(&mut fx);
         }
-        if let Some((y, x)) = self.hero.death.take() {
-            self.level.gibs_rng(y - 0x19, x, 0x20, true, &mut self.rng);
-            alien::smoke_sprite(&mut self.level.particles, y, x);
-            let r = self.rng.random(5);
-            self.level.blood_splat(&self.world, 0x531e + r, y - 0x24, x);
-        }
+        self.hero_death_effects();
         for (sprite, y, x) in std::mem::take(&mut self.hero.splats) {
             self.level.blood_splat(&self.world, sprite, y, x);
         }
@@ -583,8 +589,13 @@ impl Game {
         let h = &self.hero;
         let hero = (h.x, h.y, h.crouch_level(), false);
         let cam_x = self.camera.x;
-        self.level
-            .update_grinder(&mut self.world, hero, cam_x, &mut self.rng, fx);
+        if self.level.update_grinder(&mut self.world, hero, cam_x, &mut self.rng, fx) {
+            // FUN_1088_3c32(0xc0); a hurt hero (not a dead one) slows the grinder down.
+            if self.hero.hurt(0xc0, &mut self.rng) == 1 {
+                self.level.grinder.as_mut().unwrap().slow_down(&mut self.rng);
+            }
+            self.hero_death_effects();
+        }
         self.level.storm_frame(&mut self.rng);
         self.level.water_frame(&self.world);
         // START's foreground (FUN_1090_0ace): the ship the hero was thrown from is a platform
