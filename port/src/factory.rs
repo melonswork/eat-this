@@ -681,6 +681,10 @@ impl Level {
                         self.plat_objs.push(p);
                     }
                 }
+                100 => {
+                    let w = &*world;
+                    self.plat_objs.push(crate::platobj::PlatObj::path(&rec, |y, x| w.sector_at(y, x)));
+                }
                 k if (100..=199).contains(&k) => {
                     eprintln!("warning: OBJECTS type {k} (FUN_1060_0166) not ported")
                 }

@@ -33,6 +33,8 @@ pub struct PlatObj {
     pub dir: i32,
     pub speed_count: i32,
     pub age: i32,
+    /// +0x28: the mode the last move was started with.
+    pub saved_mode: i32,
 }
 
 impl PlatObj {
@@ -77,6 +79,7 @@ impl PlatObj {
             dir: 0,
             speed_count: 0,
             age: 0,
+            saved_mode: 0,
         };
         let mut key = -1;
         if key_row != 0xff {
@@ -113,6 +116,69 @@ impl PlatObj {
         o.prev_angle = o.angle;
         o.sector = sector_of(o.y, o.x);
         Some(o)
+    }
+
+    /// FUN_1060_0166 for a platform following a path (type 0): the points, the start index (an
+    /// odd word left over), the bounding box of the path (+0x40 all round, the width to the right).
+    pub fn path(rec: &[i16], sector_of: impl Fn(i32, i32) -> usize) -> PlatObj {
+        let n = rec.len();
+        let byte = |off: usize| -> i32 {
+            let w = rec.get(off / 2).copied().unwrap_or(0) as u16;
+            if off % 2 == 0 { (w & 0xff) as i32 } else { (w >> 8) as i32 }
+        };
+        let word = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
+        let row = byte(4) as usize;
+        let mut count = n as i32;
+        if ds_word(0x9d6 + row * 14) >> 8 & 0xff != 0xff {
+            count -= 1; // the last word is the key (+0x1c)
+        }
+        let lever = byte(7);
+        let skip = (lever != 0) as i32 + 4;
+        let points: Vec<(i32, i32)> = (0..(count - skip) / 2)
+            .map(|i| (word((skip + 2 * i) as usize), word((skip + 2 * i + 1) as usize)))
+            .collect();
+        let start = if (count - skip) % 2 == 1 { byte(((count - 1) * 2) as usize) } else { 0 };
+        let mut o = PlatObj {
+            kind: 0,
+            sector: 0,
+            x: 0,
+            y: 0,
+            prev_y: 0,
+            flags: 0,
+            angle: 0,
+            prev_angle: 0,
+            row,
+            speed: byte(6) as i8 as i32,
+            mode: ds_word(0xa68 + byte(2) as usize * 4),
+            mode_alt: ds_word(0xa6a + byte(2) as usize * 4),
+            count: points.len() as i32,
+            radius: start,
+            lever: (lever, if lever != 0 { word(4) } else { 0 }),
+            points,
+            bbox: (0, 0, 0, 0),
+            stops: (0, 0),
+            dir: 0,
+            speed_count: 0,
+            age: 0,
+            saved_mode: 0,
+        };
+        let (sx, sy) = o.points.get(start as usize).copied().unwrap_or((0, 0));
+        o.x = sx;
+        o.y = sy;
+        o.prev_y = sy;
+        let (mut x1, mut y1, mut x2, mut y2) = (sx, sy, sx, sy);
+        if let Some(&(px, py)) = o.points.first() {
+            (x1, y1, x2, y2) = (px, py, px, py);
+        }
+        for &(px, py) in o.points.iter().skip(1) {
+            x1 = x1.min(px);
+            y1 = y1.min(py);
+            x2 = x2.max(px);
+            y2 = y2.max(py);
+        }
+        o.bbox = (x1 - 0x40, y1 - 0x40, x2 + o.width() + 0x40, y2 + 0x40);
+        o.sector = sector_of(o.y, o.x);
+        o
     }
 
     /// EnemyFactory 0x14c8 (FUN_1060_14f4 after it): a lift between two stops.
@@ -154,6 +220,7 @@ impl PlatObj {
             dir: 0,
             speed_count: 0,
             age: 0,
+            saved_mode: 0,
         };
         o.bbox = (x - 0x10, a - 0x10, x + 0x10 + o.width(), b + 0x10);
         o
@@ -272,6 +339,165 @@ pub fn update(p: &mut PlatObj, hero: &mut HeroSide, now: u32) {
         p.y = ny;
     }
     if p.angle == p.prev_angle {
+        p.flags &= !2;
+    } else if p.x != old_x || p.y != p.prev_y {
+        p.flags |= 2;
+    }
+}
+
+/// FUN_1060_0819 for a platform following a path (type 0). +0x18 (`angle`) is twice the
+/// distance from the last point reached (+0x2e, `radius`) towards the next; each frame the speed
+/// (+0x22) is added to it while the mode lets it move.
+pub fn update_path(p: &mut PlatObj, hero: &mut HeroSide, world: &crate::world::World) {
+    let mut old_x = p.x;
+    p.prev_y = p.y;
+    let on_lever = p.lever.0 == 0
+        || crate::level::Level::lever_state(world, p.lever.1 as u16) == p.lever.0 - 1;
+    let (mut live, mode) = if !on_lever && p.mode_alt != -1 {
+        (1, p.mode_alt)
+    } else {
+        (on_lever as i32, p.mode)
+    };
+    live += (mode & 0x40 != 0) as i32;
+    let start = p.angle;
+    let mut a = start;
+    let (mut x, mut y) = (old_x, p.prev_y);
+    let n = p.points.len() as i32;
+    let pt = |i: i32| p.points.get(i.clamp(0, (n - 1).max(0)) as usize).copied().unwrap_or((0, 0));
+    if live != 0 || p.flags & 8 != 0 {
+        let mut idx = p.radius;
+        let (mut e, mut f) = pt(idx);
+        (x, y) = (e, f);
+        if a >= 0 {
+            if idx < p.count - 1 {
+                if p.speed < a || idx > 0 || mode & 0x10 == 0 || p.flags & 1 == 0 {
+                    idx += 1;
+                }
+            } else if mode & 4 != 0 || (mode & 0x10 != 0 && (p.speed < a || p.flags & 1 == 0)) {
+                idx = 0;
+                if mode & 0x20 != 0 {
+                    p.radius = 0;
+                    (e, f) = pt(0);
+                    old_x = e;
+                    p.prev_y = f;
+                }
+            }
+        } else if idx > 0 {
+            idx -= 1;
+        } else {
+            a = 0;
+        }
+        let (tx, ty) = pt(idx);
+        let step = (a.abs() as u16 >> 1) as i32;
+        let sx = (tx - e).signum();
+        let sy = (ty - f).signum();
+        if e == tx {
+            y += sy * step;
+        } else if f == ty {
+            x += sx * step;
+        } else {
+            // The long arithmetic: r = |dx << 16 / dy|, the step split by it.
+            let r = ((((tx - e) as i64) << 16) / (ty - f) as i64).abs() as i32;
+            let den = r.wrapping_add(0x10000) as i64;
+            y += ((step as i64 * 0x10000 * sy as i64) / den) as i32;
+            x += (((step as i32).wrapping_mul(r) as i64 * sx as i64) / den) as i32;
+        }
+        let mul = |s: i32, v: i32| (s * v) as i16;
+        if mul(sx, tx) <= mul(sx, x) && mul(sy, ty) <= mul(sy, y) {
+            p.radius = idx;
+            a = 0;
+            x = tx;
+            y = ty;
+        }
+        if p.flags & 8 != 0 && a == 0 && (p.saved_mode & 0x800 == 0 || p.count - 1 == idx) {
+            p.flags &= !8;
+        } else if mode & 3 == 0 {
+            p.flags |= 0xc;
+            p.saved_mode = mode;
+        }
+    }
+    if p.mode & 0x4000 != 0 && p.flags & 1 == 0 {
+        eprintln!("warning: a bobbing path platform (mode 0x4000, FUN_1060_0819) not ported");
+    }
+    let w = p.width();
+    let rel = (hero.x + hero.dx) - old_x;
+    let (lo, hi) = (-hero.half_width, w - 1 + hero.half_width);
+    let inside = rel >= lo.min(hi) && rel <= lo.max(hi);
+    let mut on = inside && ranges_overlap(y - 1, p.prev_y - 1, hero.y + hero.dy, hero.y);
+    if on {
+        let climbing = hero.state < 0 && (-5..=-1).contains(&hero.state);
+        on = !climbing
+            && (hero.state < 1 || hero.vy >= 0 || (hero.y <= p.prev_y - 1 && y - 1 < hero.y + hero.dy));
+    }
+    if p.flags & 0x10 == 0 {
+        p.prev_angle = p.angle;
+    } else {
+        p.flags &= !0x10;
+        if p.prev_y < y {
+            live = 0;
+            p.angle = p.prev_angle;
+            x = old_x;
+            y = p.prev_y;
+        } else {
+            p.prev_angle = p.angle;
+        }
+    }
+    let b5 = mode & 3;
+    if on {
+        if live == 1 && mode & 3 != 0 && hero.prev_ground != 0x15 && mode & 0x80 == 0 {
+            p.flags |= 0x10;
+        }
+        hero.dy = (y - 1) - hero.y;
+        if mode & 8 == 0 {
+            hero.dx += x - old_x;
+        }
+        hero.ground = Some(0x15);
+    }
+    if live == 0 || (live != 2 && (!on || mode & 0x40 != 0)) {
+        p.flags &= !1;
+        if p.flags & 8 == 0 {
+            if b5 == 3 {
+                a += p.speed;
+            } else if b5 == 1 {
+                if p.radius < 1 && a <= p.speed {
+                    a = 0;
+                } else {
+                    a -= p.speed;
+                }
+            }
+        }
+    } else {
+        if mode & 0x680 == 0 {
+            if mode & 3 != 0 && b5 <= 2 {
+                p.flags |= 0xc;
+                p.saved_mode = mode;
+            }
+        } else if on {
+            eprintln!("warning: a path platform the hero drives (mode {mode:#x}, FUN_1060_0819) not ported");
+        }
+        if p.speed.abs() < a.abs() {
+            p.flags |= 1;
+        }
+    }
+    if p.flags & 8 != 0 {
+        let mut d = p.speed;
+        if p.saved_mode & 0x8000 != 0 {
+            eprintln!("warning: a path platform slowing at its ends (mode 0x8000, FUN_1060_0819) not ported");
+        }
+        if (p.flags & 4 != 0) == (p.saved_mode & 0x1000 != 0) {
+            d = -d;
+        }
+        a += d;
+        if p.saved_mode & 0x100 == 0 {
+            p.flags &= !8;
+        }
+    }
+    if live != 0 {
+        p.angle = a;
+        p.x = x;
+        p.y = y;
+    }
+    if p.angle == start {
         p.flags &= !2;
     } else if p.x != old_x || p.y != p.prev_y {
         p.flags |= 2;

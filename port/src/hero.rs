@@ -1348,6 +1348,8 @@ impl Hero {
                             let mut released = self.released[DOWN];
                             crate::platobj::update_lift(p, &mut side, w, rng, input[DOWN] > 0, &mut released, &mut self.shakes);
                             self.released[DOWN] = released;
+                        } else if p.kind == 0 {
+                            crate::platobj::update_path(p, &mut side, w);
                         } else {
                             crate::platobj::update(p, &mut side, ps.now);
                         }
