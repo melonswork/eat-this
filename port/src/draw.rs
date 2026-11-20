@@ -716,15 +716,20 @@ pub fn doors(p: &mut Painter, level: &Level) {
 /// FUN_1088_4b64's pointer and FUN_1088_2501's status bar: `level` is GameStats (1a92):
 /// 1 = health, keys, the right button's weapon and its ammo, 2 = also the kill / hidden area /
 /// bios sphere counters on the right (`got` of `totals`). Screen coordinates; ETSCORE is slot 0x1f.
-pub fn hud(p: &mut Painter, hero: &crate::hero::Hero, level: i32, got: crate::level::Tally, totals: crate::level::Tally) {
+pub fn hud(p: &mut Painter, hero: &crate::hero::Hero, pointer: i32, level: i32, got: crate::level::Tally, totals: crate::level::Tally) {
     use crate::world::ds_word;
     p.reset();
     let byte = |a: usize| ds_word(a) & 0xff;
     let w = hero.weapon;
     let rec = 0x1656 + (w.max(0) as usize) * 0xd;
-    // The pointer: two frames blinking every 12, plus the weapon's own (record +5).
-    let mut ptr = 0x7800 + (per(p, 12) & 1);
-    if w >= 0 {
+    // The pointer (4e50): two frames blinking every 12; red over an enemy (2); KICK / ME
+    // blinking over an alien to kick (3). The first three get the weapon's own (record +5).
+    let mut ptr = match pointer {
+        0 => 0x7800 + (per(p, 12) & 1),
+        3 => 0x7803 + (per(p, 50) & 1),
+        k => 0x7800 + k,
+    };
+    if w >= 0 && ptr < 0x7803 {
         ptr += byte(rec + 5);
     }
     let (mx, my) = hero.gun_mouse();

@@ -338,6 +338,8 @@ impl Game {
     /// One game frame. `keys` is ignored while a demo plays.
     fn step(&mut self, keys: [i8; 9]) {
         sound::begin_frame(self.frame + 1);
+        // FUN_1088_4b64 clears 4e50 after drawing the pointer.
+        self.level.particles.pointer = 0;
         self.rng.frame = self.frame + 1;
         self.rng.log = std::env::var("ET_RNG").ok().and_then(|v| v.parse::<u32>().ok()) == Some(self.frame);
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
@@ -545,8 +547,11 @@ impl Game {
         let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
         self.camera
             .update(&self.world, (self.hero.x, self.hero.y), true, grinder);
-        // The end of FUN_1088_0c82: the listener (FUN_10e0_0002) is the camera's centre.
+        // The end of FUN_1088_0c82: the listener (FUN_10e0_0002) is the camera's centre, and
+        // the pointer's world position (4e42/4e44) for the next frame's hit tests.
         sound::listener(self.camera.x + 0xa0, self.camera.y + 100);
+        let m = self.hero.gun_mouse();
+        self.level.particles.mouse = (m.0 + self.camera.x, m.1 + self.camera.y);
         // FUN_10a8_1311 (doors opening by themselves), then after the level's background
         // procedure FUN_10a8_0dab (the moving doors).
         let hero_at = (self.hero.x, self.hero.y);
@@ -1071,7 +1076,7 @@ impl Graphics {
             clip: render::SCREEN,
         };
         let got = level::TALLY.with(|t| t.get());
-        draw::hud(&mut p, &g.hero, self.hud_level, got, g.totals);
+        draw::hud(&mut p, &g.hero, g.level.particles.pointer, self.hud_level, got, g.totals);
     }
 
     /// FUN_1068_09bf over the sector's decor list: each layer is an extra map drawn with its

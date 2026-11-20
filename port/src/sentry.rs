@@ -51,7 +51,10 @@ impl Level {
         let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
         self.particles.p.aim_level = -1;
         self.particles.p.aim_level2 = -1;
+        // (163e = 4e50 around this test: it leaves the pointer as it is.)
+        let pointer = self.particles.pointer;
         let d = self.particles.hit_test(y - 9, x + 4, y - 0x51, x - 4, 0x59);
+        self.particles.pointer = pointer;
         self.particles.p.aim_level = 0x100;
         self.particles.p.aim_level2 = 0x100;
         if d > 0 {

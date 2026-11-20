@@ -826,10 +826,12 @@ impl Level {
             if std::env::var("ET_CORPSE").is_ok() {
                 eprintln!("CORPSE {} sprite {:x} at {x},{y} mirror {} rect {:?}", env.frame + 1, sprite, *mirror, sprites::hit_rect(sprite, y, x, *mirror));
             }
+            self.particles.kick_pointer = true;
             let damage = match sprites::hit_rect(sprite, y, x, *mirror) {
                 Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x11fb),
                 None => 0,
             };
+            self.particles.kick_pointer = false;
             self.particles.p.aim_level = 0x100;
             self.particles.p.aim_level2 = 0x100;
             let o = self.o(id);
