@@ -713,6 +713,9 @@ struct Graphics {
     palette: Palette,
     bank: render::Bank,
     tables: render::Tables,
+    /// LoadExtraMap= maps (plane slots 8..): PLANE 0 of each (FUN_10f0_5e9f).
+    extra: Vec<Option<world::Plane>>,
+    decor: Vec<Decor>,
 }
 
 impl Graphics {
@@ -777,6 +780,39 @@ impl Graphics {
                 g
             })
             .collect();
+        let extra = script
+            .as_ref()
+            .map(|s| s.extra_maps.clone())
+            .unwrap_or_default()
+            .iter()
+            .map(|n| {
+                let m = find_ci(&data.join("MAPS"), n).and_then(|p| data::Map::load(&p).ok())?;
+                let cells = m.planes.first()?.clone();
+                Some(world::Plane { width: m.width, height: m.height, cells })
+            })
+            .collect();
+        // LevelInit's 0x272e records: [type, _, kind, x, y, extra map, depth, (x, y of the sector)].
+        let mut decor: Vec<Decor> = world
+            .map
+            .object_records()
+            .iter()
+            .filter(|r| r[0] == 0x272e && r.len() >= 7 && r[6] > 0)
+            .filter(|r| r.get(9).map_or(3, |&d| d as i32) <= 3)
+            .map(|r| {
+                let g = |i: usize| r[i] as i32;
+                let depth = g(6);
+                let (sx, sy) = if r.len() > 8 { (g(7), g(8)) } else { (g(3), g(4)) };
+                Decor {
+                    kind: g(2),
+                    plane: (g(5) + 8) as usize,
+                    depth,
+                    origin: ((g(3) - 0xa0) + 0xa000 / depth, (g(4) - 100) + 0x6400 / depth),
+                    sector: world.sector_at(sy, sx),
+                }
+            })
+            .collect();
+        // The lists keep the farthest last and are drawn from the end.
+        decor.sort_by_key(|d| d.depth);
         Ok(Graphics {
             background: bg::Background {
                 proc_: script.map_or(0, |s| s.background_proc),
@@ -789,6 +825,8 @@ impl Graphics {
             palette: level.rgb(),
             bank: render::Bank::new(level),
             tables,
+            extra,
+            decor,
         })
     }
 
@@ -808,7 +846,9 @@ impl Graphics {
         if self.bg_only {
             return;
         }
-        let map = &g.world.map;
+        // The sector's background decor (list +0x1e, FUN_1068_09bf from the background proc).
+        let sector = g.level.sector.unwrap_or(0);
+        self.decor(fb, g, sector, false, (cam_x, cam_y), frame);
         // The map planes, then the platforms (their own planes, at their positions).
         let mut layers: Vec<(usize, i32, i32)> = vec![(0, 0, 0), (MAIN_PLANE, 0, 0)];
         layers.extend(
@@ -819,45 +859,11 @@ impl Graphics {
                 .map(|p| (p.plane, p.x, p.y)),
         );
         for (plane, ox, oy) in layers {
-            let Some(pl) = g.world.planes[plane].as_ref() else {
-                continue;
-            };
-            for ty in 0..pl.height {
-                let sy = oy + ty * TILE - cam_y;
-                if sy <= -TILE || sy >= H {
-                    continue;
-                }
-                for tx in 0..pl.width {
-                    let sx = ox + tx * TILE - cam_x;
-                    if sx <= -TILE || sx >= W {
-                        continue;
-                    }
-                    let cell = pl.get(tx, ty);
-                    if cell == 0 || cell & 0x8000 != 0 {
-                        continue;
-                    }
-                    let gi = (cell >> 8) as usize;
-                    if gi >= map.groups.len() {
-                        continue;
-                    }
-                    let hidden = map.groups[gi]
-                        .as_deref()
-                        .is_some_and(|n| n.contains("ICON"));
-                    let Some(group) = &g.world.groups[gi] else {
-                        continue;
-                    };
-                    if hidden || (cell & 0xff) as usize >= group.len() {
-                        continue;
-                    }
-                    let t = tileanim::tile(
-                        &group.infos[(cell & 0xff) as usize * 16..][..16],
-                        (cell & 0xff) as u8,
-                        frame,
-                    );
-                    blit(fb, group.tile(t as usize), TILE, TILE, sx, sy, false);
-                }
+            if let Some(pl) = g.world.planes[plane].as_ref() {
+                draw_plane(fb, &g.world, pl, ox - cam_x, oy - cam_y, frame, FULL);
             }
         }
+        let ship = g.hero.ship;
         let mut p = render::Painter {
             fb,
             bank: &self.bank,
@@ -872,12 +878,133 @@ impl Graphics {
             mix: render::Mix::Level,
             frame,
             flash: draw::FLASH,
+            clip: render::SCREEN,
         };
+        if ship != (0, 0) {
+            // START's background proc (FUN_1090_0ace) draws the truck after the tiles, and its
+            // lights over it (mode 0x28).
+            p.at(0x3700, ship.0, ship.1);
+            p.at_mode(0x28, 0x3800, ship.0, ship.1);
+        }
         draw::decals(&mut p, &g.level);
-        draw::particles(&mut p, &g.level, 0);
+        draw::particles(&mut p, &g.level, &g.world, 0);
         draw::actors(&mut p, &g.level);
         draw::hero_and_drone(&mut p, &g.hero, &g.level.particles.drone);
-        draw::particles(&mut p, &g.level, 1);
+        draw::pickups(&mut p, &g.world);
+        draw::particles(&mut p, &g.level, &g.world, 1);
+        // The level's foreground proc: the sector's foreground decor (list +0x2a).
+        self.decor(fb, g, sector, true, (cam_x, cam_y), frame);
+    }
+
+    /// FUN_1068_09bf over the sector's decor list: each layer is an extra map drawn with its
+    /// own camera, ((camera - origin) * depth) >> 8 (FUN_1088_a25d), repeated across (kind 1),
+    /// down (2) or both (3).
+    fn decor(&self, fb: &mut [u8], g: &Game, sector: usize, front: bool, cam: (i32, i32), frame: u32) {
+        for d in self.decor.iter().filter(|d| d.sector == sector && (d.depth >= 0x100) == front) {
+            let Some(Some(pl)) = self.extra.get(d.plane.wrapping_sub(8)) else {
+                continue;
+            };
+            let cx = ((cam.0 - d.origin.0) * d.depth) >> 8;
+            let cy = ((cam.1 - d.origin.1) * d.depth) >> 8;
+            let (pw, ph) = (pl.width * TILE, pl.height * TILE);
+            if pw <= 0 || ph <= 0 {
+                continue;
+            }
+            let xs: Vec<i32> = if d.kind & 1 != 0 {
+                let mut x = cx.rem_euclid(pw);
+                let mut v = Vec::new();
+                while -x < W {
+                    v.push(x);
+                    x -= pw;
+                }
+                v
+            } else {
+                vec![cx]
+            };
+            let ys: Vec<i32> = if d.kind & 2 != 0 {
+                let mut y = cy.rem_euclid(ph);
+                let mut v = Vec::new();
+                while -y < H {
+                    v.push(y);
+                    y -= ph;
+                }
+                v
+            } else {
+                vec![cy]
+            };
+            for &y in &ys {
+                for &x in &xs {
+                    // FUN_1088_a25d: clipped to the plane's own rectangle.
+                    let clip = (-x, -y, -x + pw - 1, -y + ph - 1);
+                    draw_plane(fb, &g.world, pl, -x, -y, frame, clip);
+                }
+            }
+        }
+    }
+}
+
+/// A decor layer (OBJECTS 0x272e, LevelInit): extra map `plane` seen from a camera that moves
+/// `depth` / 0x100 as fast as the real one.
+struct Decor {
+    kind: i32,
+    plane: usize,
+    depth: i32,
+    /// +4, +6: the camera position at which the layer shows its own origin.
+    origin: (i32, i32),
+    sector: usize,
+}
+
+/// The whole screen as a clip rectangle (left, top, right, bottom).
+const FULL: (i32, i32, i32, i32) = (0, 0, W - 1, H - 1);
+
+/// Tiles of `pl` with its top-left corner at screen (ox, oy), within `clip`. Cells with the
+/// sign bit and icon groups are not drawn; animated tiles follow `frame`.
+fn draw_plane(fb: &mut [u8], world: &World, pl: &world::Plane, ox: i32, oy: i32, frame: u32, clip: (i32, i32, i32, i32)) {
+    let map = &world.map;
+    let (cx1, cy1) = (clip.0.max(0), clip.1.max(0));
+    let (cx2, cy2) = (clip.2.min(W - 1), clip.3.min(H - 1));
+    if cx1 > cx2 || cy1 > cy2 {
+        return;
+    }
+    let ty0 = ((cy1 - oy).div_euclid(TILE)).max(0);
+    let ty1 = ((cy2 - oy).div_euclid(TILE)).min(pl.height - 1);
+    let tx0 = ((cx1 - ox).div_euclid(TILE)).max(0);
+    let tx1 = ((cx2 - ox).div_euclid(TILE)).min(pl.width - 1);
+    for ty in ty0..=ty1 {
+        let sy = oy + ty * TILE;
+        for tx in tx0..=tx1 {
+            let sx = ox + tx * TILE;
+            let cell = pl.get(tx, ty);
+            if cell == 0 || cell & 0x8000 != 0 {
+                continue;
+            }
+            let gi = (cell >> 8) as usize;
+            if gi >= map.groups.len() {
+                continue;
+            }
+            let hidden = map.groups[gi].as_deref().is_some_and(|n| n.contains("ICON"));
+            let Some(group) = &world.groups[gi] else {
+                continue;
+            };
+            if hidden || (cell & 0xff) as usize >= group.len() {
+                continue;
+            }
+            let t = tileanim::tile(&group.infos[(cell & 0xff) as usize * 16..][..16], (cell & 0xff) as u8, frame);
+            let px = group.tile(t as usize);
+            for y in 0..TILE {
+                let yy = sy + y;
+                if yy < cy1 || yy > cy2 {
+                    continue;
+                }
+                for x in 0..TILE {
+                    let xx = sx + x;
+                    let c = px[(y * TILE + x) as usize];
+                    if c != 0 && xx >= cx1 && xx <= cx2 {
+                        fb[(yy * W + xx) as usize] = c;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1087,7 +1214,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     world::load_game_ds(&o.data.join("../ETLAUNCH.EXE"))?;
     let _ = sprites::DIR.set(o.data.join("SPRITES"));
     // The script's LoadSpriteGroup= lines fill slots 0x32.. in order (an empty one skips a slot).
-    let groups: Vec<String> = find_ci(map_path.parent().unwrap_or(Path::new(".")), &{
+    let lines: Vec<String> = find_ci(map_path.parent().unwrap_or(Path::new(".")), &{
         let mut n = map_path.file_stem().unwrap_or_default().to_os_string();
         n.push(".SCR");
         n.to_string_lossy().into_owned()
@@ -1099,12 +1226,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             .filter_map(|l| {
                 let l = l.trim();
                 let (k, v) = l.split_once('=')?;
-                k.eq_ignore_ascii_case("LoadSpriteGroup").then(|| v.split(',').next().unwrap_or("").trim().to_string())
+                k.eq_ignore_ascii_case("LoadSpriteGroup").then(|| v.trim().to_string())
             })
             .collect()
     })
     .unwrap_or_default();
+    let groups = lines.iter().map(|v| v.split(',').next().unwrap_or("").trim().to_string()).collect();
+    let raw = lines
+        .iter()
+        .map(|v| v.split(',').nth(1).is_some_and(|f| f.trim().eq_ignore_ascii_case("N")))
+        .collect();
     let _ = sprites::LEVEL_GROUPS.set(groups);
+    let _ = sprites::LEVEL_RAW.set(raw);
     let world = World::load(&map_path, &o.data.join("TILES"))?;
     let game = Game::new(world, demo);
     if o.headless {

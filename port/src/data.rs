@@ -248,6 +248,7 @@ pub struct Script {
     pub palmix: Option<String>,
     pub palmix_light: Option<String>,
     pub palmix_sea: Option<String>,
+    pub extra_maps: Vec<String>,
 }
 
 impl Script {
@@ -260,6 +261,7 @@ impl Script {
             palmix: None,
             palmix_light: None,
             palmix_sea: None,
+            extra_maps: Vec::new(),
         };
         for line in text.lines() {
             let Some((key, value)) = line.split_once('=') else {
@@ -272,6 +274,7 @@ impl Script {
                 "palmix" if !value.is_empty() => s.palmix = Some(value.to_string()),
                 "palmixlight" if !value.is_empty() => s.palmix_light = Some(value.to_string()),
                 "palmixsea" if !value.is_empty() => s.palmix_sea = Some(value.to_string()),
+                "loadextramap" if !value.is_empty() => s.extra_maps.push(value.to_string()),
                 "loadspritegroup" => s.sprite_groups.push(value.to_string()),
                 "foregroundcolors" => s.foreground_colors = value.parse().ok().filter(|&n| n < 256),
                 _ => {}
@@ -295,16 +298,21 @@ mod tests {
     }
 }
 
-/// `PALS/*.MIX`: result colour of drawing colour `src` over colour `dst`, as a 256x256 table.
+/// `PALS/*.MIX`: result colour of drawing colour `src` over colour `dst`, as a 256x256 table
+/// (`table[src * 256 + dst]`). `.LIT` (129 rows: light levels) and `.SEA` (80 rows) hold fewer
+/// rows; the missing ones are filled with "no change" (row = dst).
 pub fn load_palmix(path: &Path) -> io::Result<Vec<u8>> {
-    let t = Archive::open(path)?
+    let mut t = Archive::open(path)?
         .get("PALMIX")
         .ok_or_else(|| missing("PALMIX"))?;
-    if t.len() != 256 * 256 {
+    if t.is_empty() || t.len() % 256 != 0 || t.len() > 256 * 256 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "PALMIX is not 256x256",
+            "PALMIX is not rows of 256",
         ));
+    }
+    while t.len() < 256 * 256 {
+        t.extend(0..=255u8);
     }
     Ok(t)
 }

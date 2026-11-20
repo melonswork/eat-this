@@ -10,6 +10,9 @@ use std::sync::{Mutex, OnceLock};
 pub static DIR: OnceLock<PathBuf> = OnceLock::new();
 /// The level script's LoadSpriteGroup= names (slots 0x32..).
 pub static LEVEL_GROUPS: OnceLock<Vec<String>> = OnceLock::new();
+/// Those with the `,N` flag: loaded without fitting them to the level palette (their pixels
+/// index the mix tables, like PPGLIGHT's).
+pub static LEVEL_RAW: OnceLock<Vec<bool>> = OnceLock::new();
 
 /// Slot -> file, as FUN_1088_c98f loads them (seen with the tracer's --dump-groups).
 const SLOTS: &[(u16, &str)] = &[
@@ -72,6 +75,12 @@ fn slot_name(slot: u16, draw: bool) -> Option<String> {
 /// (FUN_10f0_1a99): their pixels are raw indices, mostly into the mix tables.
 pub fn raw(slot: u16) -> bool {
     matches!(slot, 0x1b | 0x73 | 0x75)
+        || (slot >= 0x32
+            && LEVEL_RAW
+                .get()
+                .and_then(|r| r.get(slot as usize - 0x32))
+                .copied()
+                .unwrap_or(false))
 }
 
 /// The file behind sprite group `slot`, for drawing.

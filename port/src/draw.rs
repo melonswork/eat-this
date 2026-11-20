@@ -24,17 +24,17 @@ fn per(p: &Painter, d: u32) -> i32 {
 
 /// FUN_1050_4ca5's drawing for `group`: the record's flips (+0x18, +0x1a) and mode (+0x20),
 /// its sprite +0x16 at (+8, +0xa), or its per-frame procedure's own drawing.
-pub fn particles(p: &mut Painter, level: &Level, group: i32) {
+pub fn particles(p: &mut Painter, level: &Level, world: &crate::world::World, group: i32) {
     for part in &level.particles.list {
         if part.m.w(0) != group {
             continue;
         }
-        particle(p, part);
+        particle(p, part, world);
         p.reset();
     }
 }
 
-fn particle(p: &mut Painter, part: &Particle) {
+fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
     let m = &part.m;
     let (x, y) = (m.w(8), m.w(0xa));
     p.hflip = m.b(0x18) != 0;
@@ -97,6 +97,43 @@ fn particle(p: &mut Painter, part: &Particle) {
             p.colour = 2;
         }
         0x21c5 => sprite = m.w(0x14),
+        // Burning ground (napalm and the like): a flame scaled by +0x1e / +0x1c, cut at the
+        // ground. (The original grows it while it dies out.)
+        0x18e6 | 0x19f8 | 0x1b90 => {
+            p.clip.3 = (y - p.cam.1).min(p.clip.3);
+            match m.uw(0x42) {
+                0x18e6 => p.flame(m.w(0x1e), m.w(0x1c), age as u32, x, y),
+                0x19f8 => {
+                    // A column of smoke over it.
+                    p.scaled_at(0x100, 0x400, (age / 4) % 0xd + 0x6b00, x, y);
+                    p.flame(0x300, 0x200, age as u32, x, y);
+                }
+                _ => p.flame(0xa00, 0x755, age as u32, x, y),
+            }
+            return;
+        }
+        // Smoke and debris drawn scaled: +0x40 both ways (with an animation of 8), or
+        // +0x1c across and +0x1e down.
+        0x186e => {
+            let k = m.w(0x40);
+            p.scaled_at(k, k, sprite + (n & 7), x, y);
+            return;
+        }
+        0x2148 => {
+            p.scaled_at(m.w(0x1e), m.w(0x1c), sprite, x, y);
+            return;
+        }
+        0x2192 => {
+            p.scaled_at(0x200, 0x200, sprite, x, y);
+            return;
+        }
+        0x2588 => {
+            // A bonus flying out (FUN_1088_022b on its tile +0x40).
+            let kind = world.cell_function(m.uw(0x40), 2) as i32;
+            p.reset();
+            pickup(p, kind, x - p.cam.0, y - p.cam.1);
+            return;
+        }
         0x1da7 => {
             // A burning thing: its flame behind it, translucent.
             p.mode = 0x10;
@@ -321,6 +358,9 @@ fn actor(p: &mut Painter, o: &Obj) {
         // FUN_1070_9f35: a flame (light) in mode +0x18, scaled by +0x16, +0x14, its phase +0x1a.
         // (The original skips it while the lever +0x1e is off.)
         0x1450 => {
+            if std::env::var("ET_DRAW").is_ok() {
+                eprintln!("light 14 {:#x} 16 {:#x} 18 {:#x} 1e {}", o.w(0x14), o.w(0x16), o.w(0x18), o.w(0x1e));
+            }
             p.mode = o.w(0x18);
             let t = (o.w(0x1a) as u32).wrapping_add(p.frame);
             p.flame(o.w(0x16), o.w(0x14), t, x, y);
@@ -373,4 +413,54 @@ pub fn hero_and_drone(p: &mut Painter, hero: &crate::hero::Hero, drone: &crate::
         p.at(hero.gun.frame2, hero.x + mx, hero.y + my);
     }
     p.reset();
+}
+
+/// FUN_1088_026d: the bonus pick-ups, plane-2 cells whose function 0 is 30000, each drawn by
+/// the procedure its function 2 picks (table 1170:16de) with MIX pointing at PalMixLight.
+pub fn pickups(p: &mut Painter, world: &crate::world::World) {
+    let Some(pl) = world.planes[2].as_ref() else { return };
+    let (cx, cy) = p.cam;
+    let (tx0, ty0) = ((cx >> 4).max(0), (cy >> 4).max(0));
+    let (tx1, ty1) = (((cx + 0x13f) >> 4).min(pl.width - 1), ((cy + 199) >> 4).min(pl.height - 1));
+    for ty in ty0..=ty1 {
+        for tx in tx0..=tx1 {
+            let cell = pl.get(tx, ty);
+            if cell == 0 || cell & 0x8000 != 0 || world.cell_function(cell, 0) != 30000 {
+                continue;
+            }
+            pickup(p, world.cell_function(cell, 2) as i32, tx * 16 - cx, ty * 16 - cy);
+        }
+    }
+}
+
+/// One pick-up of kind `k` at screen (x, y) (FUN_1088_022b's dispatch).
+pub fn pickup(p: &mut Painter, k: i32, x: i32, y: i32) {
+    p.mix = Mix::Light;
+    let f3 = per(p, 3);
+    match k {
+        0 => p.sprite(0x2200 + (f3 & 7), x, y),
+        1 => shine(p, 0x2208 + ((f3 & 7) < 3) as i32, x, y),
+        2 => {
+            p.sprite((per(p, 2) & 0xf) + 0x900, x + 7, y + 7);
+            p.sprite((per(p, 4) & 1) + 0x910, x + 7, y + 7);
+        }
+        3 => shine(p, 0x2214, x, y),
+        4 => shine(p, 0x220a + f3 % 6, x, y),
+        5..=12 => shine(p, 0x2216 + (k - 5), x, y),
+        13..=15 => shine(p, 0x2228 + (k - 13), x, y),
+        16 => p.sprite(0x2233 - (f3 & 7), x, y),
+        _ => {}
+    }
+    p.reset();
+}
+
+/// FUN_1088_007d: every 256 frames a pick-up shines for 16 (mode 0x24 through PalMixLight).
+fn shine(p: &mut Painter, id: i32, x: i32, y: i32) {
+    let t = (p.frame & 0xff) as i32;
+    if t < 0x10 {
+        p.mode = 0x24;
+        p.colour = (0x80 - (t << 2)) as u8;
+    }
+    p.sprite(id, x, y);
+    p.mode = 0;
 }

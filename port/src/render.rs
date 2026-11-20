@@ -110,7 +110,12 @@ pub struct Painter<'a> {
     pub frame: u32,
     /// The hit flash colour, 1170:1b1b.
     pub flash: u8,
+    /// 1170:1aca..1ad0: the clip rectangle (left, top, right, bottom), inclusive.
+    pub clip: (i32, i32, i32, i32),
 }
+
+/// The full screen as a clip rectangle.
+pub const SCREEN: (i32, i32, i32, i32) = (0, 0, W - 1, H - 1);
 
 impl<'a> Painter<'a> {
     fn table(&self, m: Mix) -> Option<&'a [u8]> {
@@ -124,6 +129,7 @@ impl<'a> Painter<'a> {
 
     /// Resets mode, colour, flips and table, as the callers do after a special draw.
     pub fn reset(&mut self) {
+        self.clip = SCREEN;
         self.mode = 0;
         self.hflip = false;
         self.vflip = false;
@@ -134,6 +140,9 @@ impl<'a> Painter<'a> {
     pub fn sprite(&mut self, id: i32, x: i32, y: i32) {
         if id < 0 || id == 0x7fff {
             return;
+        }
+        if std::env::var("ET_DRAWLOG").is_ok() {
+            eprintln!("sprite {id:#06x} at ({x},{y}) mode {:#x} flip {}", self.mode, self.hflip);
         }
         let bank = self.bank;
         bank.with(id, |s| self.put(s, x, y));
@@ -193,6 +202,16 @@ impl<'a> Painter<'a> {
         });
     }
 
+    /// `FUN_1040_6720(ystep, xstep, id, y, x)` at world (x, y).
+    pub fn scaled_at(&mut self, ystep: i32, xstep: i32, id: i32, x: i32, y: i32) {
+        let (x, y) = (x - self.cam.0, y - self.cam.1);
+        if xstep == 0x100 && ystep == 0x100 {
+            self.sprite(id, x, y);
+        } else {
+            self.scaled(id, x, y, xstep, ystep);
+        }
+    }
+
     /// `FUN_1040_6315(ystep, xstep, t, y, x)`: a flame (FLAME5, 0x6a00 + t / 3 % 16) scaled
     /// as `scaled` does, at world (x, y). `FUN_1040_62ed` is the unscaled one.
     pub fn flame(&mut self, ystep: i32, xstep: i32, t: u32, x: i32, y: i32) {
@@ -222,15 +241,16 @@ impl<'a> Painter<'a> {
         let light = self.table(Mix::Light);
         let sea = self.table(Mix::Sea);
         let (mode, colour, key) = (self.mode, self.colour, self.key);
+        let (c0, c1, c2, c3) = self.clip;
         for row in 0..h {
             let sy = top + row;
-            if !(0..H).contains(&sy) {
+            if sy < c1 || sy > c3 {
                 continue;
             }
             let srow = if self.vflip { h - 1 - row } else { row };
             for col in 0..w {
                 let sx = left + col;
-                if !(0..W).contains(&sx) {
+                if sx < c0 || sx > c2 {
                     continue;
                 }
                 let scol = if self.hflip { w - 1 - col } else { col };
