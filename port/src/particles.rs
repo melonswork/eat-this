@@ -30,6 +30,7 @@ use crate::effects;
 use crate::level::{Effects, Level};
 use crate::objects::Obj;
 use crate::rng::PascalRandom;
+use crate::sound;
 use crate::trig;
 use crate::world::{OUTSIDE, World};
 
@@ -1724,7 +1725,13 @@ impl Level {
                 }
             }
             57 => {
-                // FUN_1040_556e: a rocket bursts.
+                // FUN_1040_556e: a rocket bursts (silently if its +0x3e is -10).
+                {
+                    let m = &self.particles.list[self.particles.current].m;
+                    if m.w(0x3e) != -10 {
+                        sound::play_at(0x49, m.w(0xa), m.w(8));
+                    }
+                }
                 f.fx.shakes.push((0x12, 4));
                 let ps = &mut self.particles;
                 ps.spawn_seq(0x6900, 2, 0x19, y, x, 1); // effect 23
@@ -1813,7 +1820,8 @@ impl Level {
                     m.set(0x1c, r + 0x200);
                     m.set(0x1e, r + 0x240);
                     m.set(0x42, 0x2148);
-                    f.rng.random(0x14); // the sound's pitch
+                    let p = f.rng.random(0x14); // the sound's pitch
+                    sound::play_at_pitch(0x4b, p + 0xf6, y, x);
                     f.fx.shakes.push((0x12, 5));
                 }
             }
@@ -1822,7 +1830,10 @@ impl Level {
                 // object in the list +0x5a that only draws: not kept here).
                 let v = self.bounce_off(f);
                 if (v >> 16) > 1 {
-                    f.rng.random(8);
+                    // A tinkle, louder the harder it lands.
+                    sound::set_volume((((v - 0x20000) >> 13) + 0x80).min(0x100));
+                    sound::play_at(if f.rng.random(8) == 0 { 0x23 } else { 0x44 }, y, x);
+                    sound::set_volume(0x100);
                 }
                 if self.particles.keep_dying {
                     let draw = f.rng.random(2);
@@ -1849,7 +1860,8 @@ impl Level {
             42 => {
                 // FUN_1040_45a3: a burning bit goes out.
                 crate::alien::smoke_sprite(&mut self.particles, y, x);
-                f.rng.random(0x14);
+                let p = f.rng.random(0x14);
+                sound::play_at_pitch(0x4b, p + 0xf6, y, x);
                 f.fx.shakes.push((0x12, 6));
             }
             21 => self.grenade_hit(f, false),
@@ -1936,7 +1948,8 @@ impl Level {
             }
             15 => {
                 // FUN_1040_0a80: a metallic ping and sparks.
-                f.rng.random(0x1e);
+                let p = f.rng.random(0x1e);
+                sound::play_at_pitch(0x45, p + 0xf6, y, x);
                 self.sparks(0x191b, y, x);
             }
             _ => effects::effect(self, f.world, id as u16, y, x, f.rng, f.fx),
@@ -2006,6 +2019,7 @@ impl Level {
                 m.set(0x3e, 0);
                 m.set(4, m.w(0x10) - (m.w(4) - m.w(0x10)));
                 v.set_l(0, v.l(0).wrapping_neg());
+                sound::play_at(0x6d, m.w(0x12), m.w(0x10));
             } else {
                 if v.l(4) == 0 && v.w(8) < 5 {
                     v.set_l(0, v.l(0) / 2);
@@ -2069,6 +2083,10 @@ impl Level {
                     let fall = (t.wrapping_mul(t) - t1.wrapping_mul(t1)) / v.w(0xa);
                     let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
                     v.set_l(4, if side == 2 || vy >= 0x20000 { vy } else { 0 });
+                    // The clonk on a floor: only a hard enough landing (or a ceiling).
+                    if side == 2 || vy >= 0x20000 {
+                        sound::play_at(0x6d, m.w(0x12), m.w(0x10));
+                    }
                 }
                 m.set(0x3e, 0);
                 v.set(8, 1);
@@ -2195,7 +2213,9 @@ impl Level {
             }
             v.set_l(0, nv);
             if (nv as i64).abs() >> 16 >= 12 && f.rng.random(10) == 0 {
-                f.rng.random(0x40); // the sound's pitch
+                let p = f.rng.random(0x40); // the sound's pitch
+                sound::discard(0x7c);
+                sound::play_at_pitch(0x7c, 0x100 - p, m.w(0xa), m.w(8));
             }
             self.particles.keep_dying = false;
             return;
@@ -2208,9 +2228,17 @@ impl Level {
         let hi = vy >> 16;
         if hi >= 2 {
             if hi < 12 || f.rng.random(10) != 0 {
-                f.rng.random(4); // (a clink 1 time in 4)
+                if f.rng.random(4) == 0 {
+                    // A clink 1 time in 4, louder the faster it falls.
+                    sound::discard(0x44);
+                    sound::set_volume((((vy - 0x20000) >> 13) + 0x80).min(0x100));
+                    sound::play_at(0x44, m.w(0xa), m.w(8));
+                    sound::set_volume(0x100);
+                }
             } else {
-                f.rng.random(0x40); // the sound's pitch
+                let p = f.rng.random(0x40); // the sound's pitch
+                sound::discard(0x7c);
+                sound::play_at_pitch(0x7c, 0x100 - p, m.w(0xa), m.w(8));
             }
         }
         if side == 2 || hi > 2 || (hi == 2 && (vy as u32 & 0xffff) > 0xaaaa) {
@@ -2383,6 +2411,7 @@ impl Level {
                 m.set(0x3e, 0);
                 m.set(4, m.w(0x10) - (m.w(4) - m.w(0x10)));
                 v.set_l(0, v.l(0).wrapping_neg());
+                sound::play_at(0x6d, m.w(0x12), m.w(0x10));
             } else {
                 if v.l(4) == 0 && v.w(8) < 5 {
                     v.set_l(0, v.l(0) / 2);
@@ -2391,6 +2420,10 @@ impl Level {
                     let fall = (t * t - (t - 1) * (t - 1)) / v.w(0xa);
                     let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
                     v.set_l(4, if side == 2 || vy >= 0x20000 { vy } else { 0 });
+                    // The clonk on a floor: only a hard enough landing (or a ceiling).
+                    if side == 2 || vy >= 0x20000 {
+                        sound::play_at(0x6d, m.w(0x12), m.w(0x10));
+                    }
                 }
                 m.set(0x3e, 0);
                 v.set(8, 1);
@@ -2419,6 +2452,7 @@ impl Level {
         crate::alien::smoke_sprite(ps, y, x);
         ps.spawn_seq(0x6400, 2, 0x24, y - 0xc, x, 1);
         ps.line(8, 0x5a0);
+        sound::play_at(0x3b, y, x);
         f.fx.shakes.push((0x2a, 0x10));
         self.explode_area(f.world, damage, 4, y + 0xe, x + 0x2e, y - 0x3e, x - 0x2e, f.rng, f.fx);
         let ps = &mut self.particles;

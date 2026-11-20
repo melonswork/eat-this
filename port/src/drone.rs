@@ -260,6 +260,10 @@ impl Level {
                 ps.p.hits = 0;
                 ps.p.group = 1;
                 ps.spawn_seq(if upgraded { 0x1952 } else { 0x190a }, 2, 2, my, mx, 1);
+                if upgraded {
+                    crate::sound::pitch(0xd8);
+                }
+                crate::sound::play_at(0x55, my, mx);
                 let d = &mut ps.drone;
                 if d.burst < 0x18 {
                     if !d.upgraded {
