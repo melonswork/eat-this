@@ -15,7 +15,7 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 | # | feature | original | episode maps | notes |
 |---|---|---|---|---|
 | 1 | ~~OBJECTS 0x1482~~ the granny (VMT 0xe0c, update FUN_1070_cb38) | EnemyFactory | GRANNY 45, CITYHS 7, BUTCHERY 4, CITY02 1 | DONE (`granny.rs`, GRANNY1); her burnt/frozen deaths and frozen corpse (-0xd2) still warn |
-| 2 | carrier 0x14be (icon 61600, VMT 0xc84, update FUN_1070_0cce, hit 0b02) | | CITY02, CITY_I00, CITY_I06, FOREST03, FOREST05, STONES | created already (passengers eaten), no update |
+| 2 | ~~carrier 0x14be~~ (icon 61600, VMT 0xc84, update FUN_1070_0cce, move hook 0b02) | | CITY02, CITY_I00, CITY_I06, FOREST03, FOREST05, STONES | DONE (`carrier.rs`, CARRIER1: flight, drops, shot down, crash); + splashes (FUN_1070_0105 for aliens/big aliens, the hero's in HeroUpdate), effects 7/23 in the table. Not exercised: blowing up in the air (0b70), the hero riding it |
 | 3 | OBJECTS 0x13ec (VMT 0xcbc) | EnemyFactory | CITYRAIN, FOREST02, FOREST05, CITY02, CITY_I01 | enemy (4eb2) |
 | 4 | OBJECTS type 100 (FUN_1060_0166, platform object) | | CITY_I04 5, CITYHS 6, CITY_I01 5, GRANNY 2 | |
 | 5 | icons 61000/61001 (FUN_1070_fa6a, kind 0x13a6) | SpawnFromIconTiles | CITY02, CITYHS, CITY_I03 | |
@@ -40,3 +40,10 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
 - Granny (FUN_1070_cb38): 0x9d when hit alive, pitch `0x100 - Random(0x20)` (FUN_10e8_03ae; the Random is
   already drawn in `granny.rs`); 0x25 at half volume (1ab8 = 0x80) when she lands (state -5, counter 0x18);
   0xf when the hero stomps her lying and the stomp returns > 1; burnt 0x71, frozen 0x21 (shared deaths).
+- Carrier (FUN_1070_0cce): 0x85 when it starts, at x + dir*0x60; while flying and audible (10e0:0073) the loop
+  helper 0408 on key +0x60 with sound 0x29 at pitch 0x11f4 (10e8:03f2); the wreck under the water line loops
+  0x1e the same way; 1 when a wall stops it (if its loop played); crash 0x4a, 0x4e, 0x26; blown up 0x4a, 0x18;
+  the destructor 0a06 / release 0c6d stop the loop (10e0:0339).
+- Splashes (FUN_1070_0105 / HeroUpdate): 0x6f at (water line, x), pitch 0xd0 + Random(0x50) (drawn in
+  `Level::splash` / `Hero::update`), volume 1ab8 = 0xaa (alien), 0x100 (big alien), 0x180 (215e), the hero
+  min(fall*2 + 0x80, 0x100).

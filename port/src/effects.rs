@@ -48,6 +48,15 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
     plain_sound(id, y, x);
     match id {
         0 => {}
+        7 => {
+            // FUN_1040_0897: an explosion rising.
+            lv.particles.spawn_seq(0x6400, 2, 0x24, y, x, 1);
+            lv.particles.line(2, 0x5a0);
+        }
+        23 => {
+            // FUN_1040_2af4: a flash.
+            lv.particles.spawn_seq(0x6900, 2, 0x19, y, x, 1);
+        }
         34 => explosion(lv, world, y, x, rng, fx),
         69 => {
             // FUN_1040_5c06: a big wall collapses: the tiles above step on, dust and rubble fly.

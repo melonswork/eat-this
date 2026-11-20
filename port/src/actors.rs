@@ -223,6 +223,7 @@ impl Level {
         match kind {
             0x145a => self.smallbot(id, env),
             crate::granny::KIND => self.granny(id, env),
+            crate::carrier::KIND => self.carrier(id, env),
             0x143c => self.crate_box(id, env),
             0x13d8 => self.mine(id, env),
             0x13e2 => self.gunship(id, env),
@@ -812,9 +813,10 @@ impl Level {
                 }
             }
             crate::turret::KIND => self.turret_after_move(id, env),
-            0x1428 => self.alien_after_move(id),
+            0x1428 => self.alien_after_move(id, env),
             crate::gunship::WRECK => self.wreck_after_move(id),
             0x148c => self.spring_after_move(id),
+            crate::carrier::KIND => self.carrier_after_move(id, env),
             0x1432 => self.bigali_after_move(id, env),
             k => eprintln!("warning: move hook of {k:#x} not ported"),
         }
@@ -832,7 +834,7 @@ pub(crate) fn slope_height(w: &World, x: i32, cell: u16) -> i32 {
 }
 
 /// FUN_1058_0002: an unbounded box (the object updates wherever the camera is).
-fn unbounded(o: &mut crate::objects::Obj) {
+pub(crate) fn unbounded(o: &mut crate::objects::Obj) {
     o.set(2, -0x7fff);
     o.set(4, -0x7fff);
     o.set(6, 0x7fff);

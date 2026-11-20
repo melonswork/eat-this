@@ -1,0 +1,36 @@
+# The carrier (icon 61600, kind 0x14be, FUN_1070_0cce): CITY02, start moved left of it. It flies at
+# the hero bobbing, drops its three aliens as he comes in range, is shot down (falls, crashes:
+# dust, plates, blast), and the aliens fight on.
+level MAPS/CITY02.MAP
+start 1020 1039
+mouse 300 80
+20
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+200

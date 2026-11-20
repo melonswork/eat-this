@@ -80,6 +80,7 @@ streams and EVERY CHECK, so the method is the original's own.
 | `WEAPON6` | CITY_I04, start moved to (940,95) | weapon-6 pick-up on the crate, step down (too low to stand there: crouched the hero can't fire), six spreads of three bullets (FUN_1088_70b8/7020, effect 62); no Random: checked with dumpframe | exact |
 | `WEAPON9` | CITY_I04, start moved to (940,191) | weapon-9 pick-up, balls standing (Random(0xa1)) and crouched (laid flat), mover 1050:3044, callback 16cc, effect 56 (bounce, +8 frames, blast) | exact |
 | `GRANNY1` | GRANNY, weapon-3 pick-up copied to (19,30) | the granny 0x1482 (FUN_1070_cb38, `granny.rs`): pistol hits knock her over (hat 0x510a, bleeding ca36), lying, stomps; rockets blow two apart (red gibs, smoke, splat) | exact |
+| `CARRIER1` | CITY02, start moved to (1020,1039) | the carrier 0x14be (FUN_1070_0cce, `carrier.rs`): flies bobbing, drops its three aliens by distance, shot down it falls and crashes (0a34: dust, plates, blast); water splashes of aliens and the hero (FUN_1070_0105) | exact |
 
 ## Tools (non-obvious usage)
 

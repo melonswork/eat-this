@@ -12,6 +12,7 @@ mod bigali;
 mod archive;
 mod bg;
 mod camera;
+mod carrier;
 mod data;
 mod decals;
 mod doors;

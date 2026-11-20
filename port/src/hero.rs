@@ -1246,6 +1246,17 @@ impl Hero {
                     self.shakes.push((0xe, 4));
                 }
             }
+            // Falling through the water line of his sector: a splash (sound 0x6f, louder the
+            // longer the fall, pitch 0xd0 + Random(0x50); FUN_1040_6ac8).
+            let line = w.sectors[lv.sector.unwrap_or(0)].water[1];
+            if self.prev.1 - 4 < line && line <= self.y - 4 {
+                rng.random(0x50);
+                ps.p.callback = 0x1d33;
+                ps.p.colour = 0x34;
+                ps.spawn_seq(0x6d00, 2, 0x12, line - 1, self.x, 1);
+                ps.p.colour = 0;
+                ps.p.callback = 0;
+            }
             self.vy = self.vy.min(0x32);
         }
 

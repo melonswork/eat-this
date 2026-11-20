@@ -430,6 +430,7 @@ impl Level {
                 for a in (0..count).rev() {
                     dist[a] = ((n - 1) * -0xa0) / n + (a as i32 * 0x140) / n;
                 }
+                cx_ = x;
                 for a in 0..2 {
                     cx_ += 0x10;
                     let f = world.tile_function_in(2, y + 0x10, cx_);

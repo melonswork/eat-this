@@ -1615,6 +1615,7 @@ impl Level {
                     m.set(0x24, m.w(0x24) + 1);
                 }
             }
+            0x1d33 => {} // FUN_1050_1d33: a splash, drawn clipped at the water line
             other => eprintln!("warning: particle procedure 1050:{other:04x} not ported"),
         }
     }
