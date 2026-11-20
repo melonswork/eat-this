@@ -764,6 +764,7 @@ impl Graphics {
         };
         let mix = table(script.as_ref().and_then(|s| s.palmix.as_ref()));
         let tables = render::Tables {
+            tint: level.tint_table(),
             mix: mix.clone(),
             light: table(script.as_ref().and_then(|s| s.palmix_light.as_ref())),
             sea: table(script.as_ref().and_then(|s| s.palmix_sea.as_ref())),
@@ -849,6 +850,15 @@ impl Graphics {
         if self.bg_only {
             return;
         }
+        if let Some(Some(pl)) = self.extra.first() {
+            match self.background.proc_ {
+                // FUN_1090_147b: extra map 8 at a third of the camera, repeated across (a371).
+                3 => self.layer(fb, g, pl, 1, (cam_x / 3, cam_y / 3), frame),
+                // FUN_1090_1a06: at half the camera's height, 24 px in, repeated down (a3b9).
+                6 => self.layer(fb, g, pl, 2, (-0x18, cam_y / 2), frame),
+                _ => {}
+            }
+        }
         // The sector's background decor (list +0x1e, FUN_1068_09bf from the background proc).
         let sector = g.level.sector.unwrap_or(0);
         self.decor(fb, g, sector, false, (cam_x, cam_y), frame);
@@ -893,11 +903,19 @@ impl Graphics {
         draw::decals(&mut p, &g.level);
         draw::platform_objects(&mut p, &g.level);
         draw::particles(&mut p, &g.level, &g.world, 0);
-        draw::actors(&mut p, &g.level);
+        draw::actors(&mut p, &g.level, &g.world);
         draw::hero_and_drone(&mut p, &g.hero, &g.level.particles.drone);
         draw::pickups(&mut p, &g.world);
         draw::particles(&mut p, &g.level, &g.world, 1);
-        // The level's foreground proc: the sector's foreground decor (list +0x2a).
+        if let Some(gr) = &g.level.grinder {
+            // GrinderUpdate (GRINDER's foreground proc): eight sets of teeth across the screen.
+            let s = 0x3200 + (((gr.anim() as u16) >> 9) % 8) as i32;
+            for k in 0..8 {
+                p.sprite(s, 0x20 + k * 0x20, gr.y - cam_y);
+            }
+        }
+        // The level's foreground proc: the water, the sector's foreground decor (list +0x2a).
+        draw::water(&mut p, &g.level, &g.world);
         self.decor(fb, g, sector, true, (cam_x, cam_y), frame);
         self.hud(fb, g, frame);
     }
@@ -930,44 +948,58 @@ impl Graphics {
     /// own camera, ((camera - origin) * depth) >> 8 (FUN_1088_a25d), repeated across (kind 1),
     /// down (2) or both (3).
     fn decor(&self, fb: &mut [u8], g: &Game, sector: usize, front: bool, cam: (i32, i32), frame: u32) {
+        if std::env::var("ET_DECOR").is_ok() && !front {
+            for d in &self.decor {
+                eprintln!("decor kind {} plane {} depth {} origin {:?} sector {} (hero's {sector})", d.kind, d.plane, d.depth, d.origin, d.sector);
+            }
+        }
         for d in self.decor.iter().filter(|d| d.sector == sector && (d.depth >= 0x100) == front) {
             let Some(Some(pl)) = self.extra.get(d.plane.wrapping_sub(8)) else {
                 continue;
             };
             let cx = ((cam.0 - d.origin.0) * d.depth) >> 8;
             let cy = ((cam.1 - d.origin.1) * d.depth) >> 8;
-            let (pw, ph) = (pl.width * TILE, pl.height * TILE);
-            if pw <= 0 || ph <= 0 {
-                continue;
+            self.layer(fb, g, pl, d.kind, (cx, cy), frame);
+        }
+    }
+}
+
+impl Graphics {
+    /// FUN_1088_a25d and its repeating forms: extra plane `pl` seen from camera `cam`, once
+    /// (kind 0), repeated across (1), down (2) or both (3).
+    fn layer(&self, fb: &mut [u8], g: &Game, pl: &world::Plane, kind: i32, cam: (i32, i32), frame: u32) {
+        let (cx, cy) = cam;
+        let (pw, ph) = (pl.width * TILE, pl.height * TILE);
+        if pw <= 0 || ph <= 0 {
+            return;
+        }
+        let xs: Vec<i32> = if kind & 1 != 0 {
+            let mut x = cx.rem_euclid(pw);
+            let mut v = Vec::new();
+            while -x < W {
+                v.push(x);
+                x -= pw;
             }
-            let xs: Vec<i32> = if d.kind & 1 != 0 {
-                let mut x = cx.rem_euclid(pw);
-                let mut v = Vec::new();
-                while -x < W {
-                    v.push(x);
-                    x -= pw;
-                }
-                v
-            } else {
-                vec![cx]
-            };
-            let ys: Vec<i32> = if d.kind & 2 != 0 {
-                let mut y = cy.rem_euclid(ph);
-                let mut v = Vec::new();
-                while -y < H {
-                    v.push(y);
-                    y -= ph;
-                }
-                v
-            } else {
-                vec![cy]
-            };
-            for &y in &ys {
-                for &x in &xs {
-                    // FUN_1088_a25d: clipped to the plane's own rectangle.
-                    let clip = (-x, -y, -x + pw - 1, -y + ph - 1);
-                    draw_plane(fb, &g.world, pl, -x, -y, frame, clip);
-                }
+            v
+        } else {
+            vec![cx]
+        };
+        let ys: Vec<i32> = if kind & 2 != 0 {
+            let mut y = cy.rem_euclid(ph);
+            let mut v = Vec::new();
+            while -y < H {
+                v.push(y);
+                y -= ph;
+            }
+            v
+        } else {
+            vec![cy]
+        };
+        for &y in &ys {
+            for &x in &xs {
+                // Clipped to the plane's own rectangle.
+                let clip = (-x, -y, -x + pw - 1, -y + ph - 1);
+                draw_plane(fb, &g.world, pl, -x, -y, frame, clip);
             }
         }
     }

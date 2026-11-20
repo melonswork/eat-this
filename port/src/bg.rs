@@ -76,6 +76,14 @@ impl Background {
     pub fn draw(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
         match self.proc_ {
             0 => self.city(fb, cam, frame),
+            3 => self.sea(fb, cam, frame),
+            6 => {
+                // FUN_1090_1a06 (GRINDER): the second group's backdrop at 1/4 of the camera,
+                // tiled down. (Extra map 8 goes over it; main.rs draws that.)
+                let y = (-cam.1 / 4) % H;
+                self.sprite(1, 0, fb, 0, y);
+                self.sprite(1, 0, fb, 0, y + H);
+            }
             4 => self.forest(fb, cam),
             _ => {
                 if let Some(p) = &self.picture {
@@ -112,6 +120,28 @@ impl Background {
         self.sprite(0, 0, fb, W - s, 0);
         self.sprite_mixed(0, 2, fb, -s, 0);
         self.sprite_mixed(0, 2, fb, W - s, 0);
+    }
+
+    /// `FUN_1090_147b` (HYDRO): the first LoadSpriteGroup's sprites at 1/6 of the camera: while
+    /// the horizon (0x4b - camY / 6) is on screen, clouds drifting left one pixel per 3 frames
+    /// and the far shore, then the sea from the horizon down, tiled. (Extra map 8 at 1/3 of the
+    /// camera goes over it; main.rs draws that.)
+    fn sea(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
+        let mut y = 0x4b - cam.1 / 6;
+        let x0 = -((cam.0 / 6) % W);
+        if y > 0 {
+            let c = -((frame / 3) as i32 % W);
+            self.sprite(0, 2, fb, c, y);
+            self.sprite(0, 2, fb, c + W, y);
+            self.sprite(0, 1, fb, x0, y);
+            self.sprite(0, 1, fb, x0 + W, y);
+        }
+        if y < -199 {
+            y %= 200;
+        }
+        for (dx, dy) in [(0, 0), (W, 0), (0, H), (W, H)] {
+            self.sprite(0, 0, fb, x0 + dx, y + dy);
+        }
     }
 
     /// `FUN_1090_1629`: a 320x200 sprite (fourth LoadSpriteGroup, sprite 0) tiled at 1/16 of the

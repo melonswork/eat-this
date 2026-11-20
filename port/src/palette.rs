@@ -36,7 +36,7 @@ impl LevelPalette {
 
     /// `FUN_10f0_6039`: the colour in `free` closest to `c`. The metric is the original's:
     /// (dr² + dg²)² + db⁴, the first of equals wins, an exact match returns at once.
-    fn nearest(&self, c: [u8; 3], free: RangeInclusive<usize>) -> u8 {
+    pub(crate) fn nearest(&self, c: [u8; 3], free: RangeInclusive<usize>) -> u8 {
         let [r, g, b] = c.map(|v| i64::from(v.min(63)));
         let mut best = (i64::MAX, 0);
         for i in free {
@@ -73,6 +73,39 @@ impl LevelPalette {
                 };
                 t[c] = self.nearest(pal[c], range);
             }
+        }
+        t
+    }
+}
+
+impl LevelPalette {
+    /// `FUN_10f0_6142`: a colour's brightness, (299 r + 587 g + 114 b) / 1000.
+    fn luma(&self, c: usize) -> i32 {
+        let [r, g, b] = self.colors[c].map(i32::from);
+        (r * 0x12b + g * 0x24b + b * 0x72) / 1000
+    }
+
+    /// The tint table at 1170:4c26 (built when a level starts, 1088:d0d6): row k maps each
+    /// colour to the nearest one of a tint of its brightness l: 0 red (the hurt hero), 1 green,
+    /// 2 fire, 3 negative, 4 dark brown, 10 yellow white (the big alien's shield). Background
+    /// colours map into the background range (1..=fg), the rest into fg+2..=255. Rows 5..9 are
+    /// not colour maps or belong to other screens; they stay "no change".
+    pub fn tint_table(&self) -> Vec<u8> {
+        let fg = self.foreground.min(253);
+        let mut t: Vec<u8> = (0..11).flat_map(|_| 0..=255u8).collect();
+        let c6 = |r: i32, g: i32, b: i32| [r, g, b].map(|v| v.clamp(0, 63) as u8);
+        for c in 0..256usize {
+            let range = if c <= fg { 1..=fg } else { fg + 2..=255 };
+            let l = self.luma(c);
+            let mut put = |row: usize, rgb: [u8; 3]| t[row * 256 + c] = self.nearest(rgb, range.clone());
+            put(0, c6(l * 3 / 2, 0, 0));
+            put(1, c6(l * 4 / 5, l, l / 2));
+            let k = l / ((0x40 - l) / 8 + 1);
+            put(2, c6(l * 2 + 0xc, k * 3 + 8, k / 2 + 2));
+            put(3, c6(0x3f - l, 0x3f - l, 0x3f - l));
+            let m = (0x39 - l).clamp(6, 0x22);
+            put(4, c6(m / 2, m / 3, 0));
+            put(10, c6(l * 3 / 2, l * 3 / 2, l));
         }
         t
     }

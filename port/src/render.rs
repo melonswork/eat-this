@@ -20,11 +20,12 @@
 //! | 0x28 | LIT[src][dst], behind the foreground (glows, PalMixLight) |
 //! | 0x2c | MIX[1ae3][src] |
 //! | 0x30 | MIX[src][dst] |
-//! | 0x34 | MIX[SEA[1ae3][src]][dst], behind the foreground |
+//! | 0x34 | MIX[TINT[1ae3][src]][dst], behind the foreground |
 //! | 0x38 | MIX[1ae3][dst] where the sprite has pixels |
 //!
-//! MIX is the table 1b0c points at: normally the level's PalMix, swapped for PalMixSea (4c26) or
-//! PalMixLight (1b10) around a few calls.
+//! MIX is the table 1b0c points at: normally the level's PalMix, swapped for the tint table
+//! (4c26, computed from the palette) or PalMixLight (1b10) around a few calls. PalMixSea (16da)
+//! only serves the water (`draw::water`).
 
 use crate::data::SpriteGroup;
 use crate::palette::LevelPalette;
@@ -67,6 +68,14 @@ impl Bank {
         Some(f(s))
     }
 
+    /// Row `row` of sprite `id`'s pixels (a texture).
+    pub fn row(&self, id: i32, row: i32) -> Option<Vec<u8>> {
+        self.with(id, |s| {
+            let r = row.clamp(0, s.height - 1);
+            s.pixels[(r * s.width) as usize..((r + 1) * s.width) as usize].to_vec()
+        })
+    }
+
     /// (width, height, hotspot) of sprite `id`.
     pub fn size(&self, id: i32) -> Option<(i32, i32, (i32, i32))> {
         self.with(id, |s| (s.width, s.height, s.hotspot))
@@ -76,9 +85,14 @@ impl Bank {
 /// The colour tables the modes use.
 #[derive(Default)]
 pub struct Tables {
+    /// PalMix (1b0c's usual target, 6992).
     pub mix: Option<Vec<u8>>,
+    /// PalMixLight (1b10): rows are light levels.
     pub light: Option<Vec<u8>>,
+    /// PalMixSea (16da): the water's tints, rows indexed by the SEATILE texture.
     pub sea: Option<Vec<u8>>,
+    /// The tint table 4c26 (`LevelPalette::tint_table`), 256 rows.
+    pub tint: Vec<u8>,
 }
 
 /// Which table MIX (1b0c) points at.
@@ -86,7 +100,8 @@ pub struct Tables {
 pub enum Mix {
     #[default]
     Level,
-    Sea,
+    /// The tint table 4c26.
+    Tint,
     Light,
 }
 
@@ -122,7 +137,7 @@ impl<'a> Painter<'a> {
         let tables: &'a Tables = self.tables;
         match m {
             Mix::Level => tables.mix.as_deref(),
-            Mix::Sea => tables.sea.as_deref().or(tables.mix.as_deref()),
+            Mix::Tint => Some(tables.tint.as_slice()),
             Mix::Light => tables.light.as_deref().or(tables.mix.as_deref()),
         }
     }
@@ -239,7 +254,7 @@ impl<'a> Painter<'a> {
         let fg = self.fg;
         let mix = self.table(self.mix);
         let light = self.table(Mix::Light);
-        let sea = self.table(Mix::Sea);
+        let tint = self.table(Mix::Tint);
         let (mode, colour, key) = (self.mode, self.colour, self.key);
         let (c0, c1, c2, c3) = self.clip;
         for row in 0..h {
@@ -275,7 +290,7 @@ impl<'a> Painter<'a> {
                     0x30 => (src != 0)
                         .then(|| mix.map_or(src, |t| t[src as usize * 256 + dst as usize])),
                     0x34 => (src != 0 && behind).then(|| {
-                        let c = sea.map_or(src, |t| t[colour as usize * 256 + src as usize]);
+                        let c = tint.map_or(src, |t| t[colour as usize * 256 + src as usize]);
                         mix.map_or(c, |t| t[c as usize * 256 + dst as usize])
                     }),
                     0x38 => (src != 0)

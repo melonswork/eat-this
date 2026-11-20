@@ -40,7 +40,7 @@ pub struct Look {
     pub mode: i32,
     pub colour: i32,
     pub hflip: bool,
-    /// 0 PalMix, 1 PalMixSea, 2 PalMixLight.
+    /// 0 PalMix, 1 the tint table (4c26), 2 PalMixLight.
     pub mix: u8,
 }
 

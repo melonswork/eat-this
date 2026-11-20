@@ -55,7 +55,7 @@ fn i16_at(b: &[u8], at: usize) -> i32 {
 
 /// Slots only the drawing code uses (FUN_1088_d073 loads them). Kept apart from SLOTS so that
 /// hit-box lookups behave exactly as before.
-const DRAW_SLOTS: &[(u16, &str)] = &[(0x1b, "PPGLIGHT"), (0x73, "FACBROCK")];
+const DRAW_SLOTS: &[(u16, &str)] = &[(0x1b, "PPGLIGHT"), (0x73, "FACBROCK"), (0x7c, "SEATILE")];
 
 fn slot_name(slot: u16, draw: bool) -> Option<String> {
     let level = (slot >= 0x32)
@@ -71,10 +71,11 @@ fn slot_name(slot: u16, draw: bool) -> Option<String> {
     fixed.or(level)
 }
 
-/// Groups FUN_1088_d073 loads through FUN_1088_4518, which skips the palette fitting
-/// (FUN_10f0_1a99): their pixels are raw indices, mostly into the mix tables.
+/// Groups FUN_1088_d073 loads through FUN_1088_4518 (and SEATILE, LevelLoad with PalMixSea),
+/// which skip the palette fitting (FUN_10f0_1a99): their pixels are raw indices, mostly into
+/// the mix tables.
 pub fn raw(slot: u16) -> bool {
-    matches!(slot, 0x1b | 0x73 | 0x75)
+    matches!(slot, 0x1b | 0x73 | 0x75 | 0x7c)
         || (slot >= 0x32
             && LEVEL_RAW
                 .get()

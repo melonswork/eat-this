@@ -946,6 +946,11 @@ impl Level {
 }
 
 impl Grinder {
+    /// 1170:4ef0, the teeth's animation counter (for the draw pass).
+    pub fn anim(&self) -> i32 {
+        self.anim
+    }
+
     /// FUN_1090_1a70.
     pub fn slow_down(&mut self, rng: &mut crate::rng::PascalRandom) {
         self.speed -= rng.random(0x10) + 0x60;

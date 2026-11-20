@@ -170,7 +170,7 @@ pub fn decals(p: &mut Painter, level: &Level) {
 
 /// The actors that updated this frame (FUN_1070_faec): the hero's sector's, then sector 0's,
 /// those whose box meets the camera.
-pub fn actors(p: &mut Painter, level: &Level) {
+pub fn actors(p: &mut Painter, level: &Level, world: &crate::world::World) {
     let sector = level.sector.unwrap_or(0);
     let (cx, cy) = p.cam;
     let window = (cx, cy, cx + 0x13f, cy + 199);
@@ -183,7 +183,7 @@ pub fn actors(p: &mut Painter, level: &Level) {
             let Some(o) = &level.objects[id] else { continue };
             let (x1, y1, x2, y2) = o.bbox();
             if x1 <= window.2 && y1 <= window.3 && window.0 <= x2 && window.1 <= y2 {
-                actor(p, o);
+                actor(p, o, world);
                 p.reset();
             }
         }
@@ -197,7 +197,7 @@ fn looks(p: &mut Painter, o: &Obj) {
         p.colour = if l.colour == Look::FLASH { p.flash } else { l.colour as u8 };
         p.hflip = l.hflip;
         p.mix = match l.mix {
-            1 => Mix::Sea,
+            1 => Mix::Tint,
             2 => Mix::Light,
             _ => Mix::Level,
         };
@@ -206,7 +206,7 @@ fn looks(p: &mut Painter, o: &Obj) {
     }
 }
 
-fn actor(p: &mut Painter, o: &Obj) {
+fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
     let (x, y) = (o.w(0xe), o.w(0x10));
     match o.kind {
         // Walker (FUN_1070_4051), walking gunner (FUN_1070_af70): recorded by their updates.
@@ -336,11 +336,11 @@ fn actor(p: &mut Painter, o: &Obj) {
             }
             p.at_flash(o.w(0x2a) > 0, o.w(0x34), x, y);
         }
-        // FUN_1070_7eb2: the big alien; its shield tints it through PalMixSea.
+        // FUN_1070_7eb2: the big alien; its shield tints it yellow (tint table row 10).
         0x1432 => {
             p.hflip = o.w(0x20) < 0;
             if o.b(0x44) != 0 {
-                p.mix = Mix::Sea;
+                p.mix = Mix::Tint;
                 p.mode = 0x24;
                 p.colour = 10;
             } else if o.w(0x2a) > 0 {
@@ -356,7 +356,12 @@ fn actor(p: &mut Painter, o: &Obj) {
         // FUN_1070_a06a: a sprite (+0x14) in mode +0x16.
         0x14aa => p.at_mode(o.w(0x16), o.w(0x14), x, y),
         // FUN_1070_9f35: a flame (light) in mode +0x18, scaled by +0x16, +0x14, its phase +0x1a.
-        // (The original skips it while the lever +0x1e is off.)
+        // It is dark while the lever at cell +0x1e is at 0 (FUN_1088_140b: function 6000).
+        0x1450 if o.w(0x1e) != 0 && {
+            let c = o.uw(0x1e) as i32;
+            let wd = world.main().width;
+            world.tile_function_at((c / wd) << 4, (c % wd) << 4) == 6000
+        } => {}
         0x1450 => {
             if std::env::var("ET_DRAW").is_ok() {
                 eprintln!("light 14 {:#x} 16 {:#x} 18 {:#x} 1e {}", o.w(0x14), o.w(0x16), o.w(0x18), o.w(0x1e));
@@ -382,7 +387,7 @@ fn crate_sprite(kind: i32) -> i32 {
 
 /// FUN_1088_9d34's drawing: the drone (its sprite turns with its angle, plus a blinking light),
 /// then the hero: the body (mirrored when facing left) and the arm at the muzzle offset.
-/// Blinking after a hit tints him through PalMixSea (colour 0); the gun's recoil lights him
+/// Blinking after a hit tints him red (tint table row 0); the gun's recoil lights him
 /// through PalMixLight.
 pub fn hero_and_drone(p: &mut Painter, hero: &crate::hero::Hero, drone: &crate::drone::Drone) {
     if drone.active > 0 {
@@ -396,7 +401,7 @@ pub fn hero_and_drone(p: &mut Painter, hero: &crate::hero::Hero, drone: &crate::
     let b = hero.hurt_blink();
     if b > 0 && (b / 2) % 2 == 0 {
         p.mode = 0x24;
-        p.mix = Mix::Sea;
+        p.mix = Mix::Tint;
         p.colour = 0;
     }
     let c = hero.gun.cooldown();
@@ -694,8 +699,22 @@ pub fn hud(p: &mut Painter, hero: &crate::hero::Hero) {
     p.clip.2 = len + 0x1b;
     p.sprite(0x1f0b, 4, 0xc6);
     p.reset();
-    let x = 4;
+    let mut x = 4;
     p.mode = 4;
+    // The keys (1170:5118..511a; the port keeps them at `keys[(0x14 + k) & 0xf]`).
+    for k in 0..3 {
+        if hero.keys[(0x14 + k) & 0xf] {
+            if x == 4 {
+                p.sprite(0x1f28, 4, 0xc6);
+            }
+            p.sprite(0x1f2a + k as i32, x, 0xc6);
+            x += 9;
+        }
+    }
+    if x != 4 {
+        p.sprite(0x1f29, x, 0xc6);
+        x += 6;
+    }
     p.sprite(0x1f0a, x, 0xc6);
     if w >= 0 {
         let wp = &hero.weapons[w as usize];
@@ -716,9 +735,55 @@ pub fn hud(p: &mut Painter, hero: &crate::hero::Hero) {
     }
     p.mode = 0x30;
     p.sprite(0x1f0c, x, 0xc6);
-    if w >= 0 {
-        p.mode = 4;
-        p.sprite(0x1f14 + w, x, 0xc6);
-    }
+    // The weapon's icon; with none chosen yet (-1) this is 0x1f13, the pistol's.
+    p.mode = 4;
+    p.sprite(0x1f14 + w, x, 0xc6);
     p.reset();
+}
+
+/// FUN_1090_009c (the foreground procs of the levels with water): below the hero's sector's
+/// water line (`Level::water`, waves included) every screen row is tinted through PalMixSea,
+/// the row picked by a 128-pixel SEATILE texture (slot 0x7c) plus a strength that fades over
+/// the 32 rows under the surface (0x30 on the surface row itself) (FUN_1090_0002). The rows
+/// sway with a sine of their height and drift with the sector's current (+0x1a).
+pub fn water(p: &mut Painter, level: &Level, world: &crate::world::World) {
+    let Some(sea) = p.tables.sea.as_deref() else { return };
+    let sector = level.sector.unwrap_or(0);
+    let Some(sec) = world.sectors.get(sector) else { return };
+    if sec.water[1] == 0x7fff || level.water == 0x7fff {
+        return;
+    }
+    let (cx, cy) = p.cam;
+    let frame = p.frame as i32;
+    let surface = level.water - cy;
+    let start = surface.max(0);
+    if start > 199 {
+        return;
+    }
+    let drift = ((cx - frame.wrapping_mul(sec.water[3])) & 0x7f) + 0x80;
+    let rise = if sec.water[0] == 1 { 0 } else { (cy - frame / 2) & 0x7f };
+    for y in start..=199 {
+        let a = ((y + cy) * 6 + frame * 0x10).rem_euclid(0x1680);
+        let x0 = -((crate::trig::sin(a) / 0xaaa + drift) & 0x7f);
+        let mut row = (rise + y) & 0x7f;
+        let strength = if y == surface {
+            row = (row + frame) & 0x7f;
+            0x30
+        } else {
+            ((surface + 0x20 - y) / 2).max(0)
+        };
+        let Some(tex) = p.bank.row(0x7c00, row) else { return };
+        let mut x = x0;
+        while x < crate::W {
+            for (i, &t) in tex.iter().enumerate() {
+                let sx = x + i as i32;
+                if (0..crate::W).contains(&sx) {
+                    let at = (y * crate::W + sx) as usize;
+                    let k = (t as i32 + strength) & 0xff;
+                    p.fb[at] = sea[(k as usize) * 256 + p.fb[at] as usize];
+                }
+            }
+            x += 0x80;
+        }
+    }
 }
