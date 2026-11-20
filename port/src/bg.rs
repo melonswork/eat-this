@@ -75,7 +75,9 @@ impl Background {
     /// this one), (cam_x, cam_y) the camera.
     pub fn draw(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
         match self.proc_ {
-            0 => self.city(fb, cam, frame),
+            // 0 is FUN_1090_075c (decor only: CITY01's city comes from it); 16 (START, CITY) is
+            // FUN_1090_0ace: the city, then the bridge and the rain (main.rs), the decor, the truck.
+            0 | 16 => self.city(fb, cam, frame),
             3 => self.sea(fb, cam, frame),
             6 => {
                 // FUN_1090_1a06 (GRINDER): the second group's backdrop at 1/4 of the camera,

@@ -862,6 +862,11 @@ struct Graphics {
     show_hud: bool,
     /// GameStats (1a92): 0 none, 1 the status bar, 2 also the counters.
     hud_level: i32,
+    /// The rain (1170:512c): 90 drops (x < 0x148, y < 0xd0) drawn at boot under RandSeed 1000.
+    rain: Vec<(i32, i32)>,
+    /// 1170:512a: the level colour nearest to RGB (0x10, 0x14, 0x19) (FUN_10f0_6039): the rain
+    /// is PalMix[512a][pixel].
+    rain_colour: u8,
 }
 
 impl Graphics {
@@ -960,6 +965,7 @@ impl Graphics {
             .collect();
         // The lists keep the farthest last and are drawn from the end.
         decor.sort_by_key(|d| d.depth);
+        let colors6 = level.colors;
         Ok(Graphics {
             background: bg::Background {
                 proc_: script.map_or(0, |s| s.background_proc),
@@ -976,6 +982,18 @@ impl Graphics {
             decor,
             show_hud: true,
             hud_level: 2,
+            rain: {
+                let mut r = rng::PascalRandom::new(1000);
+                (0..0x5a).map(|_| (r.random(0x148), r.random(0xd0))).collect()
+            },
+            rain_colour: {
+                // FUN_10f0_6039(b, g, r): the smallest (dr^2 + dg^2)^2 + db^4, the first one.
+                let d = |c: [u8; 3]| -> i64 {
+                    let (r, g, b) = (0x10 - c[0] as i64, 0x14 - c[1] as i64, 0x19 - c[2] as i64);
+                    (r * r + g * g).pow(2) + b.pow(4)
+                };
+                (0..256).min_by_key(|&i| (d(colors6[i]), i)).unwrap_or(0) as u8
+            },
         })
     }
 
@@ -1015,6 +1033,9 @@ impl Graphics {
         }
         // The sector's background decor (list +0x1e, FUN_1068_09bf from the background proc).
         let sector = g.level.sector.unwrap_or(0);
+        if self.background.proc_ == 16 {
+            self.start_extras(fb, g, sector, (cam_x, cam_y), frame);
+        }
         self.decor(fb, g, sector, false, (cam_x, cam_y), frame);
         // The map planes, then the platforms (their own planes, at their positions).
         let mut layers: Vec<(usize, i32, i32)> = vec![(0, 0, 0), (MAIN_PLANE, 0, 0)];
@@ -1072,6 +1093,68 @@ impl Graphics {
         draw::water(&mut p, &g.level, &g.world);
         self.decor(fb, g, sector, true, (cam_x, cam_y), frame);
         self.hud(fb, g, frame);
+    }
+
+    /// FUN_1090_0ace's middle part: the bridge (FUN_1090_0292, sectors with +0x1c >= 0: OBJECTS
+    /// 0x2719) and the rain (FUN_1090_0418, while the storm 4eda runs).
+    fn start_extras(&self, fb: &mut [u8], g: &Game, sector: usize, cam: (i32, i32), frame: u32) {
+        let by = g.world.sectors.get(sector).map_or(-1, |s| s.water[4]);
+        if by >= 0 {
+            // A train of four cars (slot 0x35) crossing at half the camera's speed, its place
+            // (617e * 3) mod (map width + 0x75 * 0x10), then extra map 8 across (FUN_1088_a371).
+            let span = g.world.main().width * 16 + 0x750;
+            let pos = ((frame as i64 * 3) % span as i64) as i32 - 0x2be;
+            let mut x = pos - (cam.0 >> 1);
+            let y = by - (cam.1 >> 1);
+            let mut p = self.painter(fb, frame);
+            p.mode = 4;
+            for k in (0..=3).rev() {
+                p.sprite(0x3500, x, y);
+                if k > 0 {
+                    p.sprite(0x3501, x, y);
+                }
+                x += 0x75;
+            }
+            if let Some(Some(pl)) = self.extra.first() {
+                self.layer(fb, g, pl, 1, (cam.0 >> 1, 0x38 - y), frame);
+            }
+        }
+        let n = g.level.storm.level / 0x20;
+        if let (true, Some(mix)) = (n > 0, self.tables.mix.as_deref()) {
+            // Each drop: 4 pixels going down-left, through PalMix row 512a.
+            let t = (frame as u16).wrapping_mul(3);
+            let row = self.rain_colour as usize * 256;
+            for &(dx, dy) in self.rain.iter().take(n as usize).rev() {
+                let x = ((0x148u16.wrapping_sub(t) as i32 + dx) % 0x148) as i32;
+                let y = ((t as i32 + dy) % 0xd0) - 3;
+                for k in 0..4 {
+                    let (px, py) = (x - k, y + k);
+                    if (0..W).contains(&px) && (0..H).contains(&py) {
+                        let at = (py * W + px) as usize;
+                        fb[at] = mix[row + fb[at] as usize];
+                    }
+                }
+            }
+        }
+    }
+
+    fn painter<'a>(&'a self, fb: &'a mut [u8], frame: u32) -> render::Painter<'a> {
+        render::Painter {
+            fb,
+            bank: &self.bank,
+            tables: &self.tables,
+            cam: (0, 0),
+            fg: self.bank.foreground(),
+            mode: 0,
+            colour: 0,
+            key: 0,
+            hflip: false,
+            vflip: false,
+            mix: render::Mix::Level,
+            frame,
+            flash: draw::FLASH,
+            clip: render::SCREEN,
+        }
     }
 
     /// The pointer and the status bar (FUN_1088_4b64), over everything.
