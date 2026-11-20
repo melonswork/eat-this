@@ -209,6 +209,12 @@ fn looks(p: &mut Painter, o: &Obj) {
 fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
     let (x, y) = (o.w(0xe), o.w(0x10));
     match o.kind {
+        // FUN_1070_cb38: the granny, sprite +0x3a mirrored by her facing (1170:1b54).
+        crate::granny::KIND => {
+            p.hflip = o.w(0x20) < 0;
+            p.at(o.w(0x3a), x, y);
+            p.hflip = false;
+        }
         // Walker (FUN_1070_4051), walking gunner (FUN_1070_af70): recorded by their updates.
         0x140a => looks(p, o),
         crate::turret::KIND => {

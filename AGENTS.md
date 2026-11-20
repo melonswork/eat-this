@@ -79,6 +79,7 @@ streams and EVERY CHECK, so the method is the original's own.
 | `WEAPON5` | BOMS02 | weapon-5 pick-up, four rockets (FUN_1088_6deb, callback 0xd83 = the torpedo's 0xf9f without bubbles, effect 14, rubble effect 75) | exact |
 | `WEAPON6` | CITY_I04, start moved to (940,95) | weapon-6 pick-up on the crate, step down (too low to stand there: crouched the hero can't fire), six spreads of three bullets (FUN_1088_70b8/7020, effect 62); no Random: checked with dumpframe | exact |
 | `WEAPON9` | CITY_I04, start moved to (940,191) | weapon-9 pick-up, balls standing (Random(0xa1)) and crouched (laid flat), mover 1050:3044, callback 16cc, effect 56 (bounce, +8 frames, blast) | exact |
+| `GRANNY1` | GRANNY, weapon-3 pick-up copied to (19,30) | the granny 0x1482 (FUN_1070_cb38, `granny.rs`): pistol hits knock her over (hat 0x510a, bleeding ca36), lying, stomps; rockets blow two apart (red gibs, smoke, splat) | exact |
 
 ## Tools (non-obvious usage)
 

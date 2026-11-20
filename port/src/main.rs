@@ -21,6 +21,7 @@ mod draw;
 mod effects;
 mod factory;
 mod frontend;
+mod granny;
 mod gunship;
 mod hero;
 mod level;

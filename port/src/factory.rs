@@ -71,6 +71,9 @@ impl Level {
 
     pub fn add_to(&mut self, sector: usize, l: usize, o: Obj) -> usize {
         let id = self.objects.len();
+        if std::env::var_os("ET_KINDS").is_some() {
+            eprintln!("KIND {:#x} vmt {:#x}", o.kind, o.vmt());
+        }
         self.objects.push(Some(o));
         self.lists[sector][l].push(id);
         id
@@ -527,6 +530,37 @@ impl Level {
                 o.set(6, o.w(0xe));
                 o.set(8, o.w(0x10));
             }
+            crate::granny::KIND => {
+                let mut o = walker(kind, 0xe0c, 0x3c);
+                o.set(10, r.byte2());
+                o.set(0xe, r.at(4));
+                o.set(0x10, r.at(6));
+                o.set(0x28, 0);
+                o.set(0x2a, 0);
+                o.set(0x2c, rng.random(0x60));
+                o.set(0x30, 0);
+                o.set(0x20, 1);
+                if r.count > 6 {
+                    o.set(0x20, r.at(0xc));
+                }
+                o.set(0x32, 0);
+                o.set(0x34, -0x14);
+                o.set(0x36, 0);
+                o.set(0x38, 0);
+                o.set(0x14, r.at(8));
+                o.set(0x16, r.at(10));
+                if o.w(0x14) == o.w(0x16) {
+                    o.set(0x2c, 0x23);
+                    o.set(0x28, -2);
+                    o.set(0x3a, 0x5a54);
+                }
+                o.set(2, o.w(0x14) - 0x40);
+                o.set(4, o.w(0x10) - 0x40);
+                o.set(6, o.w(0x16) + 0x40);
+                o.set(8, o.w(0x10) + 0x10);
+                let (y, x) = (o.w(0x10), o.w(0xe));
+                self.add_actor(world, o, y, x);
+            }
             0x1478 => {
                 let mut o = actor(kind, 0xdf8, 0x4d);
                 for (k, off) in [2, 4, 6, 8, 10, 0xc, 0xe].into_iter().enumerate() {
@@ -640,7 +674,8 @@ impl Level {
                     world.sectors[s].water[4] = ((g(3) - 100) >> 1) + 100;
                 }
                 0x271a => self.vehicle = true,
-                0x44c | 0x44d | 0x2724 => {}
+                // 0x272e: decor layers (LevelInit, VMT 0xaf8: draw procs only), drawn by main.rs.
+                0x44c | 0x44d | 0x2724 | 0x272e => {}
                 k => eprintln!("warning: OBJECTS type {k:#x} not ported"),
             }
         }
