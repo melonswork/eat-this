@@ -4,7 +4,9 @@
 //! It only drives the simulation the way the window loop does: a level starts with
 //! `Game::new` (RandSeed 0x3e00 + HeroReset, FUN_1088_d4b2) and runs with `Game::step`.
 
+pub mod avi;
 pub mod gfx;
+pub mod indeo3;
 pub mod menu;
 pub mod texts;
 
@@ -1005,6 +1007,22 @@ fn rgb_with_gamma(pal6: &Pal6, gamma: i32) -> [[u8; 3]; 256] {
 /// `eatthis` without --map/--demo: the original's menus in a window.
 pub fn run(data: &Path, scale: u32, mute: bool) -> Result<(), Box<dyn Error>> {
     use sdl2::{event::Event, keyboard::Scancode, mouse::MouseButton, pixels::PixelFormatEnum};
+    if let Ok(spec) = std::env::var("ET_AVI_YUV") {
+        // Debug: "FILE.AVI OUT.yuv [N]" writes the first N frames as raw yuv410p (compare with
+        // `ffmpeg -i FILE.AVI -f rawvideo -pix_fmt yuv410p`).
+        let w: Vec<&str> = spec.split_whitespace().collect();
+        let mut avi = avi::Avi::open(Path::new(w[0]))?;
+        let n = w.get(2).and_then(|v| v.parse().ok()).unwrap_or(avi.frame_count());
+        let mut out = Vec::new();
+        let mut yuv = Vec::new();
+        for i in 0..n.min(avi.frame_count()) {
+            avi.seek(i)?;
+            avi.yuv(&mut yuv);
+            out.extend(&yuv);
+        }
+        std::fs::write(w[1], out)?;
+        return Ok(());
+    }
     if let Ok(script) = std::env::var("ET_FE_SHOT") {
         return shot(data, &script);
     }
