@@ -46,6 +46,41 @@ pub struct Platform {
     pub points: Vec<(i32, i32, i32)>, // w29..: (x, y, speed in 1/16 px per frame)
 }
 
+/// The level's counters for the front end's stats screen (1080:1ca3): bios spheres taken
+/// (1170:4ea8), hidden areas found (4eac), enemies killed (4eb0). The simulation only adds to
+/// them: every `Effects` hands in its kills and secrets when it is dropped.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Tally {
+    pub bios: i32,
+    pub secrets: i32,
+    pub kills: i32,
+}
+
+thread_local! {
+    pub static TALLY: std::cell::Cell<Tally> = const { std::cell::Cell::new(Tally { bios: 0, secrets: 0, kills: 0 }) };
+}
+
+/// Changes the tally (the front end resets it when a level starts).
+pub fn tally(f: impl FnOnce(&mut Tally)) {
+    TALLY.with(|t| {
+        let mut v = t.get();
+        f(&mut v);
+        t.set(v);
+    });
+}
+
+impl Drop for Effects {
+    fn drop(&mut self) {
+        let (k, s) = (self.kills, self.secrets);
+        if k != 0 || s != 0 {
+            tally(|t| {
+                t.kills += k;
+                t.secrets += s;
+            });
+        }
+    }
+}
+
 /// Things a script asks of the rest of the game.
 #[derive(Debug, Default)]
 pub struct Effects {
@@ -64,6 +99,8 @@ pub struct Effects {
     pub hero_by_enemy: i32,
     /// Enemies killed (1170:4eb0).
     pub kills: i32,
+    /// Hidden areas found (script command 0x18: 1170:4eac += 1).
+    pub secrets: i32,
     /// Object tiles a script placed (FUN_1088_0d5a): (tile, cell), spawned by `Level::flush_spawns`.
     pub spawns: Vec<(u16, u16)>,
     /// Effects a script asked for (command 2, FUN_1040_60bb): (id, y, x).
@@ -478,6 +515,11 @@ impl Level {
                 0x0f => lc += 5,
                 0x0c | 0x11 | 0x15 | 0x17 | 0x19 => lc += 3,
                 0x12 | 0x1a => lc += 2,
+                // FUN_1088_a9af: a hidden area found (1170:4eac, the stats screen's count).
+                0x18 => {
+                    fx.secrets += 1;
+                    lc += 1;
+                }
                 _ => lc += 1,
             }
         }

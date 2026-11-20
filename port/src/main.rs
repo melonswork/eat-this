@@ -20,6 +20,7 @@ mod demo;
 mod draw;
 mod effects;
 mod factory;
+mod frontend;
 mod gunship;
 mod hero;
 mod level;
@@ -303,6 +304,7 @@ impl Game {
         } else if effect == 1 {
             // FUN_1040_014a: health +10 (1170:4e6c, a heart), a counter 4ea8 += 1, sparks.
             self.hero.health += 10;
+            level::tally(|t| t.bios += 1);
             self.level.particles.bonus_pickup(y, x);
         } else if effect == 70 {
             // FUN_1040_043c: a key (1170:5104 + f3), sparks like a weapon's.
@@ -1428,6 +1430,12 @@ fn screenshot(mut game: Game, gfx: &Graphics, frames: u32, path: &Path) -> std::
 
 fn main() -> Result<(), Box<dyn Error>> {
     let o = options()?;
+    if o.map.is_none() && o.demo.is_none() && !o.headless && o.shot.is_none() {
+        // No map and no demo: the original's menus (frontend/).
+        world::load_game_ds(&o.data.join("../ETLAUNCH.EXE"))?;
+        let _ = sprites::DIR.set(o.data.join("SPRITES"));
+        return frontend::run(&o.data, o.scale, o.mute);
+    }
     let (map_path, demo) = match &o.demo {
         Some(dir) => (
             find_in(dir, "MAP")?,

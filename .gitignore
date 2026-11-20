@@ -3,3 +3,5 @@ work
 .venv
 __pycache__
 port/target
+port/EatThis.ini
+port/SAVINGS
