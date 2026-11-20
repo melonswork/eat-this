@@ -181,6 +181,17 @@ are black and white.
 ## In the port
 
 - Videos (VIDEOS/*.AVI: intro, help, credits, level start/end) are not decoded: skipped.
+
+## Videos (VIDEOS/*.AVI)
+
+All 27 files are plain RIFF AVI 1.0 (hdrl, movi, idx1) with ONE codec: **Intel Indeo 3.2**
+(fourcc `IV32`, BITMAPINFOHEADER 24 bpp, decodes to YUV 4:1:0, i.e. chroma 1/4 x 1/4). No other codec.
+- Level/intro videos (INTRO, GRINDER, BLOODY, ...): 640x240, 15 fps (66667 us/frame), shown
+  line-doubled; audio stream PCM unsigned 8-bit mono 11025 Hz (WAVEFORMATEX tag 1), interleaved.
+  INTRO: 2020 frames (2:15), 66 MB.
+- CREDITS.AVI: one 640x480 frame, 1 fps, no audio (a still). ETHELP.AVI: 19 frames 640x480 at 1 fps,
+  no audio (help pages).
+- The codec is not on the CD (Windows' own IR32 driver played it); the port needs its own decoder.
 - CommentPic of the user map list is not drawn (PCX into a sprite); the list's title sprite is
   clipped away as in the original's code.
 - Stored but without effect: GameDetail (the simulation keeps the demos' detail 3), mixed
