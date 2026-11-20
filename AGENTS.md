@@ -26,7 +26,10 @@ mise run mkdemo -- tools/scenarios/WEAPON5.txt                         # -> work
 mise run trace -- work/demos/BIN/USERMAPS/WEAPON5.DMO --overlay work/demos --watch gHeroX,gHeroY,gHeroState
 (cd port && ./target/release/eatthis --headless --demo ../work/demos/BIN/USERMAPS/WEAPON5.DMO)
 python3 tools/windiff.py WEAPON5 4 ; python3 tools/valdiff.py WEAPON5   # both look in work/demos too
+tools/checkall.sh [DEMO...]   # every oracle demo: windows, where it ended, valdiff, hero x/y/state
 ```
+`tools/checkall.sh` needs a full `mise run trace -- ... --watch gHeroX,gHeroY,gHeroState` of each demo
+(work/tracer/<DEMO>/); rerun the trace whenever a scenario changes.
 Script lines: `level GRINDER` (a CD demo folder) or `level MAPS/BOMS02.MAP` (any map under
 work/cd/BIN), `name X`, `mouse X Y` (game-screen pixels, from the next frame on), `N keys...` (hold
 these for N frames; none = all up). Keys: up down left right fire alt key6 key7 switch (gKeyMap),
@@ -45,10 +48,23 @@ streams and EVERY CHECK, so the method is the original's own.
   (`ET_PICKUPS=1 ./target/release/eatthis --headless --map ../work/cd/BIN/MAPS/X.MAP` lists them).
 - A frame count that is a multiple of 35 leaves the last CHECK unsampled (garbage); mkdemo pads one.
 - The port must run from `port/` (default data path `../work/cd/BIN`).
+- Finding a route: `ET_PICKUPS=1 ./target/release/eatthis --headless --map ../work/cd/BIN/MAPS/X.MAP` lists the
+  start, weapon pick-ups and exits (plane-2 function 9000; a door tile 7050 in the main plane must be open,
+  its function 2 = 1); `ET_TELE=1` lists teleport records (two-way, leave, both ends in pixels);
+  `mise run render -- map work/cd/BIN/MAPS/X.MAP out.png` + crop to see it. Up = jump (crouch first for a
+  higher one), Up against a ladder tile (function 10) climbs. To start somewhere a CD demo goes, cut the
+  `--from-rec` script of that demo at a frame (its hero positions: work/tracer/<DEMO>/watch.tsv) and append.
+- A demo starts with gMouseX/Y = its first mouse entry (DemoLoad): frame 0 is not a mouse move.
+- Nothing carries over between levels: every level start from the menu (FUN_1080_16b7 -> FUN_1088_d4b2)
+  sets RandSeed 0x3e00 and runs HeroReset (health 0x2c6, every weapon's ammo/owned zeroed, the kill/secret
+  counters). A demo or a recording always stops at the level end, so no oracle crosses a level change.
 
 | scenario | level | what it checks | port |
 |---|---|---|---|
 | `DEATH1` | GRINDER | BROYEUR's first 300 frames, then waiting: the grinder hurts (FUN_1088_3c32 kind 1, returns 1 → FUN_1090_1a70) and kills the hero (frame 680, state 100, gibs/smoke/splat) | exact |
+| `WEAPON3` | BOMS02 | climb the ladder at x 1336 to the ledge, weapon-3 pick-up, five homing rockets (FUN_1088_6b1f, callback 0x586, effect 14) | exact |
+| `EXIT1` | GRINDER | BROYEUR's own input + 100 frames: the recorder stops itself at the level exit (4e60 = 100, frame 3968); the port must stop there too | exact |
+| `DEATH2` | GRINDER | DEATH1 + key 6 while dead: the restart (4e60 = 10) stops the recording at frame 1801 | exact |
 | `WEAPON5` | BOMS02 | weapon-5 pick-up, four rockets (FUN_1088_6deb, callback 0xd83 = the torpedo's 0xf9f without bubbles, effect 14, rubble effect 75) | exact |
 
 ## Tools (non-obvious usage)
@@ -198,11 +214,19 @@ plain functions (`--entry 1050:5c4a` finds who shakes the screen) but hooking En
 `tools/dronediff.py`, `ET_PART=F` (+`ET_ALLPART=1`), `ET_HERO=F`, `ET_OBJ=1`, `ET_DEBUG=1`, `ET_HIT=1`, `ET_DOOR=1`,
 `ET_AREA=1`, `ET_CORPSE=1`, `ET_SPARK=1`.
 
+Done since (2026-11-20, scenarios): weapon 3 (WEAPON3), the level end through a leaving teleport record and
+the restart key while dead (EXIT1, DEATH2: `Hero::level_end` = 4e60; a demo stops, window mode reloads the map
+on 10, stops on 100; the end-of-level video/stats screen 1080:172a and the menu's next level are front end).
+
 Still unported (warnings in the port run): the hero riding a smallbot (FUN_1070_a18e), the hero's death
-outside the grinder (kinds 2/3 of FUN_1088_3c32 untested), the restart, objects of VMT 0xc84 (kind 0x14be, icon 61600, FUN_1070_0cce), kinds 0x14d2/0x14f0 icons,
-effects 23 (FUN_1050_4a29 part)/53/54, bonus 0xd10 (6b03), levers needing a key, weapons 3, 6, 9 (pick-ups: BOMS02 3 at (1303,263) near the start (1255,366), CITYRAIN 6 at
-(167,103) (start (79,799)), CITY02 9 at (1223,1719); make a scenario for each), sideways
-shake 5c7d, frozen/burnt deaths, barrels >= 0xb, level-leaving teleports, hero on the big alien's shield (00b6 is
+outside the grinder (kinds 2/3 of FUN_1088_3c32 untested), objects of VMT 0xc84 (kind 0x14be, icon 61600, FUN_1070_0cce), kinds 0x14d2/0x14f0 icons,
+effects 23 (FUN_1050_4a29 part)/53/54, bonus 0xd10 (6b03), levers needing a key, weapons 6 (FUN_1088_70b8: three bullets
+FUN_1088_7020 at aim-0x80/+0x80/aim, speed 0x60, effect 0x3e) and 9 (FUN_1088_6649: a bounce FUN_1050_46d9(7,0x20)
+with callback 0x16cc, effect 0x38; crouched it is laid flat at 0/0xb40). No pick-up of 6/9 is near a start: tried
+FOREST03 from LEVEL2_2's frame 2100 at (690,319) under the weapon-9 platform at (695,151) (walking left falls);
+FOREST04's 9s at (151..167,743) are in a room left only by a one-way door; also LEVEL2_2 frame 24953 at (942,906)
+is 130 px under the 9s at (967..983,775). Sideways
+shake 5c7d, frozen/burnt deaths, barrels >= 0xb, hero on the big alien's shield (00b6 is
 now `Level::stand_on`, wire it there), wall chunks 60308/60304 (45db), 30070 particle spawn.
 Next: nothing is left in the recorded demos; write scenarios (tools/scenarios) for the unported features. The game is not complete: see the unported items below (grep the
 port run for `warning:`), and the SDL front end/menus/sound. and run the daily loop on it.
