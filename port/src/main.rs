@@ -970,6 +970,15 @@ impl Graphics {
         if self.bg_only {
             return;
         }
+        if self.background.proc_ == 4 {
+            // FUN_1090_1629 (detail 3, as in demos): extra map 9 at a quarter of the camera, then
+            // extra map 8 at half of it, both repeated across and down (FUN_1088_a401).
+            for (k, div) in [(1, 4), (0, 2)] {
+                if let Some(Some(pl)) = self.extra.get(k) {
+                    self.layer(fb, g, pl, 3, (cam_x / div, cam_y / div), frame);
+                }
+            }
+        }
         if let Some(Some(pl)) = self.extra.first() {
             match self.background.proc_ {
                 // FUN_1090_147b: extra map 8 at a third of the camera, repeated across (a371).

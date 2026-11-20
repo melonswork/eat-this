@@ -3,7 +3,7 @@
 //! segment 1090). Ported so far, checked against the original's frame buffer (tools/dumpframe.py):
 //!
 //! * 0, the city (CITY01): `FUN_1090_0797`.
-//! * 4, the forest (FOREST02..04): `FUN_1090_1629`, its first layer only.
+//! * 4, the forest (FOREST02..04): `FUN_1090_1629` (its two extra-map layers are drawn in main.rs).
 //!
 //! Every other number falls back to the level's picture scrolled at 1/16 of the camera. That is a
 //! guess, not what those routines do.
@@ -144,9 +144,9 @@ impl Background {
         }
     }
 
-    /// `FUN_1090_1629`: a 320x200 sprite (fourth LoadSpriteGroup, sprite 0) tiled at 1/16 of the
-    /// camera. Not ported: the two parallax tile layers (extra maps 8 and 9) drawn over it at 1/2
-    /// and 1/4 speed.
+    /// `FUN_1090_1629`: a 320x200 sprite (slot 0x35, sprite 0) tiled at 1/16 of the camera. The
+    /// two parallax tile layers over it (extra maps 9 and 8 at 1/4 and 1/2 of the camera) are
+    /// drawn by main.rs.
     fn forest(&self, fb: &mut [u8], cam: (i32, i32)) {
         let x = -((cam.0 >> 4) % W);
         let y = -((cam.1 >> 4) % H);

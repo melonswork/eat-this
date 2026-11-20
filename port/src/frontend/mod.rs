@@ -939,11 +939,17 @@ fn script_of(map: &Path) -> PathBuf {
 pub fn level_totals(world: &crate::world::World) -> Tally {
     let mut t = Tally::default();
     if let Some(Some(p)) = world.planes.get(2) {
-        for &c in &p.cells {
+        let main = world.main();
+        for (i, &c) in p.cells.iter().enumerate() {
             if c == 0 {
                 continue;
             }
             let f = world.cell_function(c, 0);
+            // FUN_1088_0d5a: an alien icon (61400, 61300) over a wall hole (main-plane function
+            // 7050) makes no object yet but counts as an enemy.
+            if (f == 61400 || f == 61300) && main.cells.get(i).is_some_and(|&m| m > 0 && world.cell_function(m, 0) == 7050) {
+                t.kills += 1;
+            }
             if f < 61000 {
                 t.bios += (c == 0xd00) as i32;
             } else if f == 61800 {
