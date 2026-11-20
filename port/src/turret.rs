@@ -4,6 +4,7 @@
 
 use crate::actors::Env;
 use crate::level::Level;
+use crate::objects::Obj;
 use crate::sprites;
 use crate::walker::plates;
 
@@ -224,7 +225,21 @@ impl Level {
                 self.o(id).set(0x26, 3);
             }
         }
-        let _ = draw_off;
+        // For the draw pass: the legs (1170:196e.., mirrored by the facing) and the body.
+        let o = self.o(id);
+        let (x, y) = (o.w(0xe), o.w(0x10));
+        let legs = match o.w(0x24) {
+            0 => 0x196e + ((o.w(0x28) as u16 / 10) & 3) as i32,
+            2 if o.w(0x28) != 0 => 0x7fff,
+            2 => 0x1972,
+            _ => 0x196e,
+        };
+        let mut looks = Vec::new();
+        if legs != 0x7fff {
+            looks.push(Obj::look(legs, x, y).flip(o.w(0x20) < 0));
+        }
+        looks.push(Obj::look(sprite, x, y + draw_off).flash(o.w(0x26) > 0));
+        o.looks = looks;
     }
 
     /// FUN_1070_ad87: the move hook. Falling it keeps the box open; a dead one landing flashes.

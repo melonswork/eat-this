@@ -167,6 +167,20 @@ pub struct Hero {
     on_slope: bool,
 }
 
+impl Hero {
+    /// 1170:4e5e, for the draw pass (the hero blinks while it is > 0).
+    pub fn hurt_blink(&self) -> i32 {
+        self.hurt_blink
+    }
+}
+
+impl Gun {
+    /// 1170:4e56, for the draw pass (the gun glows while it is > 0).
+    pub fn cooldown(&self) -> i32 {
+        self.cooldown
+    }
+}
+
 /// The pistol (weapon 2's left button; HeroUpdate's end block and HeroFireWeapon 1088:6437).
 #[derive(Default)]
 pub struct Gun {

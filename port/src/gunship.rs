@@ -103,6 +103,23 @@ impl Level {
             }
             _ => sprite = 0x7fff,
         }
+        // For the draw pass: the rotor (+0x26) and the gun (the flash is applied when drawing).
+        {
+            let o = self.o(id);
+            let (x, y) = (o.w(0x16), o.w(0x18));
+            let falling = o.w(0x32) == 2;
+            let mut looks = vec![Obj::look(o.w(0x26), x, y)];
+            if sprite != 0x7fff {
+                looks.push(Obj::look(sprite, x, y));
+            }
+            if falling {
+                // Mode 0x24 with colour 1170:1b14 (0 at level start): darkened while it falls.
+                for l in &mut looks {
+                    l.mode = 0x24;
+                }
+            }
+            o.looks = looks;
+        }
         // The shots hitting it (FUN_1050_5960 with its gun's or its body's sprite).
         let (x, y) = (self.o(id).w(0x16), self.o(id).w(0x18));
         if self.o(id).w(0x1c) == 2 {

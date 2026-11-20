@@ -246,6 +246,8 @@ pub struct Script {
     pub sprite_groups: Vec<String>,
     /// `PalMix=`: the 256x256 translucency table in PALS/ (mix[src * 256 + dst]).
     pub palmix: Option<String>,
+    pub palmix_light: Option<String>,
+    pub palmix_sea: Option<String>,
 }
 
 impl Script {
@@ -256,6 +258,8 @@ impl Script {
             background_proc: 0,
             sprite_groups: Vec::new(),
             palmix: None,
+            palmix_light: None,
+            palmix_sea: None,
         };
         for line in text.lines() {
             let Some((key, value)) = line.split_once('=') else {
@@ -266,6 +270,8 @@ impl Script {
                 "background" if !value.is_empty() => s.background = Some(value.to_string()),
                 "backgroundproc" => s.background_proc = value.parse().unwrap_or(0),
                 "palmix" if !value.is_empty() => s.palmix = Some(value.to_string()),
+                "palmixlight" if !value.is_empty() => s.palmix_light = Some(value.to_string()),
+                "palmixsea" if !value.is_empty() => s.palmix_sea = Some(value.to_string()),
                 "loadspritegroup" => s.sprite_groups.push(value.to_string()),
                 "foregroundcolors" => s.foreground_colors = value.parse().ok().filter(|&n| n < 256),
                 _ => {}

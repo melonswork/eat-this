@@ -3,6 +3,7 @@
 
 use crate::actors::Env;
 use crate::level::Level;
+use crate::objects::Obj;
 use crate::particles::Particles;
 use crate::rng::PascalRandom;
 use crate::sprites;
@@ -417,11 +418,22 @@ impl Level {
             self.stand_on(env, top, last, cx + 0x12, cx - 0x12);
             self.o(id).set(0x22, top);
         }
+        // The draw: the mount (unless dead), then the rider pushed back by his recoil.
+        {
+            let o = self.o(id);
+            let (x, y) = (o.w(0xe), o.w(0x10));
+            let mut looks = Vec::new();
+            if o.w(0x34) > 0 {
+                looks.push(Obj::look(mount, x, y).flip(flip_m).flash(o.w(0x28) > 0));
+            }
+            let rx = if o.w(0x2e) > 0 { x - o.w(0x20) * o.w(0x2e) } else { x };
+            looks.push(Obj::look(rider, rx, y + off).flip(flip_r).flash(o.w(0x26) > 0));
+            o.looks = looks;
+        }
         if self.o(id).w(0x2e) > 0 {
             let o = self.o(id);
             o.set(0x2e, o.w(0x2e) - 1);
         }
-        let _ = (flip_m, flip_r);
     }
 
     /// FUN_1070_00b6(top, last top, right, left): the hero landing on a moving top stays on it.

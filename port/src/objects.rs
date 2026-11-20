@@ -25,6 +25,47 @@ pub struct Obj {
     /// The record type the factory made it from (EnemyFactory's switch), for dispatch.
     pub kind: u16,
     pub mem: Vec<u8>,
+    /// What the update method drew this frame (the original draws at the end of the update
+    /// from values it computed on the way). Only the draw pass reads it.
+    pub looks: Vec<Look>,
+}
+
+/// One sprite an object's update drew: world position, mode (1ae0), colour (1ae3; `FLASH` is
+/// the hit flash colour 1170:1b1b), mirrored (1ae5), and the table MIX points at.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Look {
+    pub sprite: i32,
+    pub x: i32,
+    pub y: i32,
+    pub mode: i32,
+    pub colour: i32,
+    pub hflip: bool,
+    /// 0 PalMix, 1 PalMixSea, 2 PalMixLight.
+    pub mix: u8,
+}
+
+impl Look {
+    /// Colour value standing for 1170:1b1b.
+    pub const FLASH: i32 = -1;
+
+    /// The hit flash (mode 0x24, colour 1b1b) when `on`.
+    pub fn flash(mut self, on: bool) -> Look {
+        if on {
+            self.mode = 0x24;
+            self.colour = Look::FLASH;
+        }
+        self
+    }
+
+    pub fn flip(mut self, f: bool) -> Look {
+        self.hflip = f;
+        self
+    }
+
+    pub fn mode(mut self, m: i32) -> Look {
+        self.mode = m;
+        self
+    }
 }
 
 impl Obj {
@@ -33,6 +74,7 @@ impl Obj {
         let mut o = Obj {
             kind,
             mem: vec![0; size.max(2)],
+            looks: Vec::new(),
         };
         o.set(0, vmt as i32);
         o
@@ -70,6 +112,11 @@ impl Obj {
 
     pub fn set_l(&mut self, off: usize, v: i32) {
         self.mem[off..off + 4].copy_from_slice(&v.to_le_bytes());
+    }
+
+    /// A sprite at (x, y) for the draw pass (see `looks`).
+    pub fn look(sprite: i32, x: i32, y: i32) -> Look {
+        Look { sprite, x, y, ..Look::default() }
     }
 
     /// The activity box (+2..+8) every object has: it only updates while this meets the camera.

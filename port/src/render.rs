@@ -1,0 +1,280 @@
+//! Drawing sprites the way the original does (segment 10f0). Nothing here touches the simulation:
+//! the draw pass reads the game state after the frame's update.
+//!
+//! The original draws every sprite through `FUN_10f0_2670` (or `FUN_10f0_2a11` mirrored; the pair
+//! sits in the table at 1170:1b54, indexed by the flip byte 1ae5). 1ae6 flips vertically. Each
+//! sprite row is a list of runs; the run handlers come from the table at 1170:1b8a, indexed by the
+//! draw mode 1ae0 (two handlers per mode: a run with transparent pixels, a solid run). What the
+//! modes do (from their disassembly, 10f0:23b6..2648):
+//!
+//! | 1ae0 | effect |
+//! |------|--------|
+//! | 0    | copy, only over pixels <= 1ae2 (the background range: foreground tiles stay in front) |
+//! | 4, 0x20 | plain copy |
+//! | 8    | fill with colour 1ae3, behind the foreground |
+//! | 0xc, 0x18 | through the 256-byte table 1170:678c (not ported: plain copy / skipped) |
+//! | 0x10 | MIX[src][dst], behind the foreground (translucent) |
+//! | 0x14 | copy only over colour 1ae4 |
+//! | 0x1c | dst = dst[x + 1], behind the foreground (heat haze) |
+//! | 0x24 | MIX[1ae3][src], behind the foreground (the hit flash, 1ae3 = 1170:1b1b) |
+//! | 0x28 | LIT[src][dst], behind the foreground (glows, PalMixLight) |
+//! | 0x2c | MIX[1ae3][src] |
+//! | 0x30 | MIX[src][dst] |
+//! | 0x34 | MIX[SEA[1ae3][src]][dst], behind the foreground |
+//! | 0x38 | MIX[1ae3][dst] where the sprite has pixels |
+//!
+//! MIX is the table 1b0c points at: normally the level's PalMix, swapped for PalMixSea (4c26) or
+//! PalMixLight (1b10) around a few calls.
+
+use crate::data::SpriteGroup;
+use crate::palette::LevelPalette;
+use crate::{H, W};
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+/// Sprite groups by slot, fitted to the level palette as they load.
+pub struct Bank {
+    level: LevelPalette,
+    groups: RefCell<HashMap<u16, Option<SpriteGroup>>>,
+}
+
+impl Bank {
+    pub fn new(level: LevelPalette) -> Bank {
+        Bank {
+            level,
+            groups: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn foreground(&self) -> u8 {
+        self.level.foreground.min(255) as u8
+    }
+
+    /// Calls `f` with sprite `id` (slot * 256 + frame), if it exists.
+    fn with<R>(&self, id: i32, f: impl FnOnce(&crate::data::Sprite) -> R) -> Option<R> {
+        let slot = (id as u16) >> 8;
+        let mut groups = self.groups.borrow_mut();
+        let g = groups.entry(slot).or_insert_with(|| {
+            let mut g = crate::sprites::path(slot).and_then(|p| SpriteGroup::load(&p).ok());
+            if let Some(g) = &mut g {
+                if !crate::sprites::raw(slot) {
+                    g.fit_to(&self.level);
+                }
+            }
+            g
+        });
+        let s = g.as_ref()?.sprites.get((id & 0xff) as usize)?.as_ref()?;
+        Some(f(s))
+    }
+
+    /// (width, height, hotspot) of sprite `id`.
+    pub fn size(&self, id: i32) -> Option<(i32, i32, (i32, i32))> {
+        self.with(id, |s| (s.width, s.height, s.hotspot))
+    }
+}
+
+/// The colour tables the modes use.
+#[derive(Default)]
+pub struct Tables {
+    pub mix: Option<Vec<u8>>,
+    pub light: Option<Vec<u8>>,
+    pub sea: Option<Vec<u8>>,
+}
+
+/// Which table MIX (1b0c) points at.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Mix {
+    #[default]
+    Level,
+    Sea,
+    Light,
+}
+
+/// The drawing state: the frame buffer plus the globals the original's draw calls read.
+pub struct Painter<'a> {
+    pub fb: &'a mut [u8],
+    pub bank: &'a Bank,
+    pub tables: &'a Tables,
+    pub cam: (i32, i32),
+    /// 1ae2: the last colour of the background range.
+    pub fg: u8,
+    /// 1ae0, 1ae3, 1ae4.
+    pub mode: i32,
+    pub colour: u8,
+    pub key: u8,
+    /// 1ae5 / 1ae6.
+    pub hflip: bool,
+    pub vflip: bool,
+    pub mix: Mix,
+    /// The level frame counter as the draw code sees it (DAT_1170_617e).
+    pub frame: u32,
+    /// The hit flash colour, 1170:1b1b.
+    pub flash: u8,
+}
+
+impl<'a> Painter<'a> {
+    fn table(&self, m: Mix) -> Option<&'a [u8]> {
+        let tables: &'a Tables = self.tables;
+        match m {
+            Mix::Level => tables.mix.as_deref(),
+            Mix::Sea => tables.sea.as_deref().or(tables.mix.as_deref()),
+            Mix::Light => tables.light.as_deref().or(tables.mix.as_deref()),
+        }
+    }
+
+    /// Resets mode, colour, flips and table, as the callers do after a special draw.
+    pub fn reset(&mut self) {
+        self.mode = 0;
+        self.hflip = false;
+        self.vflip = false;
+        self.mix = Mix::Level;
+    }
+
+    /// `FUN_10f0_2670` / `2a11`: sprite `id` with its anchor at screen (x, y).
+    pub fn sprite(&mut self, id: i32, x: i32, y: i32) {
+        if id < 0 || id == 0x7fff {
+            return;
+        }
+        let bank = self.bank;
+        bank.with(id, |s| self.put(s, x, y));
+    }
+
+    /// The sprite at world position (x, y).
+    pub fn at(&mut self, id: i32, x: i32, y: i32) {
+        self.sprite(id, x - self.cam.0, y - self.cam.1);
+    }
+
+    /// `at` with a one-off mode (reset to 0 afterwards, as the callers do).
+    pub fn at_mode(&mut self, mode: i32, id: i32, x: i32, y: i32) {
+        self.mode = mode;
+        self.at(id, x, y);
+        self.mode = 0;
+    }
+
+    /// The hit flash: mode 0x24 with colour 1b1b while `flash` > 0.
+    pub fn at_flash(&mut self, flash: bool, id: i32, x: i32, y: i32) {
+        if flash {
+            self.mode = 0x24;
+            self.colour = self.flash;
+        }
+        self.at(id, x, y);
+        self.mode = 0;
+    }
+
+    /// `FUN_10f0_302b(ystep, xstep, id, y, x)`: sprite `id` scaled, reading `xstep` / `ystep`
+    /// source pixels (8.8 fixed point, 0x100 = 1:1) per screen pixel, anchor at screen (x, y).
+    pub fn scaled(&mut self, id: i32, x: i32, y: i32, xstep: i32, ystep: i32) {
+        if id < 0 || id == 0x7fff || xstep <= 0 || ystep <= 0 {
+            return;
+        }
+        let bank = self.bank;
+        bank.with(id, |s| {
+            let w = (s.width * 0x100) / xstep;
+            let h = (s.height * 0x100) / ystep;
+            if w <= 0 || h <= 0 {
+                return;
+            }
+            let mut px = vec![0u8; (w * h) as usize];
+            for yy in 0..h {
+                let sy0 = ((yy * ystep) >> 8).min(s.height - 1);
+                for xx in 0..w {
+                    let sx0 = ((xx * xstep) >> 8).min(s.width - 1);
+                    px[(yy * w + xx) as usize] = s.pixels[(sy0 * s.width + sx0) as usize];
+                }
+            }
+            let scaled = crate::data::Sprite {
+                width: w,
+                height: h,
+                hotspot: ((s.hotspot.0 * 0x100) / xstep, (s.hotspot.1 * 0x100) / ystep + 1),
+                pixels: px,
+                extra: Vec::new(),
+            };
+            self.put(&scaled, x, y);
+        });
+    }
+
+    /// `FUN_1040_6315(ystep, xstep, t, y, x)`: a flame (FLAME5, 0x6a00 + t / 3 % 16) scaled
+    /// as `scaled` does, at world (x, y). `FUN_1040_62ed` is the unscaled one.
+    pub fn flame(&mut self, ystep: i32, xstep: i32, t: u32, x: i32, y: i32) {
+        let id = ((t / 3) % 0x10) as i32 + 0x6a00;
+        let (x, y) = (x - self.cam.0, y - self.cam.1);
+        if xstep == 0x100 && ystep == 0x100 {
+            self.sprite(id, x, y);
+        } else {
+            self.scaled(id, x, y, xstep, ystep);
+        }
+    }
+
+    fn put(&mut self, s: &crate::data::Sprite, x: i32, y: i32) {
+        let (w, h) = (s.width, s.height);
+        let left = if self.hflip {
+            x - s.hotspot.0 - w + 1
+        } else {
+            x + s.hotspot.0
+        };
+        let top = if self.vflip {
+            y - s.hotspot.1 - h + 1
+        } else {
+            y + s.hotspot.1
+        };
+        let fg = self.fg;
+        let mix = self.table(self.mix);
+        let light = self.table(Mix::Light);
+        let sea = self.table(Mix::Sea);
+        let (mode, colour, key) = (self.mode, self.colour, self.key);
+        for row in 0..h {
+            let sy = top + row;
+            if !(0..H).contains(&sy) {
+                continue;
+            }
+            let srow = if self.vflip { h - 1 - row } else { row };
+            for col in 0..w {
+                let sx = left + col;
+                if !(0..W).contains(&sx) {
+                    continue;
+                }
+                let scol = if self.hflip { w - 1 - col } else { col };
+                let src = s.pixels[(srow * w + scol) as usize];
+                let at = (sy * W + sx) as usize;
+                let dst = self.fb[at];
+                let behind = dst <= fg;
+                let out = match mode {
+                    4 | 0x20 | 0xc => (src != 0).then_some(src),
+                    0x18 => None,
+                    8 => (src != 0 && behind).then_some(colour),
+                    0x10 => (src != 0 && behind)
+                        .then(|| mix.map_or(src, |t| t[src as usize * 256 + dst as usize])),
+                    0x14 => (src != 0 && dst == key).then_some(src),
+                    0x1c => (src != 0 && behind && sx + 1 < W).then(|| self.fb[at + 1]),
+                    0x24 => (src != 0 && behind)
+                        .then(|| mix.map_or(src, |t| t[colour as usize * 256 + src as usize])),
+                    0x28 => (src != 0 && behind)
+                        .then(|| light.map_or(src, |t| t[src as usize * 256 + dst as usize])),
+                    0x2c => (src != 0)
+                        .then(|| mix.map_or(src, |t| t[colour as usize * 256 + src as usize])),
+                    0x30 => (src != 0)
+                        .then(|| mix.map_or(src, |t| t[src as usize * 256 + dst as usize])),
+                    0x34 => (src != 0 && behind).then(|| {
+                        let c = sea.map_or(src, |t| t[colour as usize * 256 + src as usize]);
+                        mix.map_or(c, |t| t[c as usize * 256 + dst as usize])
+                    }),
+                    0x38 => (src != 0)
+                        .then(|| mix.map_or(src, |t| t[colour as usize * 256 + dst as usize])),
+                    _ => (src != 0 && behind).then_some(src),
+                };
+                if let Some(c) = out {
+                    self.fb[at] = c;
+                }
+            }
+        }
+    }
+
+    /// A filled rectangle in screen coordinates (the HUD's bars).
+    pub fn rect(&mut self, x: i32, y: i32, w: i32, h: i32, c: u8) {
+        for yy in y.max(0)..(y + h).min(H) {
+            for xx in x.max(0)..(x + w).min(W) {
+                self.fb[(yy * W + xx) as usize] = c;
+            }
+        }
+    }
+}

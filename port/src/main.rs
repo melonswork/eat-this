@@ -17,6 +17,7 @@ mod decals;
 mod doors;
 mod drone;
 mod demo;
+mod draw;
 mod effects;
 mod factory;
 mod gunship;
@@ -28,6 +29,7 @@ mod palette;
 mod platobj;
 mod picture;
 mod plant;
+mod render;
 mod rng;
 mod sentry;
 mod smallbot;
@@ -709,7 +711,8 @@ struct Graphics {
     /// Debug (--bg-only): draw nothing but the background.
     bg_only: bool,
     palette: Palette,
-    hero: Vec<SpriteGroup>,
+    bank: render::Bank,
+    tables: render::Tables,
 }
 
 impl Graphics {
@@ -750,11 +753,16 @@ impl Graphics {
                 .and_then(|s| s.foreground_colors)
                 .unwrap_or(DEFAULT_FOREGROUND),
         };
-        let mix = script
-            .as_ref()
-            .and_then(|s| s.palmix.as_deref())
-            .and_then(|n| find_ci(&data.join("PALS"), n))
-            .and_then(|p| data::load_palmix(&p).ok());
+        let table = |name: Option<&String>| {
+            name.and_then(|n| find_ci(&data.join("PALS"), n))
+                .and_then(|p| data::load_palmix(&p).ok())
+        };
+        let mix = table(script.as_ref().and_then(|s| s.palmix.as_ref()));
+        let tables = render::Tables {
+            mix: mix.clone(),
+            light: table(script.as_ref().and_then(|s| s.palmix_light.as_ref())),
+            sea: table(script.as_ref().and_then(|s| s.palmix_sea.as_ref())),
+        };
         let groups = script
             .as_ref()
             .map(|s| s.sprite_groups.as_slice())
@@ -769,13 +777,6 @@ impl Graphics {
                 g
             })
             .collect();
-        let mut hero: Vec<SpriteGroup> = ["PPHERO.SPR", "PPHERO2.SPR", "PPHERO3.SPR"]
-            .iter()
-            .map(|f| SpriteGroup::load(&data.join("SPRITES").join(f)))
-            .collect::<Result<_, _>>()?;
-        for g in &mut hero {
-            g.fit_to(&level);
-        }
         Ok(Graphics {
             background: bg::Background {
                 proc_: script.map_or(0, |s| s.background_proc),
@@ -786,7 +787,8 @@ impl Graphics {
             camera: None,
             bg_only: false,
             palette: level.rgb(),
-            hero,
+            bank: render::Bank::new(level),
+            tables,
         })
     }
 
@@ -856,28 +858,26 @@ impl Graphics {
                 }
             }
         }
-        let f = g.hero.frame;
-        if let Some(Some(s)) = self
-            .hero
-            .get((f >> 8) as usize)
-            .and_then(|grp| grp.sprites.get((f & 0xff) as usize))
-        {
-            let flip = g.hero.facing < 0;
-            let x = if flip {
-                g.hero.x - s.hotspot.0 - s.width + 1
-            } else {
-                g.hero.x + s.hotspot.0
-            };
-            blit(
-                fb,
-                &s.pixels,
-                s.width,
-                s.height,
-                x - cam_x,
-                g.hero.y + s.hotspot.1 - cam_y,
-                flip,
-            );
-        }
+        let mut p = render::Painter {
+            fb,
+            bank: &self.bank,
+            tables: &self.tables,
+            cam: (cam_x, cam_y),
+            fg: self.bank.foreground(),
+            mode: 0,
+            colour: 0,
+            key: 0,
+            hflip: false,
+            vflip: false,
+            mix: render::Mix::Level,
+            frame,
+            flash: draw::FLASH,
+        };
+        draw::decals(&mut p, &g.level);
+        draw::particles(&mut p, &g.level, 0);
+        draw::actors(&mut p, &g.level);
+        draw::hero_and_drone(&mut p, &g.hero, &g.level.particles.drone);
+        draw::particles(&mut p, &g.level, 1);
     }
 }
 

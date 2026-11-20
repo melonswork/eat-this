@@ -187,6 +187,8 @@ impl Level {
                 self.o(id).set(0x3c, 0x48);
             }
         }
+        // For the draw pass: the body (the rotor +0x26 and the flash are added when drawing).
+        self.o(id).looks = vec![Obj::look(sprite, x, y)];
         let d = match sprites::hit_rect(sprite, y, x, false) {
             Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x1059),
             None => 0,

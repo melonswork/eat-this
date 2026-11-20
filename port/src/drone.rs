@@ -45,6 +45,11 @@ pub struct Drone {
 }
 
 impl Drone {
+    /// 1170:4da2, the hovering y the drone is drawn at.
+    pub fn bob_y(&self) -> i32 {
+        self.bob_y
+    }
+
     /// FUN_1088_03a3(y, x).
     pub fn pickup(&mut self, y: i32, x: i32) {
         if std::env::var("ET_DEBUG").is_ok() {

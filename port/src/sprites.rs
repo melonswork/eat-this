@@ -50,14 +50,37 @@ fn i16_at(b: &[u8], at: usize) -> i32 {
     i16::from_le_bytes([b[at], b[at + 1]]) as i32
 }
 
-fn load(slot: u16) -> Boxes {
+/// Slots only the drawing code uses (FUN_1088_d073 loads them). Kept apart from SLOTS so that
+/// hit-box lookups behave exactly as before.
+const DRAW_SLOTS: &[(u16, &str)] = &[(0x1b, "PPGLIGHT"), (0x73, "FACBROCK")];
+
+fn slot_name(slot: u16, draw: bool) -> Option<String> {
     let level = (slot >= 0x32)
         .then(|| LEVEL_GROUPS.get().and_then(|g| g.get(slot as usize - 0x32)))
         .flatten()
         .filter(|n| !n.is_empty())
         .map(|n| n.trim_end_matches(".spr").trim_end_matches(".SPR").to_ascii_uppercase());
-    let fixed = SLOTS.iter().find(|(s, _)| *s == slot).map(|&(_, n)| n.to_string());
-    let Some(name) = fixed.or(level) else {
+    let fixed = SLOTS
+        .iter()
+        .chain(if draw { DRAW_SLOTS } else { &[] })
+        .find(|(s, _)| *s == slot)
+        .map(|&(_, n)| n.to_string());
+    fixed.or(level)
+}
+
+/// Groups FUN_1088_d073 loads through FUN_1088_4518, which skips the palette fitting
+/// (FUN_10f0_1a99): their pixels are raw indices, mostly into the mix tables.
+pub fn raw(slot: u16) -> bool {
+    matches!(slot, 0x1b | 0x73 | 0x75)
+}
+
+/// The file behind sprite group `slot`, for drawing.
+pub fn path(slot: u16) -> Option<PathBuf> {
+    Some(DIR.get()?.join(format!("{}.SPR", slot_name(slot, true)?)))
+}
+
+fn load(slot: u16) -> Boxes {
+    let Some(name) = slot_name(slot, false) else {
         eprintln!("warning: sprite slot {slot:#x} unknown");
         return Vec::new();
     };
