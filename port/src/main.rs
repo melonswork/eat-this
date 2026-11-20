@@ -734,6 +734,7 @@ impl Game {
             self.hero_death_effects();
         }
         self.level.storm_frame(&mut self.rng);
+        self.level.rain_splashes(&self.world, (self.camera.x, self.camera.y));
         self.level.water_frame(&self.world);
         // START's foreground (FUN_1090_0ace): the ship the hero was thrown from is a platform
         // (FUN_1070_00b6 on each of sprite 0x3700's plain boxes).
@@ -870,8 +871,9 @@ struct Graphics {
     show_hud: bool,
     /// GameStats (1a92): 0 none, 1 the status bar, 2 also the counters.
     hud_level: i32,
-    /// The rain (1170:512c): 90 drops (x < 0x148, y < 0xd0) drawn at boot under RandSeed 1000.
-    rain: Vec<(i32, i32)>,
+    /// The palette after script command 0x16 starts the storm (FUN_1088_293a: each colour 3/4
+    /// of the way to its grey, (r * 0x12b + g * 0x24b + b * 0x72) / 1000).
+    storm_palette: Palette,
     /// 1170:512a: the level colour nearest to RGB (0x10, 0x14, 0x19) (FUN_10f0_6039): the rain
     /// is PalMix[512a][pixel].
     rain_colour: u8,
@@ -974,12 +976,21 @@ impl Graphics {
         // The lists keep the farthest last and are drawn from the end.
         decor.sort_by_key(|d| d.depth);
         let colors6 = level.colors;
+        let storm_palette = LevelPalette {
+            colors: colors6.map(|c| {
+                let lum = (c[0] as i32 * 0x12b + c[2] as i32 * 0x72 + c[1] as i32 * 0x24b) / 1000;
+                c.map(|v| ((v as i32 * 0xc0 + lum * 0x40) / 0x100) as u8)
+            }),
+            foreground: level.foreground,
+        }
+        .rgb();
         Ok(Graphics {
             background: bg::Background {
                 proc_: script.map_or(0, |s| s.background_proc),
                 picture,
                 groups,
                 mix,
+                sky_flash: tables.light.as_ref().map(|t| t[0x80 * 256..0x81 * 256].to_vec()),
             },
             camera: None,
             bg_only: false,
@@ -990,10 +1001,7 @@ impl Graphics {
             decor,
             show_hud: true,
             hud_level: 2,
-            rain: {
-                let mut r = rng::PascalRandom::new(1000);
-                (0..0x5a).map(|_| (r.random(0x148), r.random(0xd0))).collect()
-            },
+            storm_palette,
             rain_colour: {
                 // FUN_10f0_6039(b, g, r): the smallest (dr^2 + dg^2)^2 + db^4, the first one.
                 let d = |c: [u8; 3]| -> i64 {
@@ -1005,10 +1013,16 @@ impl Graphics {
         })
     }
 
+    /// The palette `g` shows: the level's, darkened once START's storm runs (1170:4eda > 0).
+    pub fn palette_of(&self, g: &Game) -> Palette {
+        if g.level.storm.level > 0 { self.storm_palette } else { self.palette }
+    }
+
     /// Indexed frame -> RGB24.
-    fn present(&self, fb: &[u8], rgb: &mut [u8]) {
+    fn present(&self, g: &Game, fb: &[u8], rgb: &mut [u8]) {
+        let pal = self.palette_of(g);
         for (px, &i) in rgb.chunks_exact_mut(3).zip(fb) {
-            px.copy_from_slice(&self.palette[i as usize]);
+            px.copy_from_slice(&pal[i as usize]);
         }
     }
 
@@ -1017,7 +1031,8 @@ impl Graphics {
         let (cam_x, cam_y) = self.camera.unwrap_or((g.camera.x, g.camera.y));
         // The level frame counter as the original's draw sees it: frames completed before this one.
         let frame = g.frame.saturating_sub(1);
-        self.background.draw(fb, (cam_x, cam_y), frame);
+        let st = &g.level.storm;
+        self.background.draw(fb, (cam_x, cam_y), frame, st.sky_flash > 0 && st.kind == 1);
         if self.bg_only {
             return;
         }
@@ -1100,6 +1115,18 @@ impl Graphics {
         // The level's foreground proc: the water, the sector's foreground decor (list +0x2a).
         draw::water(&mut p, &g.level, &g.world);
         self.decor(fb, g, sector, true, (cam_x, cam_y), frame);
+        if g.level.storm.level > 0 {
+            // FUN_1090_0567 (START's foreground): the front drops, and a lightning flash of kind
+            // 0 tints the whole screen (tint row 3) three frames in six.
+            self.rain(fb, g, 0x1e, frame);
+            let st = &g.level.storm;
+            if st.flash > 0 && st.kind == 0 && st.flash % 6 < 3 {
+                let row = &self.tables.tint[3 * 256..4 * 256];
+                for px in fb.iter_mut() {
+                    *px = row[*px as usize];
+                }
+            }
+        }
         self.hud(fb, g, frame);
     }
 
@@ -1127,20 +1154,22 @@ impl Graphics {
                 self.layer(fb, g, pl, 1, (cam.0 >> 1, 0x38 - y), frame);
             }
         }
-        let n = g.level.storm.level / 0x20;
-        if let (true, Some(mix)) = (n > 0, self.tables.mix.as_deref()) {
-            // Each drop: 4 pixels going down-left, through PalMix row 512a.
-            let t = (frame as u16).wrapping_mul(3);
-            let row = self.rain_colour as usize * 256;
-            for &(dx, dy) in self.rain.iter().take(n as usize).rev() {
-                let x = ((0x148u16.wrapping_sub(t) as i32 + dx) % 0x148) as i32;
-                let y = ((t as i32 + dy) % 0xd0) - 3;
-                for k in 0..4 {
-                    let (px, py) = (x - k, y + k);
-                    if (0..W).contains(&px) && (0..H).contains(&py) {
-                        let at = (py * W + px) as usize;
-                        fb[at] = mix[row + fb[at] as usize];
-                    }
+        self.rain(fb, g, 0, frame);
+    }
+
+    /// FUN_1090_0418 (`first` 0, behind the tiles) / FUN_1090_0567 (0x1e, in front): storm level
+    /// / 32 drops (4f0c), each 4 pixels going down-left through PalMix row 512a (FUN_1090_0390).
+    fn rain(&self, fb: &mut [u8], g: &Game, first: usize, frame: u32) {
+        let n = (g.level.storm.level / 0x20).max(0) as usize;
+        let Some(mix) = self.tables.mix.as_deref() else { return };
+        let row = self.rain_colour as usize * 256;
+        for &d in storm::rain_drops()[first..first + n].iter().rev() {
+            let (x, y) = storm::drop_at(d, frame);
+            for k in 0..4 {
+                let (px, py) = (x - k, y - 3 + k);
+                if (0..W).contains(&px) && (0..H).contains(&py) {
+                    let at = (py * W + px) as usize;
+                    fb[at] = mix[row + fb[at] as usize];
                 }
             }
         }
@@ -1580,7 +1609,7 @@ fn run_window(
             next += tick;
         }
         gfx.draw(&game, &mut fb);
-        gfx.present(&fb, &mut rgb);
+        gfx.present(&game, &fb, &mut rgb);
         tex.update(None, &rgb, W as usize * 3)?;
         canvas.copy(&tex, None, None)?;
         canvas.present();
@@ -1610,7 +1639,7 @@ fn screenshot(mut game: Game, gfx: &Graphics, frames: u32, path: &Path) -> std::
         return std::fs::write(path, &fb); // the raw indexed frame, for comparing with tools/dumpframe.py
     }
     let mut rgb = vec![0u8; (W * H * 3) as usize];
-    gfx.present(&fb, &mut rgb);
+    gfx.present(&game, &fb, &mut rgb);
     let mut out = format!("P6\n{W} {H}\n255\n").into_bytes();
     out.extend(&rgb);
     std::fs::write(path, out)

@@ -17,6 +17,8 @@ pub struct Background {
     pub groups: Vec<Option<SpriteGroup>>,
     /// The level's PalMix table, for the translucent draw mode.
     pub mix: Option<Vec<u8>>,
+    /// Row 0x80 of PalMixLight: the city sky during a lightning flash.
+    pub sky_flash: Option<Vec<u8>>,
 }
 
 /// Row `y` of the picture copied to the screen row with the picture shifted left by `shift`
@@ -73,11 +75,12 @@ impl Background {
 
     /// `frame` is the level frame counter as the original's draw sees it (frames completed before
     /// this one), (cam_x, cam_y) the camera.
-    pub fn draw(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
+    /// `flash`: a lightning flash of kind 1 lights the city's sky (4edc > 0, 4ede = 1).
+    pub fn draw(&self, fb: &mut [u8], cam: (i32, i32), frame: u32, flash: bool) {
         match self.proc_ {
             // 0 is FUN_1090_075c (decor only: CITY01's city comes from it); 16 (START, CITY) is
             // FUN_1090_0ace: the city, then the bridge and the rain (main.rs), the decor, the truck.
-            0 | 16 => self.city(fb, cam, frame),
+            0 | 16 => self.city(fb, cam, frame, flash),
             3 => self.sea(fb, cam, frame),
             6 => {
                 // FUN_1090_1a06 (GRINDER): the second group's backdrop at 1/4 of the camera,
@@ -102,10 +105,17 @@ impl Background {
     /// below scrolls faster with every row, in fixed point (`acc / 248`); then the skyline strip
     /// and its reflection (draw mode 0x30: through the PalMix table) ride at the horizon's speed. Not
     /// drawn: the little screen on a building (`DAT_4d9c`).
-    fn city(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
+    fn city(&self, fb: &mut [u8], cam: (i32, i32), frame: u32, flash: bool) {
         let sky = -((frame >> 3) as i32 % W);
         self.sprite(0, 1, fb, sky, 0);
         self.sprite(0, 1, fb, sky + W, 0);
+        if let (true, Some(row)) = (flash, &self.sky_flash) {
+            // Mode 0x2c through PalMixLight with colour 0x80: the sky's pixels lit.
+            // (The sky sprite covers rows 0..119; its colour-0 pixels stay as they were.)
+            for px in fb[..(W * 120) as usize].iter_mut().filter(|p| **p != 0) {
+                *px = row[*px as usize];
+            }
+        }
         let Some(pic) = &self.picture else { return };
         let horizon = ((cam.0 + 0x640) / 16 % W) as usize;
         for y in [0x7a, 0x7b] {

@@ -330,7 +330,7 @@ impl FrontEnd {
         self.in_game = false;
         if !self.back_is_snapshot {
             if let Some(r) = &self.level {
-                let lp: [[u8; 3]; 256] = r.gfx.palette.map(|c| c.map(|v| v >> 2));
+                let lp: [[u8; 3]; 256] = r.gfx.palette_of(&r.game).map(|c| c.map(|v| v >> 2));
                 let row = gfx::grey_row(&lp);
                 for (b, &p) in self.gfx.back.iter_mut().zip(&self.game_fb) {
                     *b = row[p as usize];
@@ -1328,7 +1328,7 @@ impl FrontEnd {
         let pal = if self.in_game {
             let r = self.level.as_ref().unwrap();
             r.gfx.draw(&r.game, &mut fb);
-            r.gfx.palette.map(|c| c.map(|v| v >> 2))
+            r.gfx.palette_of(&r.game).map(|c| c.map(|v| v >> 2))
         } else {
             self.gfx.palette
         };

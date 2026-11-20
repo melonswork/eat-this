@@ -11,9 +11,46 @@ pub struct Storm {
     pub flash: i32,
     pub kind: i32,
     pub due: u32,
+    /// The flash (4edc) as the background proc saw it this frame (only drawing reads it).
+    pub sky_flash: i32,
+}
+
+/// The rain (1170:512c): 90 drops (x < 0x148, y < 0xd0) drawn at boot under RandSeed 1000.
+/// Drops 0.. fall behind the tiles (FUN_1090_0418), drops 0x1e.. in front (FUN_1090_0567).
+pub fn rain_drops() -> &'static [(i32, i32)] {
+    static DROPS: std::sync::OnceLock<Vec<(i32, i32)>> = std::sync::OnceLock::new();
+    DROPS.get_or_init(|| {
+        let mut r = PascalRandom::new(1000);
+        (0..0x5a).map(|_| (r.random(0x148), r.random(0xd0))).collect()
+    })
+}
+
+/// Where drop `d` is on the screen when the level frame counter is `now` (before the -3 of
+/// FUN_1090_0390, which draws it from 3 rows above, going down-left).
+pub fn drop_at(d: (i32, i32), now: u32) -> (i32, i32) {
+    let t = (now as u16).wrapping_mul(3);
+    ((0x148u16.wrapping_sub(t) as i32 + d.0) % 0x148, (t as i32 + d.1) % 0xd0)
 }
 
 impl Level {
+    /// FUN_1090_0567 (START's foreground, while the storm runs): the front drops that meet the
+    /// top of a solid tile splash there (sprite 0x615, colour 0x10).
+    pub fn rain_splashes(&mut self, world: &crate::world::World, cam: (i32, i32)) {
+        let n = self.storm.level / 0x20;
+        if self.storm.level <= 0 || n <= 0 {
+            return;
+        }
+        for k in (0x1e..0x1e + n as usize).rev() {
+            let (sx, sy) = drop_at(rain_drops()[k], self.now);
+            let (x, y) = (sx + cam.0 - 4, sy + cam.1);
+            if world.solidity_at(y, x) & 0x201 != 0 && world.solidity_at(y - 4, x) & 0x201 == 0 {
+                self.particles.p.colour = 0x10;
+                self.particles.spawn_seq(0x615, 4, 3, y & !15, x, 1);
+                self.particles.p.colour = 0;
+            }
+        }
+    }
+
     /// FUN_1088_11a3: thunder of the given kind.
     fn thunder(&mut self, rng: &mut PascalRandom, kind: i32) {
         self.storm.kind = kind;
@@ -42,6 +79,8 @@ impl Level {
 
     /// FUN_1090_04d7 (from START's foreground): the storm ages and thunders when it is due.
     pub fn storm_frame(&mut self, rng: &mut PascalRandom) {
+        // The background proc (the city's sky) drew the flash as it was before this.
+        self.storm.sky_flash = self.storm.flash;
         if self.storm.level <= 0 {
             return;
         }
