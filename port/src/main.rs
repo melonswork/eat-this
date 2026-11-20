@@ -716,6 +716,8 @@ struct Graphics {
     /// LoadExtraMap= maps (plane slots 8..): PLANE 0 of each (FUN_10f0_5e9f).
     extra: Vec<Option<world::Plane>>,
     decor: Vec<Decor>,
+    /// Draw the pointer and the status bar (H toggles it in the window).
+    show_hud: bool,
 }
 
 impl Graphics {
@@ -827,6 +829,7 @@ impl Graphics {
             tables,
             extra,
             decor,
+            show_hud: true,
         })
     }
 
@@ -886,7 +889,9 @@ impl Graphics {
             p.at(0x3700, ship.0, ship.1);
             p.at_mode(0x28, 0x3800, ship.0, ship.1);
         }
+        draw::doors(&mut p, &g.level);
         draw::decals(&mut p, &g.level);
+        draw::platform_objects(&mut p, &g.level);
         draw::particles(&mut p, &g.level, &g.world, 0);
         draw::actors(&mut p, &g.level);
         draw::hero_and_drone(&mut p, &g.hero, &g.level.particles.drone);
@@ -894,6 +899,31 @@ impl Graphics {
         draw::particles(&mut p, &g.level, &g.world, 1);
         // The level's foreground proc: the sector's foreground decor (list +0x2a).
         self.decor(fb, g, sector, true, (cam_x, cam_y), frame);
+        self.hud(fb, g, frame);
+    }
+
+    /// The pointer and the status bar (FUN_1088_4b64), over everything.
+    fn hud(&self, fb: &mut [u8], g: &Game, frame: u32) {
+        if !self.show_hud {
+            return;
+        }
+        let mut p = render::Painter {
+            fb,
+            bank: &self.bank,
+            tables: &self.tables,
+            cam: (0, 0),
+            fg: self.bank.foreground(),
+            mode: 0,
+            colour: 0,
+            key: 0,
+            hflip: false,
+            vflip: false,
+            mix: render::Mix::Level,
+            frame,
+            flash: draw::FLASH,
+            clip: render::SCREEN,
+        };
+        draw::hud(&mut p, &g.hero);
     }
 
     /// FUN_1068_09bf over the sector's decor list: each layer is an extra map drawn with its
@@ -1109,7 +1139,7 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) 
     );
 }
 
-fn run_window(mut game: Game, gfx: Graphics, scale: u32) -> Result<(), Box<dyn Error>> {
+fn run_window(mut game: Game, mut gfx: Graphics, scale: u32) -> Result<(), Box<dyn Error>> {
     use sdl2::{event::Event, keyboard::Scancode, pixels::PixelFormatEnum};
     let sdl = sdl2::init()?;
     let window = sdl
@@ -1142,13 +1172,18 @@ fn run_window(mut game: Game, gfx: Graphics, scale: u32) -> Result<(), Box<dyn E
     let mut next = Instant::now();
     'main: loop {
         for e in events.poll_iter() {
-            if let Event::Quit { .. }
-            | Event::KeyDown {
-                scancode: Some(Scancode::Escape),
-                ..
-            } = e
-            {
-                break 'main;
+            match e {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    scancode: Some(Scancode::Escape),
+                    ..
+                } => break 'main,
+                Event::KeyDown {
+                    scancode: Some(Scancode::H),
+                    repeat: false,
+                    ..
+                } => gfx.show_hud = !gfx.show_hud,
+                _ => {}
             }
         }
         while Instant::now() >= next {

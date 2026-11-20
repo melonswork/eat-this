@@ -464,3 +464,261 @@ fn shine(p: &mut Painter, id: i32, x: i32, y: i32) {
     p.sprite(id, x, y);
     p.mode = 0;
 }
+
+/// FUN_1060_14a7: the platform objects whose box meets the screen, the default sector's then
+/// the hero's sector's, each through the draw procedure of its row in the table at 1170:09ce
+/// (14-byte rows: sprite, width, _, link sprite, height | key << 8, _, procedure). The
+/// procedure column is filled at run time; these are its values (seen in CITY01).
+pub fn platform_objects(p: &mut Painter, level: &Level) {
+    use crate::world::ds_word;
+    let sector = level.sector.unwrap_or(0);
+    let (cx, cy) = p.cam;
+    let mut order: Vec<&crate::platobj::PlatObj> = level.plat_objs.iter().filter(|o| o.sector == 0).collect();
+    if sector != 0 {
+        order.extend(level.plat_objs.iter().filter(|o| o.sector == sector));
+    }
+    for o in order {
+        let (x1, y1, x2, y2) = o.bbox;
+        if !(x1 <= cx + 0x13f && y1 <= cy + 199 && cx <= x2 && cy <= y2) {
+            continue;
+        }
+        let row = o.row;
+        let at = |k: usize| ds_word(0x9ce + row * 14 + k);
+        let (sprite, link, h) = (at(0), at(6), at(8) & 0xff);
+        const PROCS: [u16; 11] = [0x1cee, 0x1a25, 0x1a25, 0x1cee, 0x1a25, 0x1e13, 0x1e88, 0x1e13, 0x2242, 0x2079, 0x1e13];
+        match PROCS.get(row).copied().unwrap_or(0x1a25) {
+            0x1cee => {
+                // FUN_1060_1cee: a light under it (unless it is sprite 0x3600), then itself.
+                if sprite != 0x3600 {
+                    p.at_mode(0x28, 0x1b01, o.x, o.y);
+                }
+                p.at(sprite, o.x, o.y);
+            }
+            0x1e13 => {
+                // FUN_1060_1e13: blinks while it moves.
+                let mut s = sprite;
+                if o.angle != o.prev_angle {
+                    s += (o.angle >> (h & 0x1f)) & 1;
+                }
+                p.at(s, o.x, o.y);
+            }
+            0x2242 => {
+                // FUN_1060_2242: a lift hanging from two cables, a chain between them.
+                let (top, bottom) = (o.bbox.1 + 0x10 - cy, o.bbox.3 - 0x10 - cy);
+                let phase = 0xf - ((o.stops.1 - o.y) & 0xf);
+                rope(p, 8, 0, phase, top, bottom, o.x + 7 - cx);
+                rope(p, 8, 0, phase, top, bottom, o.x + 0x17 - cx);
+                rope(p, 0xc, 1, ((o.stops.1 - o.y) >> 2) & 0xf, top, bottom, o.x + 0xf - cx);
+                p.at(sprite, o.x, o.y);
+            }
+            _ => {
+                // FUN_1060_1a25 (and the turning ones, 1e88 / 2079, drawn plainly): the chain
+                // of a swinging platform from its pivot, then the platform.
+                if o.kind == 1 && link != 0x7fff {
+                    if let Some(&(px, py)) = o.points.first() {
+                        let a = o.angle.rem_euclid(0x1680);
+                        let (c, sn) = (crate::trig::cos(a), crate::trig::sin(a));
+                        for k in 0..o.radius {
+                            p.at(link, px + (c * h * k) / 0x4000, py - (sn * h * k) / 0x4000);
+                        }
+                    }
+                }
+                p.at(sprite, o.x, o.y);
+            }
+        }
+        p.reset();
+    }
+}
+
+/// FUN_1050_5cb0(w, kind, phase, top, bottom, x): a vertical rope (kind's sprites in the table
+/// at 1170:0942: segment, end, spacing) from `bottom` (+ `phase`) up to `top`, the last `w`
+/// pixels in the end sprite. Screen coordinates.
+fn rope(p: &mut Painter, w: i32, kind: usize, phase: i32, top: i32, bottom: i32, x: i32) {
+    use crate::world::ds_word;
+    if top > bottom {
+        return;
+    }
+    let seg = ds_word(0x942 + kind * 6);
+    let end = ds_word(0x944 + kind * 6);
+    let step = ds_word(0x946 + kind * 6) & 0xff;
+    if step <= 0 {
+        return;
+    }
+    let save = p.clip;
+    let mut y = bottom + phase;
+    p.clip.3 = bottom.min(save.3);
+    p.clip.1 = (top + w).max(save.1);
+    while y >= p.clip.1 {
+        p.sprite(seg, x, y);
+        y -= step;
+    }
+    if w > 0 && end != 0x7fff && end >= 0 {
+        p.clip.3 = (top + w - 1).min(save.3);
+        p.clip.1 = top.max(save.1);
+        y += step;
+        while y >= p.clip.1 {
+            p.sprite(end, x, y);
+            y -= step;
+        }
+    }
+    p.clip = save;
+}
+
+/// FUN_10a8_0dab's drawing: each moving door through its type's procedure (1170:19da + 0xd *
+/// type: sprite, full, procedure, sounds, top and bottom piece heights; these are the values
+/// the table holds at run time). The door's own cells are cleared while it moves.
+pub fn doors(p: &mut Painter, level: &Level) {
+    // (sprite, full, procedure, top piece, bottom piece)
+    const T: [(i32, i32, u16, i32, i32); 8] = [
+        (0x3400, 32, 0x0002, 8, 1),
+        (0x340b, 16, 0x01f5, 0, 0),
+        (0x340d, 16, 0x01f5, 0, 0),
+        (0x340f, 32, 0x02ce, 0, 0),
+        (0x3400, 32, 0x0537, 0, 0),
+        (0x3403, 32, 0x07c1, 0, 0),
+        (0x3412, 32, 0x0454, 0, 0),
+        (0x3405, 32, 0x0665, 0, 0),
+    ];
+    for d in &level.doors {
+        let Some(&(base, full, proc_, top, bot)) = T.get(d.kind) else { continue };
+        let (x, y) = (d.x * 16 - p.cam.0, d.y * 16 - p.cam.1);
+        let prog = d.progress;
+        let bottom = y + d.h * 16;
+        // The swing of the hinged ones: amp * sin(0x5a0 - progress * 0x5a0 / 32).
+        let swing = |amp: i32| {
+            let a = 0x5a0 - ((((prog * 0x5a0) as u16) >> 5) as i32);
+            (amp * crate::trig::sin(a.rem_euclid(0x1680))) / 0x4000
+        };
+        let save = p.clip;
+        match proc_ {
+            0x0002 => {
+                // FUN_10a8_0002: slides up into its frame (top piece), a sill below.
+                if top != 0 {
+                    p.clip.1 = y.max(save.1);
+                    p.clip.3 = (y + top - 1).min(save.3);
+                    p.sprite(base + 2, x, y + prog);
+                    p.clip = save;
+                }
+                p.clip.1 = (y + top).max(save.1);
+                p.sprite(base, x, y + prog);
+                p.clip = save;
+                if bot != 0 {
+                    p.clip.3 = (bottom - 1).min(save.3);
+                    p.sprite(base + 1, x, bottom - prog);
+                }
+            }
+            0x01f5 | 0x02ce => {
+                // FUN_10a8_01f5 / 02ce: two leaves part sideways (02ce: and a shutter drops).
+                p.clip.0 = x.max(save.0);
+                p.clip.2 = (x + d.w * 16 - 1).min(save.2);
+                let u = if proc_ == 0x01f5 { full - prog } else { ((full - prog) as u16 >> 1) as i32 };
+                p.sprite(base, x - u, y);
+                p.sprite(base + 1, x + u, y);
+                p.clip = save;
+                if proc_ == 0x02ce {
+                    p.clip.1 = y.max(save.1);
+                    p.sprite(base + 2, x, y - 0x40 + swing(0x40));
+                }
+            }
+            0x0454 => {
+                // FUN_10a8_0454: a folding grille, a light over it.
+                p.clip.1 = y.max(save.1);
+                let i4 = y - 0x22 + prog;
+                for k in 0..=10 {
+                    p.sprite(base + 1, x, (k * (prog + 0x21)) / 0xb + i4);
+                }
+                p.sprite(base, x, i4 + prog + 0x21);
+                p.clip = save;
+                p.mode = 0x28;
+                p.sprite(0x1b09, x, y);
+            }
+            0x0537 | 0x07c1 => {
+                // FUN_10a8_0537 / 07c1: jaws opening up and down, a light over them.
+                let k = swing(0x20);
+                p.clip.1 = (y + if proc_ == 0x0537 { 3 } else { 0xb }).max(save.1);
+                p.sprite(base, x, y - k);
+                p.clip = save;
+                p.clip.3 = (bottom - 1).min(save.3);
+                p.sprite(base + 1, x, y + k);
+                p.clip = save;
+                if proc_ == 0x0537 {
+                    p.sprite(base + 2, x, y);
+                }
+                p.mode = 0x28;
+                p.sprite(if proc_ == 0x0537 { 0x1b02 } else { 0x1b03 }, x, y);
+            }
+            _ => {
+                // FUN_10a8_0665: a lid up, two leaves sideways, a light.
+                p.clip.1 = y.max(save.1);
+                p.sprite(base, x, y - swing(0x20));
+                p.clip = save;
+                p.clip.0 = (x + 1).max(save.0);
+                p.sprite(base + 1, x - (0x20 - prog), y);
+                p.clip = save;
+                p.clip.2 = (x + 0x1e).min(save.2);
+                p.sprite(base + 2, x + (0x20 - prog), y);
+                p.clip = save;
+                p.mode = 0x28;
+                p.sprite(0x1b09, x, y);
+            }
+        }
+        p.reset();
+    }
+}
+
+/// FUN_1088_4b64's pointer and FUN_1088_2501's status bar (HUD level 1: health, keys left out,
+/// the right button's weapon and its ammo). Screen coordinates; ETSCORE is slot 0x1f.
+pub fn hud(p: &mut Painter, hero: &crate::hero::Hero) {
+    use crate::world::ds_word;
+    p.reset();
+    let byte = |a: usize| ds_word(a) & 0xff;
+    let w = hero.weapon;
+    let rec = 0x1656 + (w.max(0) as usize) * 0xd;
+    // The pointer: two frames blinking every 12, plus the weapon's own (record +5).
+    let mut ptr = 0x7800 + (per(p, 12) & 1);
+    if w >= 0 {
+        ptr += byte(rec + 5);
+    }
+    let (mx, my) = hero.gun_mouse();
+    p.mode = 0x30;
+    p.sprite(ptr, mx, my);
+    // Health: the frame, then the bar cut at its length (health * 0x47 / 0x2c6); red when low.
+    let len = hero.health.clamp(0, 0x2c6) * 0x47 / 0x2c6;
+    p.sprite(0x1f0d, 4, 0xc6);
+    p.mode = 4;
+    if len < 9 {
+        p.mix = Mix::Light;
+        p.mode = 0x2c;
+        p.colour = ((per(p, 4) & 1) * 5 + 0x1f) as u8;
+    }
+    p.clip.2 = len + 0x1b;
+    p.sprite(0x1f0b, 4, 0xc6);
+    p.reset();
+    let x = 4;
+    p.mode = 4;
+    p.sprite(0x1f0a, x, 0xc6);
+    if w >= 0 {
+        let wp = &hero.weapons[w as usize];
+        let x2 = x + 99;
+        if byte(rec + 4) == 1 {
+            // Six pips.
+            let n = (wp.ammo * 6 + wp.max - 5) / (wp.max + 1);
+            for k in 0..n.min(6) {
+                p.sprite(0x1f0e, k * 2 + x2, 0xbe);
+            }
+            for k in n.max(0)..6 {
+                p.sprite(0x1f0f, k * 2 + x2, 0xbe);
+            }
+        } else {
+            p.sprite(wp.ammo / 10 + 0x1f00, x2, 0xbe);
+            p.sprite(wp.ammo % 10 + 0x1f00, x + 0x68, 0xbe);
+        }
+    }
+    p.mode = 0x30;
+    p.sprite(0x1f0c, x, 0xc6);
+    if w >= 0 {
+        p.mode = 4;
+        p.sprite(0x1f14 + w, x, 0xc6);
+    }
+    p.reset();
+}
