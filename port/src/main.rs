@@ -1296,8 +1296,11 @@ fn run_window(
                 game.step(keys);
             }
             if std::mem::take(&mut game.restart) {
-                // GameFrame 4e60 = 10: HeroReset, the level loaded again (LevelInit randomizes).
+                // GameFrame 4e60 = 10: HeroReset, the level loaded again (LevelInit randomizes),
+                // one more try (4dc2).
+                let tries = game.level.tries + 1;
                 (game, gfx) = load(&map_path)?;
+                game.level.tries = tries;
             }
             if std::mem::take(&mut game.level_over) {
                 // GameFrame 4e60 = 100: the video and the stats screen (1080:172a, front end),

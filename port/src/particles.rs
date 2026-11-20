@@ -1669,7 +1669,12 @@ impl Level {
             }
             ps.p.on_death = 0;
             ps.p.hits = 0;
-            eprintln!("warning: effect 23 (FUN_1040_2af4) and its FUN_1050_4a29 not ported");
+            // Effect 23 (FUN_1040_2af4): a flash of fire, scaled by FUN_1050_4a29(0x180, 0x400).
+            ps.spawn_seq(0x6900, 2, 0x19, y - 2, x - 2, 1);
+            let m = &mut ps.last_mut().m;
+            m.set(0x1c, 0x400);
+            m.set(0x1e, 0x180);
+            m.set(0x42, 0x2148);
             fx.shakes.push((0x18, 0xc));
             // FUN_1050_5a07: the tile below steps on (function 2), FUN_1088_1364.
             let below = idx + width as usize;
@@ -1906,6 +1911,27 @@ impl Level {
                             self.lay_decal(f.world, crate::decals::DROP, draw, sprite, py, px);
                         }
                     }
+                }
+            }
+            27 => {
+                // FUN_1040_2f98: a burning bit bounces (effect 16); landing slowly (under 2.67 px
+                // a frame, not on a ceiling) it flares (FUN_1040_6120) and lies smoking
+                // (FUN_1040_637a).
+                let v = self.bounce_off(f);
+                let (hi, lo) = (v >> 16, v as u32 & 0xffff);
+                if hi >= 0 && (hi < 2 || (hi < 3 && lo < 0xaaab)) && self.particles.hit_side != 2 {
+                    let ps = &mut self.particles;
+                    ps.spawn_seq(0x6800, 2, 0xf, y, x, 1);
+                    f.rng.random(0x14); // the sound's pitch
+                    f.fx.shakes.push((0x12, 5));
+                    ps.p.callback = 0x18e6;
+                    ps.p.colour = 0x10;
+                    ps.spawn_seq(0x6a00, 1, 0x17e, y, x, 0);
+                    let m = &mut ps.last_mut().m;
+                    m.set(0x1c, 0x200);
+                    m.set(0x1e, 0x200);
+                    ps.p.colour = 0;
+                    ps.p.callback = 0;
                 }
             }
             15 => {

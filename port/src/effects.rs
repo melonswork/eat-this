@@ -3,7 +3,7 @@
 
 use crate::level::{Effects, Level};
 use crate::rng::PascalRandom;
-use crate::world::{OUTSIDE, World};
+use crate::world::{MAIN_PLANE, OUTSIDE, World};
 
 /// FUN_1040_60bb: effect `id` at (y, x); ids >= 30000 are plain sounds. The effect procedures
 /// are the table at 1170:07b2 (filled at run time; `mise run trace -- ... --dump-mem 1170:07b2:200`).
@@ -310,6 +310,32 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
         }
         // Seen in GRINDER with no Random() calls in the tracer.
         76 => {}
+        53 => {
+            // FUN_1040_5503: the tile `function - 60701` tiles to the right blows up if it is a
+            // 60705 (FUN_1050_5a33(0x60, 4)).
+            let f = world.tile_function_at(y, x) as i16 as i32;
+            let x = x + (f + 0x12e3) * 0x10;
+            if world.tile_function_at(y, x) as i16 == -0x12df {
+                explode_tile(lv, world, 0x60, 4, y, x, rng, fx);
+            }
+        }
+        54 => {
+            // FUN_1040_553e: with no floor tile above, the main-plane cell steps on by 2
+            // (FUN_10f0_5b14).
+            if world.solidity_at(y - 0x10, x) & 2 == 0 && world.cell_at(MAIN_PLANE, y, x).is_some() {
+                let w = world.main().width;
+                let idx = ((y >> 4) * w + (x >> 4)) as usize;
+                let c = &mut world.main_mut().cells[idx];
+                *c = c.wrapping_add(2);
+            }
+        }
+        93 => {
+            // FUN_1040_341a: on the first two tries of a level the tile goes.
+            if lv.tries < 2 && world.cell_at(MAIN_PLANE, y, x).is_some() {
+                let w = world.main().width;
+                world.main_mut().cells[((y >> 4) * w + (x >> 4)) as usize] = 0;
+            }
+        }
         id if id >= 30000 => {}
         id => eprintln!("warning: effect {id} not ported"),
     }
