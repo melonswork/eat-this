@@ -24,6 +24,7 @@ mod frontend;
 mod gunship;
 mod hero;
 mod level;
+mod messages;
 mod objects;
 mod particles;
 mod palette;
@@ -174,6 +175,8 @@ struct Game {
     weapon_key: Option<usize>,
     /// The level's totals (4eb2 kills, 4eae hidden areas, 4eaa bios spheres) for the HUD.
     totals: level::Tally,
+    /// The message box (1170:4f10..5114), only drawn.
+    messages: messages::MessageBox,
 }
 
 #[derive(Default)]
@@ -254,6 +257,7 @@ impl Game {
             live_mouse: None,
             weapon_key: None,
             totals,
+            messages: messages::MessageBox::default(),
         };
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
         let hero_at = (g.hero.x, g.hero.y);
@@ -271,6 +275,7 @@ impl Game {
             let (y, x) = (g.hero.y - 0x10, g.hero.x);
             crate::effects::explode_tile(&mut g.level, &mut g.world, 0x60, 0x104, y, x, &mut g.rng, &mut fx);
         }
+        g.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
         for &(a, b) in &fx.shakes {
             g.camera.shake(a, b);
         }
@@ -312,6 +317,8 @@ impl Game {
             self.hero.weapon_pickup(f3);
             self.level.particles.weapon_pickup(f3 as i32, y, x);
         } else if effect == 6 {
+            // GOT THE BATTLE DRONE / BATTLE DRONE UPGRADED.
+            self.hero.messages.push((if self.level.particles.drone.active < 1 { -34 } else { -35 }, false));
             self.level.particles.drone.pickup(y, x);
         } else if effect == 1 {
             // FUN_1040_014a: health +10 (1170:4e6c, a heart), a counter 4ea8 += 1, sparks.
@@ -321,6 +328,7 @@ impl Game {
         } else if effect == 70 {
             // FUN_1040_043c: a key (1170:5104 + f3), sparks like a weapon's.
             self.hero.keys[(f3 as usize) & 0xf] = true;
+            self.hero.messages.push((-0x15 - (f3 as i32 - 0x14), false));
             self.level.particles.weapon_pickup(f3 as i32, y, x);
         } else if effect != 0 && effect < 30000 {
             eprintln!("warning: pick-up effect {effect} not ported");
@@ -360,6 +368,7 @@ impl Game {
             let mut fx = Effects::default();
             self.level.release_tile_events(&mut self.world, &mut fx, self.hero.x);
             self.flush_spawns(&mut fx);
+            self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
             for &(a, b) in &fx.shakes {
                 self.camera.shake(a, b);
             }
@@ -578,10 +587,19 @@ impl Game {
             let (effect, f3) = (self.world.cell_function(tile, 4), self.world.cell_function(tile, 3));
             self.pick_effect(effect, f3, y, x);
         }
+        // Script command 0x0b: HeroDamage(id), a message.
+        self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
         for &(a, b) in &fx.shakes {
             self.camera.shake(a, b);
         }
-        // FUN_1088_2501 (the status bar; it only feeds the HUD).
+        // FUN_1088_4b64: the message box, FUN_1088_2501 (the status bar). Only the HUD reads them.
+        for (id, unless_last) in std::mem::take(&mut self.hero.messages) {
+            if std::env::var_os("ET_MSG").is_some() {
+                eprintln!("message {id} at frame {}", self.frame + 1);
+            }
+            self.messages.show_id(id, unless_last);
+        }
+        self.messages.frame();
         self.hero.status_bar();
         // The end of GameFrameInGame: 1170:4e62 counts down to the teleport.
         if self.hero.exit_timer > 0 {
@@ -763,6 +781,8 @@ impl Game {
             let (y, x) = (self.hero.y - 0x10, self.hero.x);
             crate::effects::explode_tile(&mut self.level, &mut self.world, 0x60, 0x104, y, x, &mut self.rng, &mut fx);
         }
+        // Script command 0x0b: HeroDamage(id), a message.
+        self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
         for &(a, b) in &fx.shakes {
             self.camera.shake(a, b);
         }
@@ -1077,6 +1097,7 @@ impl Graphics {
         };
         let got = level::TALLY.with(|t| t.get());
         draw::hud(&mut p, &g.hero, g.level.particles.pointer, self.hud_level, got, g.totals);
+        draw::messages(&mut p, &g.messages);
     }
 
     /// FUN_1068_09bf over the sector's decor list: each layer is an extra map drawn with its
@@ -1655,6 +1676,7 @@ fn load_world(data: &Path, map_path: &Path) -> Result<World, Box<dyn Error>> {
         .map(|v| v.split(',').nth(1).is_some_and(|f| f.trim().eq_ignore_ascii_case("N")))
         .collect();
     sprites::set_level(groups, raw);
+    messages::set_level(map_path);
     Ok(World::load(map_path, &data.join("TILES"))?)
 }
 

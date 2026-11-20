@@ -118,6 +118,9 @@ pub struct Hero {
     /// updates them every frame (`status_bar`). Only the HUD reads them.
     pub hud_bar: i32,
     pub hud_slide: i32,
+    /// HeroDamage(id) calls this frame (1088:1109: message `id` of ETMAIN for the message box;
+    /// main moves them to `Game::messages`); true = FUN_1088_10e1, only if not the last line).
+    pub messages: Vec<(i32, bool)>,
     /// 1170:1656: the weapons.
     pub weapons: [Weapon; 10],
     /// Pick-ups taken this frame: (plane-2 cell (tx, ty), effect, its function 3, y, x).
@@ -316,6 +319,7 @@ impl Hero {
             weapon: WEAPON_FOR_DIGIT[0],
             hud_bar: 0,
             hud_slide: -14,
+            messages: Vec::new(),
             weapons: WEAPON_AMMO.map(|(pickup, max)| Weapon { pickup, max, next: 0, ammo: 0, owned: false }),
             pickups: Vec::new(),
             exit_timer: 0,
@@ -575,7 +579,8 @@ impl Hero {
             if self.anim > 0 {
                 self.anim -= 1;
                 if self.anim == 0 {
-                    rng.random(6);
+                    let r = rng.random(6);
+                    self.messages.push((-0xe - r, false));
                 }
             }
             // Inputs 6 or 7 (or Space/Enter) just pressed: restart the level.
@@ -901,9 +906,13 @@ impl Hero {
                         if !self.keys[key] {
                             if w.cell_at(MAIN_PLANE, ly - 0x20, self.x) == Some(0x308) {
                                 self.script_cells.push((((ly - 0x20) >> 4) * width + (self.x >> 4)) as u16);
+                            } else {
+                                // THIS POD NEEDS A ... KEYCARD (FUN_1088_10e1).
+                                self.messages.push((-1 - (above - 14000), true));
                             }
                             skip = true;
                         } else {
+                            self.messages.push((-20, false)); // - UNLOCKED -
                             self.keys[key] = false;
                             self.cell_steps.push((((ly - 0x10) >> 4) * width + (self.x >> 4)) as u16);
                         }
@@ -1401,6 +1410,9 @@ impl Hero {
         if self.state == DEAD {
             if self.anim > 0 {
                 self.anim -= 1;
+                if self.anim == 0 {
+                    self.messages.push((-13, false));
+                }
                 if self.anim > 0x9d && self.anim % 0xc == 0 {
                     let t = 0x15e - self.anim;
                     rng.random(0x20);
@@ -1472,7 +1484,10 @@ impl Hero {
                 }
                 let old = self.health;
                 self.health = (self.health - 10).max(0);
-                let _ = old; // FUN_1088_5b41: HeroDamage(-12) is a score entry
+                // FUN_1088_5b41: health falling under 0x8f shows WARNING - SITUATION CRITICAL.
+                if old > 0x8e && self.health < 0x8f {
+                    self.messages.push((-12, false));
+                }
                 self.shakes.push((10, 4));
             }
         }
@@ -1618,6 +1633,9 @@ impl Hero {
                 self.turn = NO_TURN;
                 self.health = left;
             } else {
+                if self.health > 0x8e && left < 0x8f {
+                    self.messages.push((-12, false));
+                }
                 self.health = left;
                 self.hurt = 0x52;
                 self.hurt_blink = 0x52;
@@ -2111,7 +2129,8 @@ impl Hero {
         let i = f3 as i32 - 0x1e;
         let w = &mut self.weapons[i as usize];
         let select = if !w.owned {
-            w.owned = true; // and HeroDamage(f3 - 0x3f): score
+            w.owned = true;
+            self.messages.push((f3 as i32 - 0x3f, false));
             true
         } else {
             w.ammo == 0

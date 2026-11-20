@@ -68,6 +68,11 @@ impl Bank {
         Some(f(s))
     }
 
+    /// Sprite `id`'s (width, height) (FUN_10f0_1f5f / 1f8e).
+    pub fn size(&self, id: i32) -> Option<(i32, i32)> {
+        self.with(id, |s| (s.width, s.height))
+    }
+
     /// Row `row` of sprite `id`'s pixels (a texture).
     pub fn row(&self, id: i32, row: i32) -> Option<Vec<u8>> {
         self.with(id, |s| {

@@ -763,6 +763,95 @@ pub fn hud(p: &mut Painter, hero: &crate::hero::Hero, pointer: i32, level: i32, 
     p.reset();
 }
 
+/// FUN_1088_4b64's message box (as it was before this frame's update, `MessageBox::drawn`): the
+/// top rows darkened through PalMixLight (rows 0x20 / 0x24 in a checkerboard, FUN_1088_43e1),
+/// the lines in PPFONT3 (slot 0x20) through the tint table, clipped at row 0x1d, sliding up as
+/// the timer runs out, and a block cursor after the typed text (blinking once all is shown).
+pub fn messages(p: &mut Painter, mb: &crate::messages::MessageBox) {
+    let (text, shown, lines, timer) = (&mb.drawn.0, mb.drawn.1, mb.drawn.2, mb.drawn.3);
+    if timer <= 0 {
+        return;
+    }
+    p.reset();
+    let y = if timer < 0xd { 9 - (0xd - timer) } else { 9 };
+    let h = if lines < 1 { y + 2 } else { y - 7 + lines * 9 }.min(0x1d);
+    if let Some(light) = p.tables.light.as_deref() {
+        let (mut a, mut b) = (0x20usize, 0x24usize);
+        for row in 0..(h + 2).clamp(0, crate::H) {
+            for x in 0..crate::W {
+                let at = (row * crate::W + x) as usize;
+                let r = if x & 1 == 0 { a } else { b };
+                p.fb[at] = light[r * 256 + p.fb[at] as usize];
+            }
+            std::mem::swap(&mut a, &mut b);
+        }
+    }
+    p.clip.3 = 0x1d;
+    p.mix = Mix::Tint;
+    let (cx, cy) = text_at(p, text, shown, 6, y);
+    p.mix = Mix::Level;
+    let all = shown as usize >= text.len();
+    if !all {
+        text_at(p, b"\xdb", 0x7fff, cx, cy);
+    } else if p.frame % 0x18 < 0xc {
+        text_at(p, b" \xdb", 0x7fff, cx, cy);
+    }
+    p.reset();
+}
+
+/// FUN_1028_006e with FUN_1028_03bc(2, 0, 0x20): `t` in PPFONT3 from (x, y), bytes 0..=`limit`
+/// (01ce), mode 4 (01cc); `^|` goes down a line ('0''s height + 2), `^Cxx` tints (mode 0x2c,
+/// colour xx), `^O` stops it, `^Bxx` skips the codes after it every other xx ticks. Returns where
+/// the text ended (2444, 2446).
+fn text_at(p: &mut Painter, t: &[u8], limit: i32, x: i32, y: i32) -> (i32, i32) {
+    let line = p.bank.size(0x2030).map_or(8, |s| s.1) + 2;
+    let hex = |i: usize| -> u8 {
+        let d = |c: u8| if c > b'9' { c.wrapping_sub(0x37) } else { c.wrapping_sub(b'0') };
+        d(t.get(i).copied().unwrap_or(b'0')).wrapping_mul(16).wrapping_add(d(t.get(i + 1).copied().unwrap_or(b'0')))
+    };
+    let (mut cx, mut cy) = (x, y);
+    p.mode = 4;
+    let mut i = 0usize;
+    while i < t.len() && t[i] != 0 && i as i32 <= limit {
+        let c = t[i];
+        if c == b'^' {
+            match t.get(i + 1) {
+                Some(b'|') => {
+                    cx = x;
+                    cy += line;
+                    i += 2;
+                }
+                Some(b'C') => {
+                    p.mode = 0x2c;
+                    p.colour = hex(i + 2);
+                    i += 4;
+                }
+                Some(b'O') => {
+                    p.mode = 4;
+                    i += 2;
+                }
+                Some(b'B') => {
+                    let n = hex(i + 2).max(1) as u32;
+                    i += 4;
+                    if (p.frame / n) & 1 == 0 {
+                        i = crate::messages::skip_markup(t, i as i32) as usize;
+                    }
+                }
+                _ => i += 1,
+            }
+            continue;
+        }
+        let id = 0x2000 + c as i32;
+        if let Some((w, _)) = p.bank.size(id) {
+            p.sprite(id, cx, cy);
+            cx += w;
+        }
+        i += 1;
+    }
+    p.mode = 0;
+    (cx, cy)
+}
+
 /// FUN_1088_2410: `n` in ETSCORE's digits, at most three, its last digit at x, 5 pixels apart.
 fn number(p: &mut Painter, n: i32, x: i32, y: i32) {
     let mut n = n;
