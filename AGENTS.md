@@ -66,6 +66,30 @@ Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
   teleport records 1000; after a teleport LevelFirstFrame runs a frame without the hero
   (`world_update`). Doors: `doors.rs` (segment 10a8).
 
+## Renderer (2026-11-20)
+
+`port/src/render.rs` (sprite bank by slot, 10f0:2670's draw modes 1ae0, tables) and `port/src/draw.rs`
+(the frame's draw order and each object kind's draw tail); main.rs `Graphics::draw` runs it after the
+update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` against
+`uv run python tools/dumpframe.py DEMO FRAME` (the original's frame; frame numbers line up).
+- Draw modes (1ae0) come from the run handlers at 1170:1b8a; mode 0 only paints over colours <= 1ae2
+  (ForegroundColors), which is how foreground tiles hide sprites. MIX tables: PalMix (`.MIX`, 256 rows),
+  PalMixLight (`.LIT`, 129 rows: light levels), PalMixSea (`.SEA`, 80 rows: the water), and the tint table
+  4c26 COMPUTED from the palette (`LevelPalette::tint_table`: row 0 red = hurt hero, 10 = shield).
+- Groups loaded by FUN_1088_4518 (PPGLIGHT 0x1b, FACBROCK 0x73, SVN 0x75), SEATILE 0x7c and script groups
+  flagged `,N` are NOT fitted to the palette: their pixels index the mix tables (`sprites::raw`).
+- Long divisions of 617e in draw code (`lcall` with cx = divisor) are frame/N animations: disassemble
+  (capstone: segment for selector S is NE segment (S-0x1000)/8+1) rather than guess.
+- FUN_10f0_302b scales with source STEPS (8.8, 0x100 = 1:1, 0x200 = half size); FUN_1040_6315/6720 wrap it.
+- Updates that compute their sprites in locals record them in `Obj::looks` (walker, gunship, boss, turret,
+  tree); nothing in the simulation reads it.
+- Extra maps (`LoadExtraMap=`, slots 8..) keep only PLANE 0 and use the main map's tile groups; 0x272e
+  records are parallax decor layers (depth < 0x100 behind the tiles, else over everything).
+- Not drawn yet: the city background's extra parts (FUN_1090_0292/04d7, the START bridge), the forest
+  background's two parallax layers (proc 4), messages/tips (FUN_1088_2187), the kill/secret counters
+  (totals 4eb2/4eae/4eaa unknown in the port), platform objects of unported kinds sit at their start.
+  Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`.
+
 ## State (2026-10-17, end)
 
 GRINDER 113/113, CITY01 (LEVEL1_2) 847/847, FOREST04 (LEVEL2_1) 616/616, FOREST03 (LEVEL2_2) 770/770,
