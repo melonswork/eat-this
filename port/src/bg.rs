@@ -90,6 +90,7 @@ impl Background {
                 self.sprite(1, 0, fb, 0, y + H);
             }
             4 => self.forest(fb, cam),
+            5 => self.forplane(fb, cam, frame),
             _ => {
                 if let Some(p) = &self.picture {
                     for y in 0..H as usize {
@@ -132,6 +133,29 @@ impl Background {
         self.sprite(0, 0, fb, W - s, 0);
         self.sprite_mixed(0, 2, fb, -s, 0);
         self.sprite_mixed(0, 2, fb, W - s, 0);
+    }
+
+    /// `FUN_1090_178e` (FORPLANE): the sky (sprite 0x3200) drifting left a pixel per 16 frames,
+    /// the picture's rows 0x7a.. scrolling faster with every row (`acc / 0x1e8`, acc starting at
+    /// camX * 0x1e8 / 16 and growing by camX a row), then the skyline (0x3201, 0x3202) at 1/16 of
+    /// the camera. Not drawn: the object at 1170:534e (FUN_10d0_01e4).
+    fn forplane(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
+        let sky = -((frame >> 4) as i32 % W);
+        self.sprite(0, 0, fb, sky, 0);
+        self.sprite(0, 0, fb, sky + W, 0);
+        if let Some(pic) = &self.picture {
+            let a = i64::from(cam.0);
+            let mut acc = a * 0x1e8 / 0x10;
+            for y in 0x7a..H as usize {
+                copy_row(fb, pic, y, (acc / 0x1e8 % i64::from(W)).rem_euclid(i64::from(W)) as usize);
+                acc += a;
+            }
+        }
+        let h = ((cam.0 + 0x640) / 0x10) % W;
+        for x in [-h, W - h] {
+            self.sprite(0, 1, fb, x, 0);
+            self.sprite(0, 2, fb, x, 0);
+        }
     }
 
     /// `FUN_1090_147b` (HYDRO): the first LoadSpriteGroup's sprites at 1/6 of the camera: while

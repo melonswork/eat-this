@@ -98,11 +98,16 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
         }
         0x21c5 => sprite = m.w(0x14),
         // Burning ground (napalm and the like): a flame scaled by +0x1e / +0x1c, cut at the
-        // ground. (The original grows it while it dies out.)
+        // ground; over its last 0x120 frames the steps grow by k * k >> 5 (2/3 of it across),
+        // k = age - life + 0x120: it shrinks away.
         0x18e6 | 0x19f8 | 0x1b90 => {
             p.clip.3 = (y - p.cam.1).min(p.clip.3);
             match m.uw(0x42) {
-                0x18e6 => p.flame(m.w(0x1e), m.w(0x1c), age as u32, x, y),
+                0x18e6 => {
+                    let k = age - m.w(0x22) + 0x120;
+                    let g = if k > 0 { (k * k) >> 5 } else { 0 };
+                    p.flame(m.w(0x1e) + g, m.w(0x1c) + g * 2 / 3, age as u32, x, y)
+                }
                 0x19f8 => {
                     // A column of smoke over it.
                     p.scaled_at(0x100, 0x400, (age / 4) % 0xd + 0x6b00, x, y);
