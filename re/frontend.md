@@ -180,7 +180,17 @@ are black and white.
 
 ## In the port
 
-- Videos (VIDEOS/*.AVI: intro, help, credits, level start/end) are not decoded: skipped.
+- Videos: `frontend/indeo3.rs` (Indeo 3 decoder, a port of FFmpeg's indeo3.c, LGPL-2.1+), `avi.rs`
+  (RIFF reader, PCM track as a `sound::Sample`), `video.rs` (the player). Played where the original
+  plays them: INTRO.AVI at boot and REPLAY INTRO, the script's `Video=X.avi,0` before a level
+  starts (its music waits for the first frame), `Video=X.avi,1` before the stats, CREDITS.AVI,
+  F1 = ETHELP.AVI. The sound goes to the mixer (`sound::Ev::Pcm`), CD music stops under a level
+  video. Shown at 640x480 (240-line videos doubled), 4:3 in the middle of the window.
+  Not done: the help texts FUN_1008_1073 writes over the pages with a GDI font (menu texts -0x25..
+  -0x2c and -0x2c - page); a missing video (scripts name `seb.avi`, not on the CD) is skipped as
+  in the original. Check: `ET_AVI_YUV="FILE.AVI OUT.yuv [N]"` dumps yuv410p; all 27 files equal
+  `ffmpeg -fps_mode passthrough -pix_fmt yuv410p` (FFmpeg's CFR output places null frames, which
+  hold the picture, at other times).
 
 ## Videos (VIDEOS/*.AVI)
 
@@ -192,6 +202,10 @@ All 27 files are plain RIFF AVI 1.0 (hdrl, movi, idx1) with ONE codec: **Intel I
 - CREDITS.AVI: one 640x480 frame, 1 fps, no audio (a still). ETHELP.AVI: 19 frames 640x480 at 1 fps,
   no audio (help pages).
 - The codec is not on the CD (Windows' own IR32 driver played it); the port needs its own decoder.
+- Keys (FUN_1008_1966): a playing video (1a64 = 3, "Play AVI320120 Notify") stops on Escape, Space
+  or Return ("Stop AVI320120"; the notification runs the callback 1170:10fa). Help (1a98 = 2) and
+  credits (1a98 = 1) are stills (1a64 = 4): Space/Return/Right/F1/numpad 6 next frame, Left/numpad 4
+  previous (wrapping at the length), Escape leaves (FUN_1008_16b9).
 - CommentPic of the user map list is not drawn (PCX into a sprite); the list's title sprite is
   clipped away as in the original's code.
 - Stored but without effect: GameDetail (the simulation keeps the demos' detail 3), mixed

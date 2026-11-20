@@ -52,6 +52,8 @@ pub enum Ev {
     StopAll,
     /// CD track N from its start (0 or a missing track: silence).
     Music { track: u32, looped: bool },
+    /// A video's sound track (VIDEOS/*.AVI) on voice handle `voice`, centred, at full volume.
+    Pcm { voice: u32, sample: Arc<Sample> },
 }
 
 /// The DWS_DPLAY fields a caller set before the play (1170:5d7e flags).
@@ -386,6 +388,12 @@ pub struct Sample {
     pub rate: u32,
 }
 
+impl std::fmt::Debug for Sample {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Sample({} at {} Hz)", self.data.len(), self.rate)
+    }
+}
+
 /// RIFF WAVE: 8-bit unsigned or 16-bit signed PCM, mono or stereo (stereo is mixed down).
 pub fn decode_wav(b: &[u8]) -> Option<(Vec<f32>, u32, u16)> {
     if b.len() < 12 || &b[0..4] != b"RIFF" || &b[8..12] != b"WAVE" {
@@ -560,6 +568,12 @@ impl Mixer {
                         v.step = s;
                     }
                 }
+            }
+            Ev::Pcm { voice, sample } => {
+                self.voices.retain(|v| v.handle != voice);
+                self.age += 1;
+                let step = self.step(&sample, 0x100);
+                self.voices.push(Voice { handle: voice, sample, pos: 0.0, step, l: 1.0, r: 1.0, looped: false, prio: i32::MAX, age: self.age });
             }
             Ev::Stop { voice } => self.voices.retain(|v| v.handle != voice),
             Ev::StopAll => self.voices.clear(),

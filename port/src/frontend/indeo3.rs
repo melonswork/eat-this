@@ -630,7 +630,7 @@ impl Decoder {
         if cell.height & v_zoom != 0 || cell.width & h_zoom != 0 {
             return Err("invalid VQ data".into());
         }
-        let mut next = |ptr: &mut usize| -> Res<u8> {
+        let next = |ptr: &mut usize| -> Res<u8> {
             let v = *d.get(*ptr).ok_or("attempt to read past end of buffer")?;
             *ptr += 1;
             Ok(v)

@@ -9,6 +9,7 @@ pub mod gfx;
 pub mod indeo3;
 pub mod menu;
 pub mod texts;
+pub mod video;
 
 use crate::level::{self, Tally};
 use crate::palette::Pal6;
@@ -77,6 +78,9 @@ pub struct FrontEnd {
     /// gFrameCounter (1170:0f2c).
     frame: u32,
     quit: bool,
+    /// The video showing (FUN_1008_1365), and the sound events its keys made.
+    video: Option<video::Player>,
+    video_evs: Vec<sound::Ev>,
 }
 
 fn pcx_palette(path: &Path) -> Option<Pal6> {
@@ -139,6 +143,8 @@ impl FrontEnd {
             menu_keys: [-1; 9],
             frame: 0,
             quit: false,
+            video: None,
+            video_evs: Vec::new(),
         };
         fe.build_menus(&mut texts);
         sound::listener(0xa0, 100);
@@ -147,6 +153,8 @@ impl FrontEnd {
         m.b = 0x2409;
         let ui = &fe.ui;
         m.select(m.default, ui);
+        // FUN_1088_d60e's last step: INTRO.AVI over the main menu.
+        fe.play_video("INTRO.AVI", video::Kind::Play, video::Then::Menu);
         fe
     }
 
@@ -420,6 +428,34 @@ impl FrontEnd {
             eprintln!("can't start {}: {e}", map.display());
             self.level_state = 0;
             self.show(Id::Main);
+            return;
+        }
+        // FUN_1080_17fa: the script's start video (`Video=X.avi,0`), then 16b7 starts the level
+        // (here the level waits: its music is queued until its first frame).
+        if let Some(name) = video::script_video(&script_pairs(&script_of(&map)), 0) {
+            self.play_video(&name, video::Kind::Play, video::Then::Level(map));
+        }
+    }
+
+    /// FUN_1008_1365: show VIDEOS/<name>; a missing file runs what comes next at once.
+    fn play_video(&mut self, name: &str, kind: video::Kind, then: video::Then) {
+        match video::Player::open(&self.data, name, kind, then.clone()) {
+            Some(p) => {
+                // The CD music stops under a video with sound.
+                if kind == video::Kind::Play && !matches!(then, video::Then::Menu) {
+                    self.video_evs.push(sound::Ev::Music { track: 0, looped: false });
+                }
+                self.video = Some(p);
+            }
+            None => self.after_video(then),
+        }
+    }
+
+    /// The video's end notification.
+    fn after_video(&mut self, then: video::Then) {
+        match then {
+            video::Then::Menu | video::Then::Level(_) => {}
+            video::Then::Stats => self.show_stats(),
         }
     }
 
@@ -460,6 +496,15 @@ impl FrontEnd {
     /// GameFrame 4e60 = 100 -> FUN_1080_172a: the stats screen over the script's EndPic,
     /// CD track 6, and the next map goes to the savings (FUN_1080_2fc4).
     fn level_over(&mut self) {
+        let Some(r) = &self.level else { return };
+        // GameFrame 4e60 = 100: `Video=X.avi,1` first (FUN_1080_161b(1)), then the stats.
+        match video::script_video(&script_pairs(&script_of(&r.map)), 1) {
+            Some(name) => self.play_video(&name, video::Kind::Play, video::Then::Stats),
+            None => self.show_stats(),
+        }
+    }
+
+    fn show_stats(&mut self) {
         let Some(r) = &self.level else { return };
         let pairs = script_pairs(&script_of(&r.map));
         let pic = pairs.iter().rfind(|(k, _)| k.eq_ignore_ascii_case("EndPic")).map(|(_, v)| v.clone());
@@ -627,7 +672,12 @@ impl FrontEnd {
                 if act && sel == count - 1 {
                     self.back();
                 }
-                // Items 0 and 2 play INTRO.AVI / CREDITS.AVI: videos are not decoded.
+                // Items 0 and 2: INTRO.AVI, CREDITS.AVI (shown like the help pages).
+                if act && sel == 0 {
+                    self.play_video("INTRO.AVI", video::Kind::Play, video::Then::Menu);
+                } else if act && sel == 2 {
+                    self.play_video("CREDITS.AVI", video::Kind::Pages, video::Then::Menu);
+                }
             }
             Id::Episode if act && sel >= 0 => {
                 if let Some(p) = find_ci(&self.data.join("MAPS"), EPISODE_MAPS[sel as usize % 3]) {
@@ -1071,6 +1121,9 @@ pub fn run(data: &Path, scale: u32, mute: bool) -> Result<(), Box<dyn Error>> {
     let tc = canvas.texture_creator();
     let mut tex = tc.create_texture_streaming(PixelFormatEnum::RGB24, W as u32, H as u32)?;
     let mut tex2 = tc.create_texture_streaming(PixelFormatEnum::RGB24, W as u32, 2 * H as u32)?;
+    let (vw, vh) = video::SIZE;
+    let mut tex_v = tc.create_texture_streaming(PixelFormatEnum::RGB24, vw, vh)?;
+    let mut rgb_v = vec![0u8; (vw * vh * 3) as usize];
     sdl.mouse().show_cursor(false);
     let mut events = sdl.event_pump()?;
     let mut rgb = vec![0u8; (W * H * 3) as usize];
@@ -1150,6 +1203,17 @@ pub fn run(data: &Path, scale: u32, mute: bool) -> Result<(), Box<dyn Error>> {
             std::thread::sleep(std::time::Duration::from_millis(1));
             continue;
         }
+        if let Some(v) = &fe.video {
+            // 640x480 at 4:3 in the middle of the 320x200 picture.
+            v.render(&mut rgb_v);
+            tex_v.update(None, &rgb_v, vw as usize * 3)?;
+            canvas.set_draw_color(sdl2::pixels::Color::BLACK);
+            canvas.clear();
+            let vwid = (H as u32 * 4 / 3).min(W as u32);
+            canvas.copy(&tex_v, None, Some(sdl2::rect::Rect::new((W - vwid as i32) / 2, 0, vwid, H as u32)))?;
+            canvas.present();
+            continue;
+        }
         fe.render(&mut rgb);
         if fe.settings.display_mode == 1 {
             // Scanlines: every other line of a double-height picture is black.
@@ -1195,6 +1259,14 @@ fn shot(data: &Path, script: &str) -> Result<(), Box<dyn Error>> {
                     r.game.level_over = true;
                 }
             }
+            "shot" if fe.video.is_some() => {
+                let (vw, vh) = video::SIZE;
+                let mut pic = vec![0u8; (vw * vh * 3) as usize];
+                fe.video.as_ref().unwrap().render(&mut pic);
+                let mut out = format!("P6\n{vw} {vh}\n255\n").into_bytes();
+                out.extend(&pic);
+                std::fs::write(words.get(1).copied().unwrap_or("fe.ppm"), out)?;
+            }
             "shot" => {
                 fe.render(&mut rgb);
                 let mut out = format!("P6\n{W} {H}\n255\n").into_bytes();
@@ -1205,7 +1277,7 @@ fn shot(data: &Path, script: &str) -> Result<(), Box<dyn Error>> {
                 let n: u32 = n.parse().map_err(|_| format!("ET_FE_SHOT: bad step {step}"))?;
                 let keys: Vec<Scancode> = words[1..].iter().filter_map(|k| Scancode::from_name(k)).collect();
                 for k in &keys {
-                    if matches!(k, Scancode::Escape | Scancode::F3 | Scancode::F4 | Scancode::F5 | Scancode::F6 | Scancode::F7) || crate::weapon_key(*k).is_some() {
+                    if fe.video.is_some() || matches!(k, Scancode::Escape | Scancode::F1 | Scancode::F3 | Scancode::F4 | Scancode::F5 | Scancode::F6 | Scancode::F7) || crate::weapon_key(*k).is_some() {
                         fe.key_down(*k);
                     }
                 }
@@ -1223,7 +1295,13 @@ impl FrontEnd {
     /// A key going down (FUN_1008_1966): Escape, the F keys, numpad +/-.
     fn key_down(&mut self, sc: sdl2::keyboard::Scancode) {
         use sdl2::keyboard::Scancode;
+        if let Some(v) = self.video.as_mut() {
+            v.key(sc, &mut self.video_evs);
+            return;
+        }
         match sc {
+            // F1: the help pages (ETHELP.AVI; the texts FUN_1008_1073 writes over them are not drawn).
+            Scancode::F1 => self.play_video("ETHELP.AVI", video::Kind::Pages, video::Then::Menu),
             Scancode::Escape => {
                 // The main menu, or back to the level the menu is over.
                 if self.level_state == 0 || self.in_game || self.cur == Id::Stats {
@@ -1262,6 +1340,16 @@ impl FrontEnd {
     /// One 70 Hz frame (GameFrame): the level or the menus; the sound events go to `evs`.
     fn tick(&mut self, pressed: &dyn Fn(sdl2::keyboard::Scancode) -> bool, lmb: bool, rmb: bool, evs: &mut Vec<sound::Ev>) {
         use sdl2::keyboard::Scancode;
+        if let Some(v) = self.video.as_mut() {
+            evs.append(&mut self.video_evs);
+            v.tick(evs);
+            if v.done {
+                let then = self.video.take().unwrap().then;
+                self.after_video(then);
+            }
+            return;
+        }
+        evs.append(&mut self.video_evs);
         self.frame += 1;
         // The mouse buttons as GameFrame counts them: 1 the frame they go down, then 2.
         let i = &mut self.ui.input;

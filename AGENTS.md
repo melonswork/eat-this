@@ -149,7 +149,11 @@ streams and EVERY CHECK, so the method is the original's own.
   buttons fill LeftShoot/RightShoot when those keys are up, keys 1..9 0 / PgUp / PgDn select weapons
   (`Game::weapon_key`, gWeaponForDigitKey; like the original they select weapons not owned too). Same in `--map`.
 - Test without a window: `ET_FE_SHOT="30;2 Return;50;shot a.ppm;levelend;300;shot b.ppm" ./target/release/eatthis`
-  (`N keys...` = SDL scancode names held N frames, `move/click X Y`, `levelend`). Videos are not decoded (skipped).
+  (`N keys...` = SDL scancode names held N frames, `move/click X Y`, `levelend`). The intro plays first: start
+  scripts with `1 Return;` to skip it; `shot` during a video writes its 640x480 frame.
+- Videos (VIDEOS/*.AVI, Indeo 3 + PCM): `frontend/indeo3.rs` (port of FFmpeg's indeo3.c, LGPL), `avi.rs`, `video.rs`;
+  intro, level start/end (`Video=X.avi,0/1`), credits, F1 help; skip = Escape/Space/Return. `ET_AVI_YUV` dumps yuv410p
+  to compare with ffmpeg (all 27 match). Help pages' GDI texts not drawn.
 
 ## Sound (2026-11-20, re/sound.md)
 
