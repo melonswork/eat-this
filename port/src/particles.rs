@@ -647,6 +647,44 @@ impl Particles {
         self.spawn_seq(0x1952, 2, 2, y, x, 1);
     }
 
+    /// FUN_1088_70b8 (weapon 6) from the muzzle (y0, x0): a flash, three bullets
+    /// (FUN_1088_7020: at aim - 0x80, aim + 0x80 and aim, 0x17 px out, effect 62) and a second flash.
+    pub fn spread(&mut self, y0: i32, x0: i32, aim: i32) {
+        let out = |a: i32| {
+            (
+                y0 - (0x17 * trig::sin(a)) / 0x4000,
+                x0 + (0x17 * trig::cos(a)) / 0x4000,
+            )
+        };
+        let (y, x) = out(aim);
+        self.p.colour = 0x28;
+        self.spawn_seq(0x1b04, 4, 2, y, x, 1);
+        self.p.colour = 0;
+        self.p.hits = 1;
+        self.p.damage = 0x10;
+        self.p.on_death = 0x3e;
+        for a in [(aim + 0x1600) % 0x1680, (aim + 0x80) % 0x1680, aim] {
+            let (by, bx) = out(a);
+            // FUN_1088_63c9: which of the ten pictures for the angle.
+            if (a + 0x5a0) % 0x1680 > 0xb3f {
+                self.p.draw = 1;
+            }
+            if a > 0xb3f {
+                self.p.draw2 = 1;
+            }
+            let q = (a % 0x5a0 + 0x50) / 0xa0;
+            let idx = if self.p.draw == self.p.draw2 { q } else { 9 - q };
+            self.spawn(0x1848 + idx, by, bx);
+            self.line(0x60, a);
+            self.p.draw = 0;
+            self.p.draw2 = 0;
+        }
+        self.p.on_death = 0;
+        self.p.damage = 0x10;
+        self.p.hits = 0;
+        self.spawn_seq(0x190a, 2, 1, y, x, 1);
+    }
+
     /// `hit_test` with the homing priority 1170:093c at 0 (wrecks, corpses, crates: rockets
     /// only steer at them when nothing better is around) and the drone's 093e at -1 (it never
     /// picks them), restored to 0x100 after.

@@ -205,6 +205,8 @@ pub struct Gun {
     pub charge: Option<(i32, i32, i32)>,
     /// FUN_1088_655f's shell: (y, x, angle).
     pub shell7: Option<(i32, i32, i32)>,
+    /// FUN_1088_70b8's three bullets: (muzzle y, muzzle x, angle).
+    pub spread: Option<(i32, i32, i32)>,
     /// FUN_1088_6649's ball: (y, x, angle).
     pub ball9: Option<(i32, i32, i32)>,
     /// FUN_1088_69d8's bullet: (y, x, angle, parity).
@@ -487,6 +489,7 @@ impl Hero {
         self.gun.charge = None;
         self.gun.shell7 = None;
         self.gun.ball9 = None;
+        self.gun.spread = None;
         self.gun.rapid = None;
         self.gun.rockets = None;
         self.gun.rocket5 = None;
@@ -1930,6 +1933,16 @@ impl Hero {
                     self.gun.pose = 4;
                     self.gun.shooting = true;
                     self.released[RIGHT_SHOOT] = false;
+                }
+            }
+            // FUN_1088_70b8: three bullets, 0x80 either side of the aim and on it.
+            6 => {
+                if self.use_ammo(10, input, now) {
+                    let g = &mut self.gun;
+                    g.spread = Some((self.y + g.muzzle.1 - 0x16, self.x + g.muzzle.0, g.aim));
+                    g.shots += 1;
+                    g.cooldown = 10;
+                    g.shooting = true;
                 }
             }
             // FUN_1088_6649: a ball that bounces and rolls (FUN_1050_46d9); crouched, it is laid

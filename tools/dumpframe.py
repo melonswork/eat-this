@@ -36,13 +36,15 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--camera-trace", metavar="FILE", help="also write frame, camera x y, hero x y for every frame up to the last FRAME")
     ap.add_argument("--menu-frames", type=int, default=5)
+    ap.add_argument("--overlay", help="folder over work/cd (default work/tracer/overlay; work/demos when the demo is there)")
     o = ap.parse_args()
 
     game_path, _ = demo_files(o.demo)
     out = Path(o.out or f"work/frames/{Path(o.demo).name.split('.')[0]}")
     out.mkdir(parents=True, exist_ok=True)
     emu = Win16(CD / "ETLAUNCH.EXE", log=lambda *a: None)
-    emu.setup_process(FileSystem(CD, Path("work/tracer/overlay")))
+    overlay = o.overlay or ("work/demos" if Path(o.demo).resolve().is_relative_to(Path("work/demos").resolve()) else "work/tracer/overlay")
+    emu.setup_process(FileSystem(CD, Path(overlay)))
     st = {"menu": 0, "started": False, "frame": 0, "todo": sorted(o.frames)}
 
     def far(e, off):

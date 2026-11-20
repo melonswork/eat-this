@@ -1,0 +1,32 @@
+# Weapon 6 (FUN_1088_70b8, three bullets FUN_1088_7020): CITY_I04 with the start moved into the
+# room of the weapon-6 pick-ups on the crate at (983..999,55).
+level MAPS/CITY_I04.MAP
+start 940 95
+mouse 250 60
+20
+12 right
+10 up right
+20 right
+20
+# too low to stand on the crate: back down to the floor
+30 left
+20
+5 rmb
+15
+5 rmb
+15
+mouse 60 100
+5 rmb
+15
+5 rmb
+15
+mouse 60 20
+5 rmb
+15
+mouse 200 20
+5 rmb
+15
+20 down
+5 down rmb
+30 down
+100

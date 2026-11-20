@@ -8,6 +8,9 @@ mouse 250 60
 10 up right
 20 right
 20
+# too low to stand on the crate: back down to the floor
+30 left
+20
 5 rmb
 40
 mouse 60 100
