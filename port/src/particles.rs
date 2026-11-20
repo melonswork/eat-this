@@ -516,6 +516,29 @@ impl Particles {
         self.p.group = 1;
     }
 
+    /// FUN_1088_6deb's rocket (weapon 5): like the torpedo, it speeds up from 0x10 and leaves
+    /// smoke (callback 0xd83); effect 14 when it hits.
+    pub fn rocket5(&mut self, y: i32, x: i32, angle: i32) {
+        self.p.hits = 0x410;
+        self.p.damage = 0xa0;
+        self.p.flags = 0x284;
+        self.p.homing = 0x10;
+        self.p.tiles = 0x143;
+        self.p.on_death = 0xe;
+        self.p.callback = 0xd83;
+        self.spawn_seq(0x193c, 1, 0x100, y, x, 0);
+        self.rocket(0x10, angle);
+        self.last_mut().v.set(0x18, 0x100);
+        self.p.callback = 0;
+        self.p.on_death = 0;
+        self.p.tiles = 0x43;
+        self.p.flags = 0x84;
+        self.p.homing = 0;
+        self.p.damage = 0x10;
+        self.p.hits = 0;
+        self.spawn_seq(0x190a, 2, 2, y, x, 1);
+    }
+
     /// FUN_1088_678b's flame: a short-lived fire that follows its line and goes out in smoke
     /// (effect 37).
     pub fn flame(&mut self, y: i32, x: i32, angle: i32) {
@@ -996,7 +1019,8 @@ impl Level {
     /// The per-frame procedure at +0x42 (the drawing otherwise).
     fn particle_callback(&mut self, i: usize, f: &mut Frame) {
         let m = &mut self.particles.list[i].m;
-        match m.uw(0x42) {
+        let cb = m.uw(0x42);
+        match cb {
             CB_WALL_REGROW => {
                 if m.w(0x22) <= m.w(0x24) {
                     let (tile, y, x) = (m.uw(0x40), m.w(0xa), m.w(8));
@@ -1015,8 +1039,9 @@ impl Level {
                 m.set(0x30, x + 3);
                 m.set(0x32, y + 3);
             }
-            0xf9f => {
-                // FUN_1050_0f9f: the torpedo turns (at most 0x10) towards its target, speeds up,
+            0xf9f | 0xd83 => {
+                // FUN_1050_0f9f (the torpedo) and FUN_1050_0d83 (weapon 5's rocket, the same
+                // without the bubbles): it turns (at most 0x10) towards its target, speeds up,
                 // and leaves a trail.
                 let (cx, age) = (m.w(0x22), m.w(0x24));
                 let _ = cx;
@@ -1051,7 +1076,7 @@ impl Level {
                     ps.p.group = 1;
                     ps.p.delay = 0;
                 }
-                if age % 7 == 6 {
+                if cb == 0xf9f && age % 7 == 6 {
                     let sprite = f.rng.random(3) + 0x64b;
                     if self.water + 0x10 <= y {
                         let ps = &mut self.particles;

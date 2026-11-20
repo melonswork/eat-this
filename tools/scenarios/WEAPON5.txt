@@ -1,0 +1,15 @@
+# BOMS02: walk left to the weapon-5 pick-up at (1143, 359), then fire it with the right button.
+level MAPS/BOMS02.MAP
+mouse 60 100
+30
+70 left
+20
+5 rmb
+20
+5 rmb
+20
+mouse 60 60
+5 rmb
+20
+5 rmb
+150

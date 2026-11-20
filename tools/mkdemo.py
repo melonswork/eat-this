@@ -81,6 +81,10 @@ def parse(path):
         raise SystemExit(f"{path}: no 'level' line")
     if not frames:
         raise SystemExit(f"{path}: no frames")
+    if len(frames) % 35 == 0:
+        # DemoSave writes frames/35 + 1 CHECKs; the last one would be sampled at the input read
+        # of frame `frames` + 1, which never comes, and stay garbage.
+        frames.append(frames[-1])
     return level, name, frames
 
 

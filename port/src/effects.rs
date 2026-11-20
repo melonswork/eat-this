@@ -78,7 +78,12 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             ps.p.hits = 0;
         }
         43 => wall_chunks(lv, world, y, x, rng, fx),
-        72 => rubble(rng),
+        72 => rubble(lv, 0x3301, y, x, rng),
+        75 => {
+            rubble(lv, 0x520a, y, x, rng);
+            rng.random(0x28); // the crash's pitch
+            fx.shakes.push((0x18, 10));
+        }
         92 => {
             // FUN_1040_3325: a blast of burning bits, and a steam emitter where it happened
             // (the START intro's ship).
@@ -461,14 +466,23 @@ pub fn smoke(_y: i32, _x: i32, rng: &mut PascalRandom) {
     }
 }
 
-/// FUN_1040_5833: six rubble particles, four Random() calls each.
-fn rubble(rng: &mut PascalRandom) {
-    for _ in 0..6 {
-        rng.random(8);
-        rng.random(2);
-        rng.random(0x81);
-        rng.random(0x20);
+/// FUN_1040_5833 (sprites 0x3301/2) and FUN_1040_58d4 (0x520a/b): six bits of rubble thrown
+/// up and out, bouncing off walls (effect 16).
+fn rubble(lv: &mut Level, sprite: i32, y: i32, x: i32, rng: &mut PascalRandom) {
+    let ps = &mut lv.particles;
+    ps.p.hits = 0x8000;
+    ps.p.on_death = 0x10;
+    for i in 0..6 {
+        let px = x - 10 + i * 4;
+        let py = (y - 4) - rng.random(8);
+        let s = rng.random(2);
+        ps.spawn(s + sprite, py, px);
+        let a = i * -0x30 + 0x5d8 + rng.random(0x81);
+        let speed = rng.random(0x20) + 0x20;
+        ps.throw(9, speed, a);
     }
+    ps.p.on_death = 0;
+    ps.p.hits = 0;
 }
 
 /// FUN_1050_5a33(strength, mask, y, x): blow up the tile at (x, y) if its function 3 matches
