@@ -14,6 +14,43 @@ python3 tools/compare_watch.py work/tracer/LEVEL1_2/watch.tsv work/port_dump.tsv
 ```
 Always also run GRINDER.DMO: it must stay 113/113. Commit after each green step.
 
+## New oracle demos (tools/mkdemo.py, 2026-11-20)
+
+The seven CD demos never exercise many features. `tools/mkdemo.py` makes NEW ones: the original
+game (the tracer's emulator) records them with its OWN recorder from a scenario script, so the
+.REC carries the original's CHECK entries. Scenarios live in git (`tools/scenarios/*.txt`), the
+demos they make in `work/demos/BIN/USERMAPS/<NAME>.DMO` (regenerate them, ~5 s each):
+
+```
+mise run mkdemo -- tools/scenarios/WEAPON5.txt                         # -> work/demos/BIN/USERMAPS/WEAPON5.DMO
+mise run trace -- work/demos/BIN/USERMAPS/WEAPON5.DMO --overlay work/demos --watch gHeroX,gHeroY,gHeroState
+(cd port && ./target/release/eatthis --headless --demo ../work/demos/BIN/USERMAPS/WEAPON5.DMO)
+python3 tools/windiff.py WEAPON5 4 ; python3 tools/valdiff.py WEAPON5   # both look in work/demos too
+```
+Script lines: `level GRINDER` (a CD demo folder) or `level MAPS/BOMS02.MAP` (any map under
+work/cd/BIN), `name X`, `mouse X Y` (game-screen pixels, from the next frame on), `N keys...` (hold
+these for N frames; none = all up). Keys: up down left right fire alt key6 key7 switch (gKeyMap),
+kp8 kp2 kp4 kp6 kp0 (numpad: these report 0 on release; BROYEUR was played with them), lmb rmb.
+Script frame i = game frame i+1 = port frame i. `mkdemo.py LEVEL --from-rec X.REC` prints a script
+replaying a recording: re-recording BROYEUR, HYDRO_02 and CITY01 that way gives their exact input
+streams and EVERY CHECK, so the method is the original's own.
+- How: the demo folder's .SCR gets `PlayRecord=<name>.rec`; the file is missing, so LevelLoad calls
+  DemoStartRecording (RandSeed := 0) instead of DemoLoad. GetKeyState is answered from the script
+  (VKs read from gKeyMap), the mouse buttons are the globals 1a5c/1a5e (0 up, 1 pressed, GameFrame
+  turns 1 into 2), the cursor goes through GetCursorPos (FUN_1088_42a3 scales by 319/screen width,
+  inverted in mkdemo). After the last frame mkdemo calls DemoSave.
+- The game stops recording by itself when the level ends or restarts (GameFrame: 4e60 > 0 ->
+  DemoSave): a demo can show the hero dying but not the restart after it.
+- Digit/PgUp/PgDn weapon keys aren't replayed by DemoPlayFrame: get weapons from pick-ups
+  (`ET_PICKUPS=1 ./target/release/eatthis --headless --map ../work/cd/BIN/MAPS/X.MAP` lists them).
+- A frame count that is a multiple of 35 leaves the last CHECK unsampled (garbage); mkdemo pads one.
+- The port must run from `port/` (default data path `../work/cd/BIN`).
+
+| scenario | level | what it checks | port |
+|---|---|---|---|
+| `DEATH1` | GRINDER | BROYEUR's first 300 frames, then waiting: the grinder hurts (FUN_1088_3c32 kind 1, returns 1 → FUN_1090_1a70) and kills the hero (frame 680, state 100, gibs/smoke/splat) | exact |
+| `WEAPON5` | BOMS02 | weapon-5 pick-up, four rockets (FUN_1088_6deb, callback 0xd83 = the torpedo's 0xf9f without bubbles, effect 14, rubble effect 75) | exact |
+
 ## Tools (non-obvious usage)
 
 - `tools/fn.py show NAME...` prints decompiled functions from `work/decomp/ETLAUNCH.EXE.c`
@@ -162,9 +199,10 @@ plain functions (`--entry 1050:5c4a` finds who shakes the screen) but hooking En
 `ET_AREA=1`, `ET_CORPSE=1`, `ET_SPARK=1`.
 
 Still unported (warnings in the port run): the hero riding a smallbot (FUN_1070_a18e), the hero's death
-(FUN_1068_186c splats), objects of VMT 0xc84 (kind 0x14be, icon 61600, FUN_1070_0cce), kinds 0x14d2/0x14f0 icons,
-effects 23 (FUN_1050_4a29 part)/53/54, bonus 0xd10 (6b03), levers needing a key, other weapons (1..3, 5..9), sideways
+outside the grinder (kinds 2/3 of FUN_1088_3c32 untested), the restart, objects of VMT 0xc84 (kind 0x14be, icon 61600, FUN_1070_0cce), kinds 0x14d2/0x14f0 icons,
+effects 23 (FUN_1050_4a29 part)/53/54, bonus 0xd10 (6b03), levers needing a key, weapons 3, 6, 9 (pick-ups: BOMS02 3 at (1303,263) near the start (1255,366), CITYRAIN 6 at
+(167,103) (start (79,799)), CITY02 9 at (1223,1719); make a scenario for each), sideways
 shake 5c7d, frozen/burnt deaths, barrels >= 0xb, level-leaving teleports, hero on the big alien's shield (00b6 is
 now `Level::stand_on`, wire it there), wall chunks 60308/60304 (45db), 30070 particle spawn.
-Next: nothing is left in the recorded demos. The game is not complete: see the unported items below (grep the
+Next: nothing is left in the recorded demos; write scenarios (tools/scenarios) for the unported features. The game is not complete: see the unported items below (grep the
 port run for `warning:`), and the SDL front end/menus/sound. and run the daily loop on it.

@@ -5,7 +5,7 @@ a recorded demo and logs every Borland Pascal `Random` call with its call site, 
 CHECK window. It checks RandSeed against the demo's `CHECK` entries as it goes.
 
 ```
-mise run trace -- work/cd/BIN/USERMAPS/GRINDER.DMO [--windows N] [--keep-going] [--out DIR]
+mise run trace -- work/cd/BIN/USERMAPS/GRINDER.DMO [--windows N] [--keep-going] [--out DIR] [--overlay work/demos]
 ```
 
 | demo | frames | CHECK windows matched | time |

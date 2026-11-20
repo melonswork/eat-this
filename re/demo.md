@@ -88,3 +88,20 @@ Caveats:
   tracer: clearing `gDrawThisFrame` on every frame leaves all of BROYEUR's counts unchanged.)
 - `LevelInit` runs after `DemoLoad` has zeroed the seed, so the first window includes the
   level's setup calls (START: 290 calls in window 1).
+
+## Recording (and making new demos)
+
+`LevelLoad` (1088:cf5c) records instead of playing when the script's `PlayRecord=` file doesn't
+exist: `DemoStartRecording` zeroes RandSeed at the same point `DemoLoad` would, so a recording and
+its playback see the same game. `ReadGameInput` polls the keys (`KeyPoll` = GetKeyState into a
+per-VK counter), merges the mouse buttons (1170:1a5c/1a5e, 0 up / 1 pressed / 2 held, set by the
+WM_*BUTTON* handlers 1008:1c0e..1c33, 1 → 2 at the end of `GameFrame`) into LeftShoot/RightShoot
+when the key is up, reads the cursor (`FUN_1088_42a3`: x·319/screen width, y·199/screen height),
+then `DemoRecordFrame` appends the values. `DemoSave` writes the archive to the `PlayRecord` name
+(through `temp.$$$`) when `GameFrame` sees a level end or restart (4e60 > 0), when a buffer fills
+(16000 runs), or when called. Differences from playback are harmless: `LevelFirstFrame` reads the
+cursor (playback keeps mouse[0]), and the weapon keys 1–0/PgUp/PgDn work only when not playing.
+
+`tools/mkdemo.py` drives this path with scripted input under the tracer's emulator (see AGENTS.md).
+Re-recording BROYEUR, HYDRO_02 and CITY01 from their own input reproduces their input streams and
+all CHECK entries exactly.
