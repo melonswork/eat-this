@@ -132,6 +132,22 @@ streams and EVERY CHECK, so the method is the original's own.
   teleport records 1000; after a teleport LevelFirstFrame runs a frame without the hero
   (`world_update`). Doors: `doors.rs` (segment 10a8).
 
+## Front end (2026-11-20, re/frontend.md)
+
+`eatthis` without `--map`/`--demo` (from `port/`: `cargo run --release`) runs the original's menus:
+`port/src/frontend/` (`mod.rs` state machine + window loop, `menu.rs` the menu objects of segment 1080,
+`gfx.rs` drawing/text/tint rows, `texts.rs` ETMENUn.SCR, ETMAIN messages, EatThis.ini). `--map`/`--demo`/
+`--headless` still use `run_window`/`run_headless` unchanged.
+- Levels start like the menu's 17fa -> 16b7: `load_world` + `Game::new` (RandSeed 0x3e00 + HeroReset) + `level_music`.
+  Level end (4e60 = 100) -> stats (1080:172a) -> CONTINUE: NextLevelMap / NEXT EPISODE (episode menu) / main menu.
+  A demo (user map with PlayRecord=) that ends goes to the main menu, no stats (as GameFrame does).
+- Stats counters: `level::Tally` (thread-local; `Effects` add kills/secrets when dropped, command 0x18 = hidden
+  area, heart pick-up = bios sphere); totals from plane 2 + the setup's enemy objects (`frontend::level_totals`).
+- Savings (the original's only save): the next level of a finished MAPS/ level is copied to `SAVINGS/<NAME>/`
+  (cwd, `ET_SAVINGS`) and listed under START USER MAP. Settings: `EatThis.ini` in the cwd (`ET_INI`).
+- Test without a window: `ET_FE_SHOT="30;2 Return;50;shot a.ppm;levelend;300;shot b.ppm" ./target/release/eatthis`
+  (`N keys...` = SDL scancode names held N frames, `move/click X Y`, `levelend`). Videos are not decoded (skipped).
+
 ## Sound (2026-11-20, re/sound.md)
 
 Effects are SOUNDS/*.WAV (ids = ETMAIN.SCR's `LoadWAV=` lines in order), played through DiamondWare
