@@ -151,6 +151,10 @@ struct Game {
     stopped: bool,
     /// The hero asked to restart the level (4e60 = 10): the window loop reloads the map.
     restart: bool,
+    /// The level is over (4e60 = 100): the window loop loads the next one.
+    level_over: bool,
+    /// What ended a demo (4e60), 0 if its input ran out.
+    end: i32,
     report: CheckReport,
 }
 
@@ -221,6 +225,8 @@ impl Game {
             demo,
             stopped: false,
             restart: false,
+            level_over: false,
+            end: 0,
             report: CheckReport::default(),
         };
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
@@ -532,12 +538,13 @@ impl Game {
             0 => {}
             e if self.demo.is_some() => {
                 println!("the level ended by itself (4e60 = {e}) after {} frames", self.frame);
+                self.end = e;
                 self.stopped = true;
             }
             10 => self.restart = true,
             e => {
                 eprintln!("level over ({e}) at frame {}", self.frame);
-                self.stopped = true;
+                self.level_over = true;
             }
         }
     }
@@ -1140,7 +1147,7 @@ fn blit(fb: &mut [u8], px: &[u8], w: i32, h: i32, x0: i32, y0: i32, flip: bool) 
     }
 }
 
-fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) {
+fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) -> i32 {
     use std::io::Write;
     let t = Instant::now();
     let mut dump =
@@ -1222,9 +1229,17 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) 
         "hero ended at ({}, {}), state {}",
         game.hero.x, game.hero.y, game.hero.state
     );
+    game.end
 }
 
-fn run_window(mut game: Game, mut gfx: Graphics, scale: u32, reload: impl Fn() -> Result<World, Box<dyn Error>>) -> Result<(), Box<dyn Error>> {
+fn run_window(
+    mut game: Game,
+    mut gfx: Graphics,
+    scale: u32,
+    data: PathBuf,
+    mut map_path: PathBuf,
+    load: impl Fn(&Path) -> Result<(Game, Graphics), Box<dyn Error>>,
+) -> Result<(), Box<dyn Error>> {
     use sdl2::{event::Event, keyboard::Scancode, pixels::PixelFormatEnum};
     let sdl = sdl2::init()?;
     let window = sdl
@@ -1282,7 +1297,23 @@ fn run_window(mut game: Game, mut gfx: Graphics, scale: u32, reload: impl Fn() -
             }
             if std::mem::take(&mut game.restart) {
                 // GameFrame 4e60 = 10: HeroReset, the level loaded again (LevelInit randomizes).
-                game = Game::new(reload()?, None);
+                (game, gfx) = load(&map_path)?;
+            }
+            if std::mem::take(&mut game.level_over) {
+                // GameFrame 4e60 = 100: the video and the stats screen (1080:172a, front end),
+                // whose handler 1080:1ab2 starts the next level like the menu does (1080:17fa ->
+                // 16b7 -> 1088:d4b2: RandSeed 0x3e00, HeroReset; nothing carries over).
+                match next_level(&data, &map_path) {
+                    Some(next) => {
+                        eprintln!("next level: {}", next.display());
+                        (game, gfx) = load(&next)?;
+                        map_path = next;
+                    }
+                    None => {
+                        eprintln!("no next level (menu or episode screen): the game stays over");
+                        game.stopped = true;
+                    }
+                }
             }
             next += tick;
         }
@@ -1337,34 +1368,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     world::load_game_ds(&o.data.join("../ETLAUNCH.EXE"))?;
     let _ = sprites::DIR.set(o.data.join("SPRITES"));
-    // The script's LoadSpriteGroup= lines fill slots 0x32.. in order (an empty one skips a slot).
-    let lines: Vec<String> = find_ci(map_path.parent().unwrap_or(Path::new(".")), &{
-        let mut n = map_path.file_stem().unwrap_or_default().to_os_string();
-        n.push(".SCR");
-        n.to_string_lossy().into_owned()
-    })
-    .and_then(|p| std::fs::read(p).ok())
-    .map(|t| {
-        String::from_utf8_lossy(&t)
-            .lines()
-            .filter_map(|l| {
-                let l = l.trim();
-                let (k, v) = l.split_once('=')?;
-                k.eq_ignore_ascii_case("LoadSpriteGroup").then(|| v.trim().to_string())
-            })
-            .collect()
-    })
-    .unwrap_or_default();
-    let groups = lines.iter().map(|v| v.split(',').next().unwrap_or("").trim().to_string()).collect();
-    let raw = lines
-        .iter()
-        .map(|v| v.split(',').nth(1).is_some_and(|f| f.trim().eq_ignore_ascii_case("N")))
-        .collect();
-    let _ = sprites::LEVEL_GROUPS.set(groups);
-    let _ = sprites::LEVEL_RAW.set(raw);
-    let world = World::load(&map_path, &o.data.join("TILES"))?;
+    let world = load_world(&o.data, &map_path)?;
     if std::env::var_os("ET_PICKUPS").is_some() {
         println!("START {:?}", world.map.start);
+        println!("NEXT {:?}", next_level(&o.data, &map_path));
         for ty in 0..world.main().height {
             for tx in 0..world.main().width {
                 let (y, x) = (ty * 16 + 15, tx * 16);
@@ -1393,7 +1400,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         if game.demo.is_none() {
             return Err("--headless needs --demo".into());
         }
-        run_headless(game, o.trace, o.dump.as_deref());
+        let end = run_headless(game, o.trace, o.dump.as_deref());
+        // Debug: ET_NEXT=N plays N idle frames of the next level after a demo that ends the level.
+        if let (100, Some(n)) = (end, std::env::var("ET_NEXT").ok().and_then(|v| v.parse::<u32>().ok())) {
+            let next = next_level(&o.data, &map_path).ok_or("no next level")?;
+            let mut g = Game::new(load_world(&o.data, &next)?, None);
+            for _ in 0..n {
+                g.step([-1; 9]);
+            }
+            println!("next level {}: {n} frames, hero at ({}, {}) state {}", next.display(), g.hero.x, g.hero.y, g.hero.state);
+        }
         return Ok(());
     }
     let mut gfx = Graphics::load(&o.data, &game.world, &map_path)?;
@@ -1402,8 +1418,68 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some((frames, path)) = &o.shot {
         return Ok(screenshot(game, &gfx, *frames, path)?);
     }
-    let tiles = o.data.join("TILES");
-    run_window(game, gfx, o.scale, || Ok(World::load(&map_path, &tiles)?))
+    let (data, camera, bg_only) = (o.data.clone(), o.camera, o.bg_only);
+    run_window(game, gfx, o.scale, data.clone(), map_path, move |path: &Path| {
+        let world = load_world(&data, path)?;
+        let mut gfx = Graphics::load(&data, &world, path)?;
+        gfx.camera = camera;
+        gfx.bg_only = bg_only;
+        Ok((Game::new(world, None), gfx))
+    })
+}
+
+/// The map's level script (`<MAP>.SCR` beside it) as `Key=value` pairs, comments dropped.
+fn script_lines(map_path: &Path) -> Vec<(String, String)> {
+    let mut n = map_path.file_stem().unwrap_or_default().to_os_string();
+    n.push(".SCR");
+    find_ci(map_path.parent().unwrap_or(Path::new(".")), &n.to_string_lossy())
+        .and_then(|p| std::fs::read(p).ok())
+        .map(|t| {
+            String::from_utf8_lossy(&t)
+                .lines()
+                .filter_map(|l| {
+                    let l = l.split('\'').next()?.trim();
+                    let (k, v) = l.split_once('=')?;
+                    Some((k.trim().to_string(), v.trim().to_string()))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// LevelLoad's files: the script's LoadSpriteGroup= lines fill slots 0x32.. in order (an empty
+/// one skips a slot), then the map and its tile groups.
+fn load_world(data: &Path, map_path: &Path) -> Result<World, Box<dyn Error>> {
+    let lines: Vec<String> = script_lines(map_path)
+        .into_iter()
+        .filter(|(k, _)| k.eq_ignore_ascii_case("LoadSpriteGroup"))
+        .map(|(_, v)| v)
+        .collect();
+    let groups = lines.iter().map(|v| v.split(',').next().unwrap_or("").trim().to_string()).collect();
+    let raw = lines
+        .iter()
+        .map(|v| v.split(',').nth(1).is_some_and(|f| f.trim().eq_ignore_ascii_case("N")))
+        .collect();
+    sprites::set_level(groups, raw);
+    Ok(World::load(map_path, &data.join("TILES"))?)
+}
+
+/// The level after this one (the script's NextLevelMap=, FUN_1088_bf00 -> 1170:4c3a): beside
+/// the current map, else in MAPS/ (1170:02ac). None for "NEXT EPISODE" (the episode screen,
+/// 1170:4d97) or no next level (back to the menu): both are front end.
+fn next_level(data: &Path, map_path: &Path) -> Option<PathBuf> {
+    let (_, name) = script_lines(map_path)
+        .into_iter()
+        .rfind(|(k, _)| k.eq_ignore_ascii_case("NextLevelMap"))?;
+    if name.is_empty() || name.eq_ignore_ascii_case("NEXT EPISODE") {
+        return None;
+    }
+    // DOS truncates a longer name to 8.3 (CITY_I01's "city_roll.map" opens CITY_ROL.MAP).
+    let name = match name.rsplit_once('.') {
+        Some((stem, ext)) if stem.len() > 8 => format!("{}.{ext}", &stem[..8]),
+        _ => name,
+    };
+    find_ci(map_path.parent().unwrap_or(Path::new(".")), &name).or_else(|| find_ci(&data.join("MAPS"), &name))
 }
 
 #[cfg(test)]

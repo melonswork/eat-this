@@ -5,14 +5,23 @@
 use crate::data::SpriteGroup;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, RwLock};
 
 pub static DIR: OnceLock<PathBuf> = OnceLock::new();
 /// The level script's LoadSpriteGroup= names (slots 0x32..).
-pub static LEVEL_GROUPS: OnceLock<Vec<String>> = OnceLock::new();
+static LEVEL_GROUPS: RwLock<Vec<String>> = RwLock::new(Vec::new());
 /// Those with the `,N` flag: loaded without fitting them to the level palette (their pixels
 /// index the mix tables, like PPGLIGHT's).
-pub static LEVEL_RAW: OnceLock<Vec<bool>> = OnceLock::new();
+static LEVEL_RAW: RwLock<Vec<bool>> = RwLock::new(Vec::new());
+
+/// A new level's LoadSpriteGroup= lines (names, `,N` flags): the level slots load anew.
+pub fn set_level(groups: Vec<String>, raw: Vec<bool>) {
+    *LEVEL_GROUPS.write().unwrap() = groups;
+    *LEVEL_RAW.write().unwrap() = raw;
+    if let Some(m) = GROUPS.get() {
+        m.lock().unwrap().retain(|&slot, _| slot < 0x32 || SLOTS.iter().any(|&(s, _)| s == slot));
+    }
+}
 
 /// Slot -> file, as FUN_1088_c98f loads them (seen with the tracer's --dump-groups).
 const SLOTS: &[(u16, &str)] = &[
@@ -59,7 +68,7 @@ const DRAW_SLOTS: &[(u16, &str)] = &[(0x1b, "PPGLIGHT"), (0x73, "FACBROCK"), (0x
 
 fn slot_name(slot: u16, draw: bool) -> Option<String> {
     let level = (slot >= 0x32)
-        .then(|| LEVEL_GROUPS.get().and_then(|g| g.get(slot as usize - 0x32)))
+        .then(|| LEVEL_GROUPS.read().unwrap().get(slot as usize - 0x32).cloned())
         .flatten()
         .filter(|n| !n.is_empty())
         .map(|n| n.trim_end_matches(".spr").trim_end_matches(".SPR").to_ascii_uppercase());
@@ -77,11 +86,7 @@ fn slot_name(slot: u16, draw: bool) -> Option<String> {
 pub fn raw(slot: u16) -> bool {
     matches!(slot, 0x1b | 0x73 | 0x75 | 0x7c)
         || (slot >= 0x32
-            && LEVEL_RAW
-                .get()
-                .and_then(|r| r.get(slot as usize - 0x32))
-                .copied()
-                .unwrap_or(false))
+            && LEVEL_RAW.read().unwrap().get(slot as usize - 0x32).copied().unwrap_or(false))
 }
 
 /// The file behind sprite group `slot`, for drawing.
