@@ -172,6 +172,8 @@ struct Game {
     live_mouse: Option<(i32, i32)>,
     /// Live play: a weapon key went down (ReadGameInput: 0..9 = keys 1..9 0, 10 PgUp, 11 PgDn).
     weapon_key: Option<usize>,
+    /// The level's totals (4eb2 kills, 4eae hidden areas, 4eaa bios spheres) for the HUD.
+    totals: level::Tally,
 }
 
 #[derive(Default)]
@@ -207,8 +209,11 @@ impl Game {
             let m = d.input(0).1;
             hero.set_mouse((m.0 as i32, m.1 as i32));
         }
+        // SpawnFromIconTiles' totals (plane 2), then the constructors that count themselves.
+        let mut totals = frontend::level_totals(&world);
         // LevelInit: icons and OBJECTS records become objects (their constructors draw Random).
         level.spawn_all(&mut world, hero.x, &mut rng);
+        totals.kills += level.objects.iter().flatten().filter(|o| frontend::COUNTED_KINDS.contains(&o.kind)).count() as i32;
         // LevelFirstFrame (1088:b4db): enter the start sector (its scripts run), face its far side.
         let mut fx = Effects::default();
         let sector = world.sector_at(hero.y, hero.x);
@@ -248,6 +253,7 @@ impl Game {
             sound: Vec::new(),
             live_mouse: None,
             weapon_key: None,
+            totals,
         };
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
         let hero_at = (g.hero.x, g.hero.y);
@@ -570,6 +576,8 @@ impl Game {
         for &(a, b) in &fx.shakes {
             self.camera.shake(a, b);
         }
+        // FUN_1088_2501 (the status bar; it only feeds the HUD).
+        self.hero.status_bar();
         // The end of GameFrameInGame: 1170:4e62 counts down to the teleport.
         if self.hero.exit_timer > 0 {
             self.hero.exit_timer -= 1;
@@ -827,6 +835,8 @@ struct Graphics {
     decor: Vec<Decor>,
     /// Draw the pointer and the status bar (H toggles it in the window).
     show_hud: bool,
+    /// GameStats (1a92): 0 none, 1 the status bar, 2 also the counters.
+    hud_level: i32,
 }
 
 impl Graphics {
@@ -940,6 +950,7 @@ impl Graphics {
             extra,
             decor,
             show_hud: true,
+            hud_level: 2,
         })
     }
 
@@ -1050,7 +1061,8 @@ impl Graphics {
             flash: draw::FLASH,
             clip: render::SCREEN,
         };
-        draw::hud(&mut p, &g.hero);
+        let got = level::TALLY.with(|t| t.get());
+        draw::hud(&mut p, &g.hero, self.hud_level, got, g.totals);
     }
 
     /// FUN_1068_09bf over the sector's decor list: each layer is an extra map drawn with its

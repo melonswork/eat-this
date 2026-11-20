@@ -113,6 +113,11 @@ pub struct Hero {
     pub push: Option<(i32, i32, i32)>,
     /// 1170:4dec: the right button's weapon (-1 none yet; its procedure 4dee is table 188a).
     pub weapon: i32,
+    /// 1170:4e30 / 4e32: the status bar's health length (follows the health one pixel a frame)
+    /// and the weapon icon's slide-in offset (-14 on a weapon change, +2 a frame); FUN_1088_2501
+    /// updates them every frame (`status_bar`). Only the HUD reads them.
+    pub hud_bar: i32,
+    pub hud_slide: i32,
     /// 1170:1656: the weapons.
     pub weapons: [Weapon; 10],
     /// Pick-ups taken this frame: (plane-2 cell (tx, ty), effect, its function 3, y, x).
@@ -307,7 +312,10 @@ impl Hero {
             side_shakes: Vec::new(),
             cam_nudge: (0, 0),
             gun: Gun::default(),
-            weapon: -1,
+            // HeroReset (FUN_1088_06b8) ends with SelectWeapon(gWeaponForDigitKey[0]).
+            weapon: WEAPON_FOR_DIGIT[0],
+            hud_bar: 0,
+            hud_slide: -14,
             weapons: WEAPON_AMMO.map(|(pickup, max)| Weapon { pickup, max, next: 0, ammo: 0, owned: false }),
             pickups: Vec::new(),
             exit_timer: 0,
@@ -1381,6 +1389,8 @@ impl Hero {
         let water = lv.water;
         let now = ps.now;
         self.veh_fired = false;
+        // HeroUpdateVehicle keeps the weapon icon hidden (4e32 = -16).
+        self.hud_slide = -16;
         let old_facing = self.facing;
         self.half_width = 0x14;
         self.height = 0x1e;
@@ -2056,8 +2066,18 @@ impl Hero {
         if w != self.weapon {
             sound::discard(0x88);
             sound::play_at_listener(0x88, -200 + (w * 400) / 9);
+            self.hud_slide = -14;
         }
         self.weapon = w;
+    }
+
+    /// The update half of FUN_1088_2501 (the status bar), once a frame.
+    pub fn status_bar(&mut self) {
+        let target = self.health.clamp(0, 0x2c6) * 0x47 / 0x2c6;
+        self.hud_bar = if self.hud_bar == 0x7fff { target } else { self.hud_bar + (target - self.hud_bar).signum() };
+        if self.hud_slide < 0 {
+            self.hud_slide += 2;
+        }
     }
 
     /// The start of FUN_1088_55f0: pick-ups (function 30000 in plane 2) under the hero's two

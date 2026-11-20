@@ -713,9 +713,10 @@ pub fn doors(p: &mut Painter, level: &Level) {
     }
 }
 
-/// FUN_1088_4b64's pointer and FUN_1088_2501's status bar (HUD level 1: health, keys left out,
-/// the right button's weapon and its ammo). Screen coordinates; ETSCORE is slot 0x1f.
-pub fn hud(p: &mut Painter, hero: &crate::hero::Hero) {
+/// FUN_1088_4b64's pointer and FUN_1088_2501's status bar: `level` is GameStats (1a92):
+/// 1 = health, keys, the right button's weapon and its ammo, 2 = also the kill / hidden area /
+/// bios sphere counters on the right (`got` of `totals`). Screen coordinates; ETSCORE is slot 0x1f.
+pub fn hud(p: &mut Painter, hero: &crate::hero::Hero, level: i32, got: crate::level::Tally, totals: crate::level::Tally) {
     use crate::world::ds_word;
     p.reset();
     let byte = |a: usize| ds_word(a) & 0xff;
@@ -729,8 +730,56 @@ pub fn hud(p: &mut Painter, hero: &crate::hero::Hero) {
     let (mx, my) = hero.gun_mouse();
     p.mode = 0x30;
     p.sprite(ptr, mx, my);
-    // Health: the frame, then the bar cut at its length (health * 0x47 / 0x2c6); red when low.
-    let len = hero.health.clamp(0, 0x2c6) * 0x47 / 0x2c6;
+    if level > 0 {
+        status_bar(p, hero);
+    }
+    if level > 1 {
+        // FUN_1088_248e for each counter with a total: the box (mode 0x30), the count and the
+        // total right-aligned, the animated icon (STATSOBJ, slot 0x28); bottom up from y 0xbe.
+        let f = p.frame as i32;
+        let mut y = 0xbe;
+        for (icon, n, total) in [
+            (0x2800 + (f / 6) % 12, got.kills, totals.kills),
+            (0x280c + (f / 9) % 12, got.secrets, totals.secrets),
+            (0x2824 + ((f / 3) & 7), got.bios, totals.bios),
+        ] {
+            if total <= 0 {
+                continue;
+            }
+            p.mode = 0x30;
+            p.sprite(0x1f11, 0x107, y);
+            p.mode = 4;
+            number(p, n, 0x115, y);
+            number(p, total, 0x12d, y);
+            p.sprite(icon, 0x105, y);
+            y -= 0xc;
+        }
+    }
+    p.reset();
+}
+
+/// FUN_1088_2410: `n` in ETSCORE's digits, at most three, its last digit at x, 5 pixels apart.
+fn number(p: &mut Painter, n: i32, x: i32, y: i32) {
+    let mut n = n;
+    for k in 0..3 {
+        p.sprite(n % 10 + 0x1f00, x - k * 5, y);
+        n /= 10;
+        if n <= 0 {
+            break;
+        }
+    }
+}
+
+/// The status bar of FUN_1088_2501 (GameStats >= 1).
+fn status_bar(p: &mut Painter, hero: &crate::hero::Hero) {
+    use crate::world::ds_word;
+    let byte = |a: usize| ds_word(a) & 0xff;
+    let w = hero.weapon;
+    let rec = 0x1656 + (w.max(0) as usize) * 0xd;
+    // Health: the frame, then the bar cut at 4e30 (it follows health * 0x47 / 0x2c6 a pixel a
+    // frame); flashing red when short.
+    let len = hero.hud_bar;
+    p.mode = 0x30;
     p.sprite(0x1f0d, 4, 0xc6);
     p.mode = 4;
     if len < 9 {
@@ -777,10 +826,12 @@ pub fn hud(p: &mut Painter, hero: &crate::hero::Hero) {
     }
     p.mode = 0x30;
     p.sprite(0x1f0c, x, 0xc6);
-    // The weapon's icon; with none chosen yet (-1) this is 0x1f13, the pistol's.
+    // The weapon's icon, sliding in from the left after a change (4e32), the edge 0x1f10 over it.
     p.mode = 4;
-    p.sprite(0x1f14 + w, x, 0xc6);
-    p.reset();
+    p.sprite(0x1f14 + w, x + hero.hud_slide, 0xc6);
+    if hero.hud_slide < 0 {
+        p.sprite(0x1f10, x + hero.hud_slide, 0xc6);
+    }
 }
 
 /// FUN_1090_009c (the foreground procs of the levels with water): below the hero's sector's

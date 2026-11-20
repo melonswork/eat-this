@@ -434,7 +434,8 @@ impl FrontEnd {
         sound::stop_all();
         let world = crate::load_world(&self.data, map)?;
         let mut gfx = Graphics::load(&self.data, &world, map)?;
-        gfx.show_hud = self.settings.game_stats > 0;
+        gfx.show_hud = true;
+        gfx.hud_level = self.settings.game_stats;
         // A user map with PlayRecord= plays its recording (LevelLoad -> DemoLoad).
         let pairs = script_pairs(&script_of(map));
         let demo = pairs
@@ -935,7 +936,7 @@ fn script_of(map: &Path) -> PathBuf {
 /// SpawnFromIconTiles' totals (FUN_1088_1797): plane-2 cells 0xd00 (bios spheres), function
 /// 61800 (hidden areas), 61900 (enemies). The constructors that also add to the enemy total
 /// (EnemyFactory during LevelInit) are counted from the objects the setup made.
-fn level_totals(world: &crate::world::World) -> Tally {
+pub fn level_totals(world: &crate::world::World) -> Tally {
     let mut t = Tally::default();
     if let Some(Some(p)) = world.planes.get(2) {
         for &c in &p.cells {
@@ -956,7 +957,7 @@ fn level_totals(world: &crate::world::World) -> Tally {
 }
 
 /// The enemy kinds whose constructors count themselves (1170:4eb2) during LevelInit.
-const COUNTED_KINDS: [u16; 10] = [0x1428, 0x1432, 0x145a, 0x14d2, 0x13e2, 0x13ec, 0x13f6, 0x140a, 0x146e, 0x1482];
+pub const COUNTED_KINDS: [u16; 10] = [0x1428, 0x1432, 0x145a, 0x14d2, 0x13e2, 0x13ec, 0x13f6, 0x140a, 0x146e, 0x1482];
 
 // ---- the window ------------------------------------------------------------------------------
 
@@ -1288,7 +1289,7 @@ impl FrontEnd {
                 self.show(Id::Main);
             }
             if let Some(r) = self.level.as_mut() {
-                r.gfx.show_hud = self.settings.game_stats > 0;
+                r.gfx.hud_level = self.settings.game_stats;
             }
         } else {
             let sets: [&[Scancode]; 9] = [
