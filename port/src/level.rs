@@ -9,6 +9,20 @@ pub const SECTOR_ON_TILE: u16 = 0x308;
 pub const SECTOR_OFF_TILE: u16 = 0x312;
 
 /// One moving platform (the game's struct behind gPlatforms[i], word offsets in comments).
+/// The platform sound sets (1170:0ec4): start, point reached, end, moving loop, shake amount.
+const PLATFORM_SOUNDS: [[i32; 5]; 10] = [
+    [0x7fff, 0x7fff, 0x7fff, 0x7fff, 4],
+    [48, 51, 50, 49, 4],
+    [0x7fff, 0x7fff, 62, 0x7fff, 4],
+    [5, 51, 127, 49, 4],
+    [146, 51, 139, 147, 4],
+    [5, 0x7fff, 0x7fff, 0x7fff, 4],
+    [146, 51, 139, 9, 4],
+    [0x7fff, 0x7fff, 50, 0x7fff, 4],
+    [5, 0x7fff, 50, 0x7fff, 4],
+    [5, 0x7fff, 127, 156, 3],
+];
+
 #[derive(Clone, Debug)]
 pub struct Platform {
     pub x: i32,                       // w0
@@ -644,6 +658,31 @@ impl Level {
         });
     }
 
+    /// FUN_1078_0002 (`slot` 0 start, 1 a point reached, 2 the end) and FUN_1078_0048 (`slot` 3,
+    /// the loop while it moves): the platform's sound set (1170:0ec4, 10 bytes per set; 0x7fff =
+    /// none) played over its box at its volume.
+    fn platform_sound(&self, i: usize, slot: usize) {
+        let Some(p) = self.platforms[i].as_ref() else {
+            return;
+        };
+        let Some(&id) = PLATFORM_SOUNDS.get(p.sound as usize).map(|s| &s[slot]) else {
+            return;
+        };
+        if id == 0x7fff {
+            return;
+        }
+        crate::sound::set_volume(p.volume);
+        if crate::sound::audible_box((p.x, p.y, p.x + p.width, p.y + p.height)) {
+            if slot == 3 {
+                crate::sound::priority(0x11f4);
+                crate::sound::keep(crate::sound::key::platform(i), id as usize);
+            } else {
+                crate::sound::play(id as usize);
+            }
+        }
+        crate::sound::set_volume(0x100);
+    }
+
     /// FUN_1078_05a0.
     fn start_platform(&mut self, world: &World, i: usize, reverse: bool) {
         let p = self.platforms[i].as_mut().unwrap();
@@ -657,6 +696,8 @@ impl Level {
         (p.prev_x, p.prev_y) = (p.x, p.y);
         p.point = 0;
         p.accel = 1;
+        self.platform_sound(i, 0);
+        let p = self.platforms[i].as_mut().unwrap();
         let last = *p.points.last().unwrap_or(&(p.x, p.y, 0));
         p.sector = world.sector_at(last.1, last.0);
         p.bounds = if p.flags & 3 == 0 {
@@ -724,8 +765,13 @@ impl Level {
                 p.point += 1;
                 done = p.point == p.points.len();
             }
+            self.platform_sound(i, 3);
             self.wake_actors(sector, rect);
+            if arrived {
+                self.platform_sound(i, if done { 2 } else { 1 });
+            }
             if done {
+                crate::sound::stop(crate::sound::key::platform(i)); // FUN_1078_00ae
                 self.paste_back(world, i);
             }
         }
@@ -899,6 +945,9 @@ impl Level {
         if g.speed < 0 {
             if Self::lever_state(world, g.trigger) > 0 {
                 g.speed = 2;
+                if crate::sound::audible_box((cam_x + 0x20, g.y, cam_x + 0x120, g.y)) {
+                    crate::sound::play(0x33);
+                }
             }
         } else {
             if g.top < g.y {
@@ -942,9 +991,24 @@ impl Level {
             g.slow_down(rng);
             // The crunch sound's pitch, drawn when it is audible (always so far: the camera
             // follows the grinder).
-            rng.random(0x50);
+            let p = rng.random(0x50);
+            crate::sound::set_volume(0xaa);
+            if crate::sound::audible_box((cam_x + 0x20, g.y, cam_x + 0x120, g.y)) {
+                crate::sound::pitch(0x100 - p);
+                crate::sound::play(0x4a);
+            }
             fx.shakes.push((0x18, 10));
         }
+        // The engine's hum (handle 4ee8): louder and lower as it speeds up.
+        let g = self.grinder.as_ref().unwrap();
+        let vol = ((g.speed as i64) << 8) / g.max_speed as i64;
+        crate::sound::set_volume(vol as i32);
+        if crate::sound::audible_box((cam_x + 0x20, g.y - 0x40, cam_x + 0x120, g.y)) {
+            crate::sound::pitch(0x180 - ((vol as i32 as u16) >> 1) as i32);
+            crate::sound::priority(0x11fe);
+            crate::sound::keep(crate::sound::key::GRINDER, 0x93);
+        }
+        crate::sound::set_volume(0x100);
         hit_hero
     }
 }

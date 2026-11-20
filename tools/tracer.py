@@ -301,8 +301,33 @@ def main():
 
         emu.hook(sel, off, on_entry)
 
+    # Sounds (re/sound.md): every SoundPlay (10e8:04d1, also reached through SoundPlayAt and the
+    # loop helper 10e0:0408), SoundSetInfo (10e8:0575, a loop's new volumes) and loop stop
+    # (10e0:0339) with the DWS_DPLAY fields the caller set: flags (high word), lvol, rvol, pitch.
+    sounds_f = open(out / "sounds.tsv", "w")
+    sounds_f.write("frame\tkind\tid\tlvol\trvol\tpitch\tflags\tcaller\n")
+
+    def on_sound(kind):
+        def f(e):
+            if not st["started"]:
+                return
+            ss, sp, bp = e["ss"], e["sp"], e["bp"]
+            arg = e.rw(ss, sp + 4)
+            chain = [syms.name(e.rw(ss, sp + 2), e.rw(ss, sp) - 5)]
+            if bp:
+                chain.append(syms.name(e.rw(ss, bp + 4), e.rw(ss, bp + 2) - 5))
+            flags = e.rw(DS, 0x5D80)
+            vals = [e.rw(DS, a) for a in (0x5D8E, 0x5D90, 0x5D92)]
+            sounds_f.write(f"{st['frame']}\t{kind}\t{arg - 0x10000 if arg & 0x8000 else arg}\t" + "\t".join(map(str, vals)) + f"\t{flags:04x}\t{' <- '.join(chain)}\n")
+        return f
+
+    emu.hook(0x10E8, 0x04D1, on_sound("play"))
+    emu.hook(0x10E8, 0x0575, on_sound("set"))
+    emu.hook(0x10E0, 0x0339, on_sound("stop"))
+
     t = time.time()
     emu.run()
+    sounds_f.close()
     calls_f.close()
     if watch_f:
         watch_f.close()

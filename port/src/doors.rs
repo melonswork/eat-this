@@ -12,6 +12,13 @@ use crate::world::{MAIN_PLANE, World};
 
 /// Tile function of door cells.
 pub const DOOR: u16 = 7050;
+/// FUN_1040_60bb with a door type's effect: they are all sounds (30000 + id) or none.
+fn door_sound(effect: u16, y: i32, x: i32) {
+    if (30000..0x8000).contains(&effect) {
+        crate::sound::play_at(effect as usize - 30000, y, x);
+    }
+}
+
 /// Plane-2 marker of the doors that open by themselves.
 const AUTO_MARK: u16 = 7060;
 
@@ -126,7 +133,8 @@ impl Level {
         };
         if !first {
             d.progress = if closed { full - speed } else { speed };
-            // (FUN_1040_60bb: the type's start sound.)
+            // FUN_1040_60bb: the type's start sound at the door's middle.
+            door_sound(TYPES[kind].1, d.y * 0x10 + d.h * 8, d.cx);
         }
         if closed {
             let p2 = w.planes[2].as_ref().unwrap().cells[(idx + (dh - 2) * width) as usize];
@@ -206,7 +214,9 @@ impl Level {
                 let want = near as i32;
                 if d.open != want {
                     d.open = want;
-                    // (The start sound unless `first`.)
+                    if !first {
+                        door_sound(TYPES[d.kind].1, d.y * 0x10 + d.h * 8, d.cx);
+                    }
                 }
             }
             let p = if first {
@@ -258,7 +268,9 @@ impl Level {
                     tile = tile.wrapping_add(0x14);
                 }
                 d.cell = cell;
-                // (The closing sound unless `first`.)
+                if !first {
+                    door_sound(TYPES[d.kind].2, d.y * 0x10 + d.h * 8, d.cx);
+                }
             }
             self.doors.swap_remove(i);
         }

@@ -33,6 +33,7 @@ mod render;
 mod rng;
 mod sentry;
 mod smallbot;
+mod sound;
 mod steam;
 mod storm;
 mod sprites;
@@ -74,6 +75,10 @@ struct Options {
     dump: Option<PathBuf>,
     camera: Option<(i32, i32)>,
     bg_only: bool,
+    /// `--wav FILE`: render the sound offline into a WAV (headless demo runs).
+    wav: Option<PathBuf>,
+    /// `--mute`: no audio device in window mode.
+    mute: bool,
 }
 
 fn options() -> Result<Options, String> {
@@ -88,6 +93,8 @@ fn options() -> Result<Options, String> {
         dump: None,
         camera: None,
         bg_only: false,
+        wav: None,
+        mute: false,
     };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -104,6 +111,8 @@ fn options() -> Result<Options, String> {
                 o.trace = Some((from, value()?.parse().map_err(|e| format!("--trace FROM TO: {e}"))?));
             }
             "--bg-only" => o.bg_only = true,
+            "--wav" => o.wav = Some(value()?.into()),
+            "--mute" => o.mute = true,
             "--camera" => {
                 let x = value()?.parse().map_err(|e| format!("--camera X Y: {e}"))?;
                 o.camera = Some((x, value()?.parse().map_err(|e| format!("--camera X Y: {e}"))?));
@@ -112,7 +121,7 @@ fn options() -> Result<Options, String> {
                 let frame = value()?.parse().map_err(|e| format!("--shot FRAME FILE.ppm: {e}"))?;
                 o.shot = Some((frame, value()?.into()));
             }
-            "-h" | "--help" => return Err("usage: eatthis [--data BIN] [--map FILE.MAP | --demo DIR.DMO] [--headless] [--scale N] [--shot FRAME FILE.ppm]".into()),
+            "-h" | "--help" => return Err("usage: eatthis [--data BIN] [--map FILE.MAP | --demo DIR.DMO] [--headless] [--scale N] [--shot FRAME FILE.ppm] [--wav FILE.wav] [--mute]".into()),
             _ => return Err(format!("unknown argument {a}")),
         }
     }
@@ -156,6 +165,8 @@ struct Game {
     /// What ended a demo (4e60), 0 if its input ran out.
     end: i32,
     report: CheckReport,
+    /// This frame's sound events for the mixer (drained by the window loop or a capture).
+    sound: Vec<sound::Ev>,
 }
 
 #[derive(Default)]
@@ -215,6 +226,7 @@ impl Game {
             -1
         };
         camera.first_frame(&world, (hero.x, hero.y), grinder);
+        sound::listener(camera.x + 0xa0, camera.y + 100);
         let mut g = Game {
             camera,
             world,
@@ -228,6 +240,7 @@ impl Game {
             level_over: false,
             end: 0,
             report: CheckReport::default(),
+            sound: Vec::new(),
         };
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
         let hero_at = (g.hero.x, g.hero.y);
@@ -281,6 +294,7 @@ impl Game {
 
     /// A pick-up's effect (function 4 of its tile).
     fn pick_effect(&mut self, effect: u16, f3: u16, y: i32, x: i32) {
+        effects::plain_sound(effect, y, x);
         if effect == hero::WEAPON_PICKUP {
             self.hero.weapon_pickup(f3);
             self.level.particles.weapon_pickup(f3 as i32, y, x);
@@ -309,6 +323,7 @@ impl Game {
 
     /// One game frame. `keys` is ignored while a demo plays.
     fn step(&mut self, keys: [i8; 9]) {
+        sound::begin_frame(self.frame + 1);
         self.rng.frame = self.frame + 1;
         self.rng.log = std::env::var("ET_RNG").ok().and_then(|v| v.parse::<u32>().ok()) == Some(self.frame);
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
@@ -498,6 +513,8 @@ impl Game {
         let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
         self.camera
             .update(&self.world, (self.hero.x, self.hero.y), true, grinder);
+        // The end of FUN_1088_0c82: the listener (FUN_10e0_0002) is the camera's centre.
+        sound::listener(self.camera.x + 0xa0, self.camera.y + 100);
         // FUN_10a8_1311 (doors opening by themselves), then after the level's background
         // procedure FUN_10a8_0dab (the moving doors).
         let hero_at = (self.hero.x, self.hero.y);
@@ -535,6 +552,8 @@ impl Game {
             }
         }
         self.frame += 1;
+        // GameFrame: FUN_10e0_04a4 (loops nobody kept stop), SoundUpdate.
+        self.sound.extend(sound::end_frame());
         // GameFrame: 4e60 > 0 ends a demo (DemoStop; a recording is saved), else 10 restarts the
         // level and 100 shows the level's end (video 1, then the stats screen 1080:172a).
         match std::mem::take(&mut self.hero.level_end) {
@@ -644,6 +663,7 @@ impl Game {
         if self.level.update_grinder(&mut self.world, hero, cam_x, &mut self.rng, fx) {
             // FUN_1088_3c32(0xc0); a hurt hero (not a dead one) slows the grinder down.
             if self.hero.hurt(0xc0, &mut self.rng) == 1 {
+                sound::play_at(0x16, self.hero.y, self.hero.x);
                 self.level.grinder.as_mut().unwrap().slow_down(&mut self.rng);
             }
             self.hero_death_effects();
@@ -1150,7 +1170,7 @@ fn blit(fb: &mut [u8], px: &[u8], w: i32, h: i32, x0: i32, y0: i32, flip: bool) 
     }
 }
 
-fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) -> i32 {
+fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>, mut capture: Option<sound::Capture>) -> i32 {
     use std::io::Write;
     let t = Instant::now();
     let mut dump =
@@ -1187,6 +1207,10 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) 
         let traced = trace.is_some_and(|(a, b)| (a..=b).contains(&count));
         let before = game.rng.calls();
         game.step([0; 9]);
+        let events = std::mem::take(&mut game.sound);
+        if let Some(c) = capture.as_mut() {
+            c.frame(events, HZ);
+        }
         if traced {
             let (keys, _) = game.demo.as_ref().unwrap().input(count - 1);
             println!(
@@ -1232,6 +1256,12 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) 
         "hero ended at ({}, {}), state {}",
         game.hero.x, game.hero.y, game.hero.state
     );
+    if let Some(c) = &capture {
+        match c.save() {
+            Ok(()) => println!("wrote the sound of {} frames", game.frame),
+            Err(e) => eprintln!("--wav: {e}"),
+        }
+    }
     game.end
 }
 
@@ -1239,12 +1269,38 @@ fn run_window(
     mut game: Game,
     mut gfx: Graphics,
     scale: u32,
+    mute: bool,
     data: PathBuf,
     mut map_path: PathBuf,
     load: impl Fn(&Path) -> Result<(Game, Graphics), Box<dyn Error>>,
 ) -> Result<(), Box<dyn Error>> {
     use sdl2::{event::Event, keyboard::Scancode, pixels::PixelFormatEnum};
     let sdl = sdl2::init()?;
+    // The mixer runs in SDL's audio callback; the game hands it each frame's events.
+    struct Out(sound::Mixer);
+    impl sdl2::audio::AudioCallback for Out {
+        type Channel = f32;
+        fn callback(&mut self, out: &mut [f32]) {
+            self.0.render(out);
+        }
+    }
+    let mut audio = if mute {
+        None
+    } else {
+        let want = sdl2::audio::AudioSpecDesired { freq: Some(sound::RATE as i32), channels: Some(2), samples: Some(1024) };
+        match sdl.audio().and_then(|a| a.open_playback(None, &want, |_| Out(sound::Mixer::new(&data)))) {
+            Ok(dev) => {
+                sound::enable();
+                dev.resume();
+                Some(dev)
+            }
+            Err(e) => {
+                eprintln!("no sound: {e}");
+                None
+            }
+        }
+    };
+    level_music(&map_path);
     let window = sdl
         .video()?
         .window("Eat This", W as u32 * scale, H as u32 * scale)
@@ -1298,12 +1354,21 @@ fn run_window(
             if !game.demo_done() {
                 game.step(keys);
             }
+            if let Some(dev) = audio.as_mut() {
+                let mut m = dev.lock();
+                for e in game.sound.drain(..) {
+                    m.0.apply(e);
+                }
+            } else {
+                game.sound.clear();
+            }
             if std::mem::take(&mut game.restart) {
                 // GameFrame 4e60 = 10: HeroReset, the level loaded again (LevelInit randomizes),
                 // one more try (4dc2).
                 let tries = game.level.tries + 1;
                 (game, gfx) = load(&map_path)?;
                 game.level.tries = tries;
+                level_music(&map_path);
             }
             if std::mem::take(&mut game.level_over) {
                 // GameFrame 4e60 = 100: the video and the stats screen (1080:172a, front end),
@@ -1314,6 +1379,7 @@ fn run_window(
                         eprintln!("next level: {}", next.display());
                         (game, gfx) = load(&next)?;
                         map_path = next;
+                        level_music(&map_path);
                     }
                     None => {
                         eprintln!("no next level (menu or episode screen): the game stays over");
@@ -1406,7 +1472,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         if game.demo.is_none() {
             return Err("--headless needs --demo".into());
         }
-        let end = run_headless(game, o.trace, o.dump.as_deref());
+        // Sound stays off unless --wav asks for a capture.
+        let capture = o.wav.as_ref().map(|p| sound::Capture::new(&o.data, p));
+        if capture.is_some() {
+            level_music(&map_path);
+        }
+        let end = run_headless(game, o.trace, o.dump.as_deref(), capture);
         // Debug: ET_NEXT=N plays N idle frames of the next level after a demo that ends the level.
         if let (100, Some(n)) = (end, std::env::var("ET_NEXT").ok().and_then(|v| v.parse::<u32>().ok())) {
             let next = next_level(&o.data, &map_path).ok_or("no next level")?;
@@ -1425,13 +1496,26 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(screenshot(game, &gfx, *frames, path)?);
     }
     let (data, camera, bg_only) = (o.data.clone(), o.camera, o.bg_only);
-    run_window(game, gfx, o.scale, data.clone(), map_path, move |path: &Path| {
+    run_window(game, gfx, o.scale, o.mute, data.clone(), map_path, move |path: &Path| {
         let world = load_world(&data, path)?;
         let mut gfx = Graphics::load(&data, &world, path)?;
         gfx.camera = camera;
         gfx.bg_only = bg_only;
         Ok((Game::new(world, None), gfx))
     })
+}
+
+/// A level starts (FUN_1080_167b): every sound stops (FUN_10e0_03d5) and the script's
+/// `CDTrack=N,loop` plays CD track N (FUN_1088_bf00 -> 1170:4d98/4d9a, CdPlayTrack).
+fn level_music(map_path: &Path) {
+    sound::stop_all();
+    if let Some((_, v)) = script_lines(map_path).into_iter().rfind(|(k, _)| k.eq_ignore_ascii_case("CDTrack")) {
+        let mut it = v.split(',').map(|x| x.trim().parse::<i32>().unwrap_or(0));
+        let (track, looped) = (it.next().unwrap_or(0), it.next().unwrap_or(0) > 0);
+        if track > 0 {
+            sound::music(track as u32, looped);
+        }
+    }
 }
 
 /// The map's level script (`<MAP>.SCR` beside it) as `Key=value` pairs, comments dropped.

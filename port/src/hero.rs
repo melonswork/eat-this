@@ -6,6 +6,7 @@
 
 use crate::level::{Level, Platform};
 use crate::rng::PascalRandom;
+use crate::sound;
 use crate::world::{MAIN_PLANE, OUTSIDE, World, solid};
 
 /// gInput indices (ReadGameInput, 1088:53a5).
@@ -222,6 +223,8 @@ pub struct Gun {
     /// FUN_1088_678b's flame: (y, x, angle).
     pub flame: Option<(i32, i32, i32)>,
     flame_aim: i32, // 4e4a: the aim the flame follows
+    /// 1170:4dbe: the flame's roar plays again at this level frame (sound only).
+    flame_sound: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -1094,6 +1097,7 @@ impl Hero {
                 self.crouch = 8;
                 self.frame = 0xa8;
                 self.shakes.push((8, 4));
+                sound::play_at(0x24, self.y, self.x);
                 let n = rng.random(6) + 1;
                 spawn_dust(w, n, self.y, self.x, rng);
             }
@@ -1195,6 +1199,7 @@ impl Hero {
             if self.vy < 1 {
                 if self.vy < 0 && self.ceiling < 0 {
                     self.vy = 0;
+                    sound::play_at(7, self.y, self.x);
                 }
             } else {
                 self.fall += self.vy / 10;
@@ -1210,6 +1215,8 @@ impl Hero {
                         self.hang_x = (hx & !15) + 7;
                         self.released[UP] = false;
                         self.hang_y = row;
+                        sound::play_at(0x39, self.y, self.x);
+                        sound::play_at(0x22, self.y, self.x);
                         self.shakes.push((0xc, 6));
                         return;
                     }
@@ -1221,6 +1228,8 @@ impl Hero {
                         dy = (((self.y - 0x2f) & !15) + 0x2f) - self.y;
                         self.released[UP] = false;
                         self.shakes.push((8, 3));
+                        sound::play_at(0x22, self.y, self.x);
+                        sound::play_at(0x39, self.y, self.x);
                     }
                 }
             }
@@ -1233,6 +1242,7 @@ impl Hero {
                     || (input[RIGHT] > 0 && wall((self.x - self.half_width) - 5))
                 {
                     self.start_jump(-0x32, 7);
+                    sound::play_at(0x22, self.y, self.x);
                     self.shakes.push((0xe, 4));
                 }
             }
@@ -1755,6 +1765,8 @@ impl Hero {
                 eprintln!("SHOT {now} hero {},{} facing {} muzzle {:?} aim {} pose {} -> {x},{y}", self.x, self.y, self.facing, g.muzzle, g.aim, g.pose);
             }
             g.shot = Some((y, x, g.aim, g.shots & 1));
+            sound::discard(0x73); // HeroFireWeapon
+            sound::play_at(0x73, y, x);
             g.shots += 1;
             if std::env::var_os("ET_SHOT").is_some() {
                 eprintln!("SHOTS {now} -> {}", g.shots);
@@ -1851,6 +1863,10 @@ impl Hero {
                             eprintln!("FLAME {now} aim {} a4a {a} shots {} muzzle {:?} hero {},{} -> {x},{y} angle {}", g.aim, g.shots, g.muzzle, self.x, self.y, (a + wobble + 0x1680) % 0x1680);
                         }
                         g.flame = Some((y, x, (a + wobble + 0x1680) % 0x1680));
+                        if g.flame_sound <= now {
+                            sound::play_at(0x72, y, x);
+                            g.flame_sound = now + 0x10;
+                        }
                         g.shots += 1;
                         g.shooting = true;
                         self.weapons[1].ammo -= 1;
@@ -1892,7 +1908,8 @@ impl Hero {
                     let g = &mut self.gun;
                     let (y, x) = (self.y + g.muzzle.1 - 0x16, self.x + g.muzzle.0);
                     g.rockets = Some((y, x, g.aim));
-                    rng.random(0x30); // the sound's pitch
+                    let p = rng.random(0x30); // the sound's pitch
+                    sound::play_at_pitch(0x5c, 0x100 - p, y, x);
                     g.pose = 4;
                     g.shots += 1;
                     g.cooldown = 10;
@@ -1909,6 +1926,7 @@ impl Hero {
                     let y = self.y + g.muzzle.1 - 0x16 - (0x17 * s) / 0x4000;
                     let a = (g.aim + 0x1680 - 0x20 + rng.random(0x41) as i32) % 0x1680;
                     g.rocket5 = Some((y, x, a));
+                    sound::play_at(0x52, y, x);
                     g.pose = 4;
                     g.shots += 1;
                     g.cooldown = 10;
@@ -1925,6 +1943,7 @@ impl Hero {
                     let y = self.y + g.muzzle.1 - 0x16 - (0x17 * s) / 0x4000;
                     let a = (g.aim + 0x1680 - 0x20 + rng.random(0x41) as i32) % 0x1680;
                     g.rocket3 = Some((y, x, a));
+                    sound::play_at(0x52, y, x);
                     g.pose = 4;
                     g.shots += 1;
                     g.cooldown = 10;
@@ -1940,6 +1959,8 @@ impl Hero {
                     let x = self.x + g.muzzle.0 + (0x17 * c) / 0x4000;
                     let y = self.y + g.muzzle.1 - 0x16 - (0x17 * s) / 0x4000;
                     g.rapid = Some((y, x, g.aim, g.shots & 1));
+                    sound::discard(0x1b);
+                    sound::play_at(0x1b, y, x);
                     g.shots += 1;
                     g.cooldown = 10;
                     g.shooting = true;
@@ -1961,6 +1982,7 @@ impl Hero {
                 if self.use_ammo(10, input, now) {
                     let g = &mut self.gun;
                     g.spread = Some((self.y + g.muzzle.1 - 0x16, self.x + g.muzzle.0, g.aim));
+                    sound::play_at(0x95, self.y + g.muzzle.1 - 0x16, self.x + g.muzzle.0);
                     g.shots += 1;
                     g.cooldown = 10;
                     g.shooting = true;
@@ -1980,6 +2002,7 @@ impl Hero {
                         (self.y - 0x1a, (aim + 0x1680 - 0x50 + rng.random(0xa1)) % 0x1680)
                     };
                     self.gun.ball9 = Some((y, self.x, a));
+                    sound::play_at(0x5e, y, self.x);
                     self.gun.pose = 4;
                     self.gun.shooting = true;
                     self.released[RIGHT_SHOOT] = false;
@@ -2022,6 +2045,11 @@ impl Hero {
 
     /// SelectWeapon (1088:71ef). (4e32 = -14 starts the weapon display, 4e4a keeps the aim.)
     pub fn select_weapon(&mut self, w: i32) {
+        // A click from the weapon's place on the HUD (FUN_1088_0688 ~ its slot), at the listener.
+        if w != self.weapon {
+            sound::discard(0x88);
+            sound::play_at_listener(0x88, -200 + (w * 400) / 9);
+        }
         self.weapon = w;
     }
 
@@ -2083,6 +2111,7 @@ impl Hero {
                 } else {
                     self.launch = 0;
                     self.anim = 0x46;
+                    sound::play_at(0x25, self.y, self.x);
                 }
                 self.flat = true;
             } else {
@@ -2090,6 +2119,8 @@ impl Hero {
                 self.anim = self.anim.min(0xaa);
                 self.shakes.push((0x18, 0xe));
                 self.flat = false;
+                sound::play_at(0x25, self.y, self.x);
+                sound::play_at(0x1a, self.y, self.x);
             }
             return;
         }
@@ -2114,6 +2145,8 @@ impl Hero {
         if d > 0x60 {
             self.shakes.push((8, (d / 0x10 - 4).min(8)));
         }
+        // A thud, or on a soft floor (gHeroGround 9) from high up a splash (and a puff, 66d4).
+        sound::play_at(if d < 0x40 || self.ground != 9 { 8 } else { 4 }, self.y, self.x);
     }
 
     /// The tail of HeroUpdate after the collision: animation frames and the Random() calls.
@@ -2646,6 +2679,7 @@ impl Hero {
             return (dx, dy);
         }
         if self.state > 0 {
+            sound::play_at(0x22, self.y, self.x);
             self.shakes.push((8, 3));
         }
         self.vy = ON_GROUND_VY;
@@ -2661,6 +2695,7 @@ impl Hero {
             if self.fall < 0x40 {
                 self.released[UP] = true;
             } else {
+                sound::play_at(0x39, self.y, self.x);
                 self.shakes.push((0xc, 6));
             }
             self.anim = 0x37;

@@ -3,11 +3,49 @@
 
 use crate::level::{Effects, Level};
 use crate::rng::PascalRandom;
+use crate::sound;
 use crate::world::{MAIN_PLANE, OUTSIDE, World};
+
+/// The effect procedures whose sound needs no Random(): (effect, sound, pitch, volume 1ab8,
+/// stop that sample's other instances first (FUN_10e8_05e0)). Pick-ups (1, 6, 67, 70, 74) too.
+const PLAIN_SOUNDS: [(u16, usize, i32, i32, bool); 13] = [
+    (1, 0x86, 0x100, 0x100, true),     // FUN_1040_014a: a heart
+    (3, 0x87, 0x100, 0x100, false),    // FUN_1040_0264
+    (4, 0x38, 0x100, 0x100, false),    // FUN_1040_0571
+    (6, 0x88, 0x100, 0x100, false),    // FUN_1040_050e: the drone
+    (26, 0x4e, 0x100, 0x100, false),   // FUN_1040_2f7b
+    (41, 0x4a, 0x100, 0x100, false),   // FUN_1040_44ef
+    (50, 0x26, 0x100, 0x80, false),    // FUN_1040_50cf (and 0x1c below)
+    (52, 0x5b, 0x100, 0x100, false),   // FUN_1040_54b2
+    (67, 0x88, 0x100, 0x100, true),    // FUN_1040_0312: a weapon
+    (70, 0x88, 0x100, 0x100, false),   // FUN_1040_043c: a key
+    (74, 0x86, 0x100, 0x100, true),    // FUN_1040_01d9
+    (0, 0, 0, 0, false),
+    (0, 0, 0, 0, false),
+];
+
+/// The sound of an effect procedure that draws no Random() for it (`PLAIN_SOUNDS`).
+pub fn plain_sound(id: u16, y: i32, x: i32) {
+    if let Some(&(_, s, p, v, discard)) = PLAIN_SOUNDS.iter().find(|e| e.0 == id && e.0 != 0) {
+        if discard {
+            sound::discard(s);
+        }
+        sound::set_volume(v);
+        if p != 0x100 {
+            sound::pitch(p);
+        }
+        sound::play_at(s, y, x);
+        if id == 50 {
+            sound::play_at(0x1c, y, x);
+        }
+        sound::set_volume(0x100);
+    }
+}
 
 /// FUN_1040_60bb: effect `id` at (y, x); ids >= 30000 are plain sounds. The effect procedures
 /// are the table at 1170:07b2 (filled at run time; `mise run trace -- ... --dump-mem 1170:07b2:200`).
 pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+    plain_sound(id, y, x);
     match id {
         0 => {}
         34 => explosion(lv, world, y, x, rng, fx),
@@ -81,7 +119,10 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
         72 => rubble(lv, 0x3301, y, x, rng),
         75 => {
             rubble(lv, 0x520a, y, x, rng);
-            rng.random(0x28); // the crash's pitch
+            let p = rng.random(0x28); // the crash's pitch
+            sound::set_volume(0xaa);
+            sound::play_at_pitch(0x4a, 0x100 - p, y, x);
+            sound::set_volume(0x100);
             fx.shakes.push((0x18, 10));
         }
         92 => {
@@ -140,7 +181,8 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             ps.p.group = 0;
             ps.spawn_seq(0x520d, 4, 3, y, x, 1);
             ps.p.group = 1;
-            rng.random(0x80); // the sound's pitch
+            let p = rng.random(0x80); // the sound's pitch
+            sound::play_at_pitch(99, p + 0xe0, y, x);
         }
         37 => {
             // FUN_1040_3fff: a puff of smoke every other frame (1170:617e is even).
@@ -168,7 +210,8 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                     lv.set_cell(world, v.wrapping_add(off), c as u16, fx);
                 }
             }
-            rng.random(0x1f); // the sound's pitch
+            let p = rng.random(0x1f); // the sound's pitch
+            sound::play_at_pitch(0x7b, p + 0xf1, y, x);
             fx.shakes.push((0xc, 7));
         }
         30 => {
@@ -214,7 +257,8 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             ps.p.hits = 0;
             ps.p.group = 1;
             ps.p.delay = 0;
-            rng.random(0x1f); // the sound's pitch
+            let p = rng.random(0x1f); // the sound's pitch
+            sound::play_at_pitch(0x51, p + 0xf1, y, x + 0x10);
             fx.shakes.push((0xc, 7));
         }
         83 => {
@@ -240,7 +284,8 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             ps.p.hits = 0;
             ps.p.group = 1;
             ps.p.delay = 0;
-            rng.random(0x29); // the sound's pitch
+            let p = rng.random(0x29); // the sound's pitch
+            sound::play_at_pitch(0x7b, p + 0xec, y, x);
             fx.shakes.push((0xc, 7));
             if rng.random(2) != 0 {
                 ps.p.delay = rng.random(0x50) + 0x28;
@@ -284,8 +329,11 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                 ps.p.group = 1;
                 ps.p.delay = 0;
             }
-            rng.random(0x29); // the sound's pitch
-            rng.random(0x40);
+            let p = rng.random(0x29); // the sound's pitch
+            let v = rng.random(0x40);
+            sound::set_volume(0x100 - v);
+            sound::play_at_pitch(0x7b, p + 0xec, y, x);
+            sound::set_volume(0x100);
             fx.shakes.push((0xc, 7));
         }
         85 => {
@@ -309,7 +357,7 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             ps.p.hits = 0;
         }
         // Seen in GRINDER with no Random() calls in the tracer.
-        76 => {}
+        76 => sound::play_at_pitch(0x91, 0xce, y, x),
         53 => {
             // FUN_1040_5503: the tile `function - 60701` tiles to the right blows up if it is a
             // 60705 (FUN_1050_5a33(0x60, 4)).
@@ -336,7 +384,7 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                 world.main_mut().cells[((y >> 4) * w + (x >> 4)) as usize] = 0;
             }
         }
-        id if id >= 30000 => {}
+        id if (30000..0x8000).contains(&id) => crate::sound::play_at(id as usize - 30000, y, x),
         id => eprintln!("warning: effect {id} not ported"),
     }
 }
