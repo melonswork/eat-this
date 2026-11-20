@@ -18,6 +18,8 @@ Script (one command per line, '#' starts a comment):
     level GRINDER          a CD demo folder (BIN/USERMAPS/GRINDER.DMO: its .MAP/.SCR are copied)
                            or a map under work/cd/BIN, e.g. MAPS/CITY01.MAP
     name DEATH1            output folder/REC name (default: the script's file name)
+    start 940 191          move the hero's start (MAP HEADER) in the demo's copy of the map
+    cell 2 61 9 0x1234     set a cell (plane, tile x, tile y, value) in the copy (tools/mapedit.py)
     mouse 160 100          mouse position in game-screen pixels from the next frame on
     40 right fire          hold these keys for 40 frames (nothing listed = all released)
 
@@ -56,8 +58,9 @@ BUTTONS = ["lmb", "rmb"]
 
 
 def parse(path):
-    """-> (level, name, frames): frames[i] = (set of key names, (mouse x, y))."""
+    """-> (level, name, frames, edits): frames[i] = (set of key names, (mouse x, y))."""
     level, name, frames, mouse = None, Path(path).stem.upper(), [], (160, 100)
+    edits = []
     for n, line in enumerate(Path(path).read_text().splitlines(), 1):
         words = line.split("#")[0].split()
         if not words:
@@ -67,6 +70,10 @@ def parse(path):
             level = words[1]
         elif cmd == "name":
             name = words[1].upper()
+        elif cmd == "start":
+            edits += ["--start", words[1], words[2]]
+        elif cmd == "cell":
+            edits += ["--cell", *words[1:5]]
         elif cmd == "mouse":
             mouse = (int(words[1]), int(words[2]))
         elif cmd.isdigit():
@@ -85,10 +92,10 @@ def parse(path):
         # DemoSave writes frames/35 + 1 CHECKs; the last one would be sampled at the input read
         # of frame `frames` + 1, which never comes, and stay garbage.
         frames.append(frames[-1])
-    return level, name, frames
+    return level, name, frames, edits
 
 
-def make_folder(level, name, root):
+def make_folder(level, name, root, edits=()):
     """Copy the level into root/BIN/USERMAPS/<name>.DMO with PlayRecord=<name>.REC; -> (folder, game path)."""
     src = CD / "BIN" / "USERMAPS" / f"{level.upper()}.DMO"
     if src.is_dir():
@@ -107,6 +114,11 @@ def make_folder(level, name, root):
     lines = [ln for ln in scr.read_bytes().split(b"\n") if not ln.strip().lower().startswith(b"playrecord=")]
     lines.insert(0, f"PlayRecord={name.lower()}.rec\r".encode())
     (folder / scr.name.upper()).write_bytes(b"\n".join(lines))
+    if edits:
+        import subprocess
+
+        m = next(folder / p.name.upper() for p in files if p.suffix.upper() == ".MAP")
+        subprocess.run([sys.executable, str(Path(__file__).parent / "mapedit.py"), str(m), str(m), *edits], check=True)
     return folder, f".\\Bin\\usermaps\\{folder.name}\\{scr.stem}.map"
 
 
@@ -223,9 +235,9 @@ def main():
     if o.from_rec:
         print(script_from_rec(o.from_rec, o.script), end="")
         return 0
-    level, name, frames = parse(o.script)
+    level, name, frames, edits = parse(o.script)
     root = Path(o.out)
-    folder, game_path = make_folder(level, name, root)
+    folder, game_path = make_folder(level, name, root, edits)
     why = record(game_path, frames, root, verbose=o.verbose)
     rec = next((p for p in folder.iterdir() if p.suffix.upper() == ".REC"), None)
     print(f"{why}; {len(frames)} scripted frames -> {rec or 'NO .REC WRITTEN'}")

@@ -434,6 +434,11 @@ impl Game {
             self.level.particles.shell7(a, y, x);
             noise = 2;
         }
+        if let Some((y, x, a)) = self.hero.gun.ball9 {
+            let water = self.world.sectors[self.world.sector_at(y, x)].water[1];
+            self.level.particles.ball9(y, x, a, water);
+            noise = 2;
+        }
         if let Some((y, x, a)) = self.hero.gun.rocket3 {
             self.level.particles.rocket3(y, x, a);
             noise = 2;

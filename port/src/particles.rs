@@ -41,6 +41,8 @@ pub const MOVE_LINE: u16 = 0x2ade;
 pub const MOVE_THROW: u16 = 0x2c17;
 /// FUN_1050_2d37: a bouncing throw (FUN_1050_457e).
 pub const MOVE_BOUNCE: u16 = 0x2d37;
+/// FUN_1050_3044: a ball that bounces, rolls on and climbs one-tile steps (FUN_1050_46d9).
+pub const MOVE_ROLL: u16 = 0x3044;
 /// FUN_1050_3c4f: a homing rocket in 16.16 fixed point (FUN_1050_4870).
 pub const MOVE_ROCKET: u16 = 0x3c4f;
 /// FUN_1050_2ac9: just ages (no sprite frame either).
@@ -315,6 +317,41 @@ impl Particles {
         self.p.flags = 0x84;
         self.p.hits = 0;
         self.p.group = 1;
+    }
+
+    /// FUN_1088_6649's ball (weapon 9): bounces, then rolls along the floor and up steps,
+    /// hurting what it meets for its first frames after each bounce (effect 56 at its end).
+    pub fn ball9(&mut self, y: i32, x: i32, angle: i32, water: i32) {
+        self.p.group = 0;
+        self.p.hits = 0x8000;
+        self.p.flags = 0x90;
+        self.p.damage = 0;
+        self.p.callback = 0x16cc;
+        self.p.on_death = 0x38;
+        self.p.draw = (0x5a0..=0x10df).contains(&angle) as i32;
+        self.p.bounce = 2;
+        self.spawn_seq(0x1818, 1, 0x1e0, y, x, 0);
+        self.roll(7, 0x20, angle, water);
+        self.p.bounce = 5;
+        self.p.draw = 0;
+        self.p.on_death = 0;
+        self.p.callback = 0;
+        self.p.damage = 0x10;
+        self.p.flags = 0x84;
+        self.p.hits = 0;
+        self.p.group = 1;
+    }
+
+    /// FUN_1050_46d9(gravity, speed, angle): a rolling ball (FUN_1050_3044); `water` is the
+    /// spawn sector's water line (FUN_1050_44ae).
+    pub fn roll(&mut self, gravity: i32, speed: i32, angle: i32, water: i32) {
+        self.throw(gravity, speed, angle);
+        let p = self.last_mut();
+        p.m.set(0x4a, MOVE_ROLL as i32);
+        if p.v.l(0) == 0 {
+            p.v.set_l(0, 1);
+        }
+        p.m.set(0x4e, water);
     }
 
     /// FUN_1088_6f4d: weapon 4's bouncing charge (effect 77 when it hits or its fuse runs out).
@@ -917,6 +954,75 @@ impl Level {
                     m.set(4, m.w(4) + w.cell_function(cell, 3) as i16 as i32);
                 }
             }
+            MOVE_ROLL => {
+                let t = v.w(8);
+                m.set(8, m.w(4) + v.l(0).wrapping_mul(t) / 0x40000);
+                let fall = (t * t) / v.w(0xa);
+                m.set(0xa, fall + (m.w(6) - v.l(4).wrapping_mul(t) / 0x40000));
+                v.set(8, t + 1);
+                if off_screen(m, -0x200) {
+                    m.set(0x24, m.w(0x22));
+                    m.set(0x3e, -10);
+                    return;
+                }
+                m.set(0x24, m.w(0x24) + 1);
+                if m.w(0x4e) != 0x7fff {
+                    eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+                }
+                let (x, y) = (m.w(8), m.w(0xa));
+                let mut steep = false;
+                if w.solidity_at(y, x) & 0x20 != 0 {
+                    let cell = w.cell_at(crate::world::MAIN_PLANE, y, x).unwrap_or(0);
+                    let k = (w.cell_function(cell, 2) & 0xff7f) as usize * 0x16 + 0x14;
+                    steep = u16::from_le_bytes([crate::world::SLOPES[k], crate::world::SLOPES[k + 1]]) & 4 == 0;
+                    let ground = (y & 0xfff0) + crate::actors::slope_height(w, x, cell) - 1;
+                    if ground < y + 1 {
+                        if v.l(4) == 0 {
+                            v.set_l(0, if v.l(0) < 0 { -0x40000 } else { 0x40000 });
+                        } else {
+                            let t1 = v.w(8);
+                            let t0 = t1 - 1;
+                            let fall = ((t1 * t1) - (t0 * t0) as i16 as i32) / v.w(0xa);
+                            let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
+                            v.set_l(4, if vy < 0x20000 { 0 } else { vy });
+                        }
+                        v.set(8, 1);
+                        m.set(4, m.w(8));
+                        m.set(6, ground);
+                        m.set(0xa, ground);
+                        m.set(0xe, ground);
+                    }
+                }
+                let (x, y) = (m.w(8), m.w(0xa));
+                if w.tile_function_at(y + 1, x) == 11000 {
+                    let cell = w.cell_at(crate::world::MAIN_PLANE, y + 1, x).unwrap_or(0);
+                    m.set(4, m.w(4) + w.cell_function(cell, 3) as i16 as i32);
+                }
+                if v.w(8) < 5 {
+                    if m.w(0x22) < 0x1e1 {
+                        m.set(0x34, 1);
+                    }
+                    let (x, y) = (m.w(8), m.w(0xa));
+                    m.set(0x2c, x);
+                    m.set(0x2e, y - 0x14);
+                    m.set(0x30, x);
+                    m.set(0x32, y);
+                    if v.l(4) == 0 && !steep {
+                        let ax = if v.l(0) < 0 { x - 0x10 } else { x + 0x10 };
+                        if w.solidity_at(y - 1, ax) & 2 != 0 && w.solidity_at(y - 0x11, ax) & 2 == 0 {
+                            if w.solidity_at(y, x) & 2 != 0 {
+                                m.set(0xa, y - 1);
+                            }
+                            m.set(4, m.w(8));
+                            m.set(6, m.w(0xa));
+                            v.set(8, 1);
+                            v.set_l(4, 0xe0000);
+                        }
+                    }
+                } else {
+                    m.set(0x34, 0x8000);
+                }
+            }
             MOVE_ROCKET => {
                 m.set(8, v.l(0) >> 16);
                 m.set(0xa, v.l(4) >> 16);
@@ -1217,6 +1323,12 @@ impl Level {
                 let t = self.particles.list[i].v.w(8);
                 let m = &mut self.particles.list[i].m;
                 m.set(0x16, if t < 5 { (m.w(0x24) / 6) % 6 + 0x5215 } else { 0x5218 });
+            }
+            0x16cc => {
+                // FUN_1050_16cc (drawing): weapon 9's ball turns while it bounces.
+                let t = self.particles.list[i].v.w(8);
+                let m = &mut self.particles.list[i].m;
+                m.set(0x16, if t < 5 { ((m.uw(0x24) >> 3) & 3) as i32 + 0x1900 } else { 0x1904 });
             }
             0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
             0x2299 => {
@@ -1552,6 +1664,7 @@ impl Level {
                 self.bounce_off(f);
             }
             44 => self.shell7_hit(f),
+            56 => self.ball9_hit(f),
             66 => {
                 // FUN_1040_1137: the bonus lands as a pick-up tile in plane 2.
                 let m = &self.particles.list[self.particles.current].m;
@@ -1861,6 +1974,93 @@ impl Level {
             m.set(0xa, m.w(0x12));
         }
         self.shell7_blast(f);
+    }
+
+    /// Effect 56, FUN_1040_22c1: weapon 9's ball bounces off walls (back the way it came) and
+    /// floors (losing speed, rolling on at 4 px a frame); at the end of its life it gets 8 more
+    /// frames, then goes off.
+    fn ball9_hit(&mut self, f: &mut Frame) {
+        let i = self.particles.current;
+        let side = self.particles.hit_side;
+        let p = &mut self.particles.list[i];
+        let (m, v) = (&mut p.m, &mut p.v);
+        if m.w(0x3e) == -10 {
+            return;
+        }
+        if m.w(0x24) < m.w(0x22) {
+            m.set(8, m.w(0x10));
+            m.set(0xa, m.w(0x12));
+            m.set(0x16, ((m.uw(0x24) >> 3) & 3) as i32 + 0x1900);
+            if side < 2 {
+                m.set(0x3e, 0);
+                m.set(4, m.w(0x10) - (m.w(4) - m.w(0x10)));
+                v.set_l(0, v.l(0).wrapping_neg());
+                m.set(0x18, m.w(0x18) ^ 1);
+            } else {
+                if v.l(4) == 0 && v.w(8) < 5 {
+                    v.set_l(0, if v.l(0) < 0 { -0x40000 } else { 0x40000 });
+                } else {
+                    let t = v.w(8);
+                    let t1 = t - 1;
+                    let fall = (t.wrapping_mul(t) - t1.wrapping_mul(t1)) / v.w(0xa);
+                    let vy = fall.wrapping_mul(0x40000).wrapping_sub(v.l(4)).wrapping_mul(v.w(0xc)) / 0x10;
+                    v.set_l(4, if side == 2 || vy >= 0x20000 { vy } else { 0 });
+                }
+                m.set(0x3e, 0);
+                v.set(8, 1);
+                if f.world.solidity_at(m.w(0xe), m.w(8)) & 0x40 == 0 {
+                    m.set(0xc, m.w(8));
+                } else {
+                    m.set(8, m.w(0xc));
+                }
+                m.set(4, m.w(0xc));
+                m.set(6, m.w(0xa));
+            }
+            m.set(0x24, m.w(0x24) + 1);
+            self.particles.keep_dying = false;
+            return;
+        }
+        if m.w(0x3e) == -1 {
+            m.set(8, m.w(0x10));
+            m.set(0xa, m.w(0x12));
+        }
+        if m.w(0x22) == 0x1e0 {
+            m.set(0x34, 0x8000);
+            m.set(0x22, 0x1e8);
+            self.particles.keep_dying = false;
+            return;
+        }
+        let (y, x) = (m.w(0xa), m.w(8));
+        let ps = &mut self.particles;
+        ps.spawn_seq(0x6e00, 3, 0x13, y, x, 1); // FUN_1040_690b
+        let r = f.rng.random(0x40) + 300;
+        let m = &mut ps.last_mut().m; // FUN_1050_4a29
+        m.set(0x1c, r * 6 / 5);
+        m.set(0x1e, r);
+        m.set(0x42, 0x2148);
+        f.fx.shakes.push((0x26, 0xe));
+        self.explode_area(f.world, 0xc0, 4, y + 0xe, x + 0x2e, y - 0x3e, x - 0x2e, f.rng, f.fx);
+        let ps = &mut self.particles;
+        ps.blast(2, 0xc0, 5, 0x1e, 0x3e, -0x4e, -0x3e, y, x);
+        ps.p.group = 0;
+        ps.p.hits = 0x8000;
+        ps.p.on_death = 0x10;
+        ps.spawn(-0xb, y - 1, x);
+        let a = f.rng.random(0xc0) + 0x5c0;
+        ps.throw(9, 0x80, a);
+        ps.spawn(-0xb, y - 1, x);
+        let a = 0x580 - f.rng.random(0xc0);
+        ps.throw(9, 0x80, a);
+        if f.rng.random(2) == 0 {
+            ps.spawn(-0xb, y - 1, x);
+            let a = f.rng.random(0xd0) + 0x540;
+            ps.throw(9, 0x80, a);
+        }
+        ps.p.on_death = 0;
+        ps.p.hits = 0;
+        ps.p.group = 1;
+        let n = f.rng.random(4) + 1;
+        crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
     }
 
     /// FUN_1040_1ec6: the shell goes off: a flash, four bits of casing, shake and dust.

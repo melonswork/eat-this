@@ -205,6 +205,8 @@ pub struct Gun {
     pub charge: Option<(i32, i32, i32)>,
     /// FUN_1088_655f's shell: (y, x, angle).
     pub shell7: Option<(i32, i32, i32)>,
+    /// FUN_1088_6649's ball: (y, x, angle).
+    pub ball9: Option<(i32, i32, i32)>,
     /// FUN_1088_69d8's bullet: (y, x, angle, parity).
     pub rapid: Option<(i32, i32, i32, i32)>,
     /// FUN_1088_6cf0's three rockets: (y, x, angle).
@@ -484,6 +486,7 @@ impl Hero {
         self.gun.grenade = None;
         self.gun.charge = None;
         self.gun.shell7 = None;
+        self.gun.ball9 = None;
         self.gun.rapid = None;
         self.gun.rockets = None;
         self.gun.rocket5 = None;
@@ -1924,6 +1927,25 @@ impl Hero {
                     let (y, x) = (self.y - 0x1a, self.x);
                     let a = (self.gun.aim + 0x1680 - 0x50 + rng.random(0xa1)) % 0x1680;
                     self.gun.shell7 = Some((y, x, a));
+                    self.gun.pose = 4;
+                    self.gun.shooting = true;
+                    self.released[RIGHT_SHOOT] = false;
+                }
+            }
+            // FUN_1088_6649: a ball that bounces and rolls (FUN_1050_46d9); crouched, it is laid
+            // on the floor and may fire in any pose.
+            9 => {
+                if self.state == CROUCH {
+                    self.gun.armed = true;
+                }
+                if self.use_ammo(0xc, input, now) {
+                    let aim = self.gun.aim;
+                    let (y, a) = if self.state == CROUCH && self.crouch > 7 {
+                        (self.y, if (0x5a0..0x10e0).contains(&aim) { 0xb40 } else { 0 })
+                    } else {
+                        (self.y - 0x1a, (aim + 0x1680 - 0x50 + rng.random(0xa1)) % 0x1680)
+                    };
+                    self.gun.ball9 = Some((y, self.x, a));
                     self.gun.pose = 4;
                     self.gun.shooting = true;
                     self.released[RIGHT_SHOOT] = false;

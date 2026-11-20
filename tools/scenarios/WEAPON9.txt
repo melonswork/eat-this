@@ -1,0 +1,25 @@
+# Weapon 9 (FUN_1088_6649, a ball that bounces, rolls and climbs steps, FUN_1050_3044): CITY_I04
+# with the start moved into the room of the weapon-9 pick-ups on the crate at (983..999,151).
+level MAPS/CITY_I04.MAP
+start 940 191
+mouse 250 60
+20
+12 right
+10 up right
+20 right
+20
+5 rmb
+40
+mouse 60 100
+5 rmb
+40
+mouse 60 40
+5 rmb
+60
+20 down
+5 down rmb
+40 down
+mouse 250 100
+5 down rmb
+80 down
+400
