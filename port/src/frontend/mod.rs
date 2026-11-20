@@ -111,6 +111,7 @@ impl FrontEnd {
             gfx.back.copy_from_slice(&p.pixels[..(W * H) as usize]);
         }
         let main = MainScript::load(data, settings.language);
+        crate::messages::LANGUAGE.store(settings.language, std::sync::atomic::Ordering::Relaxed);
         let mut texts = MenuTexts::load(data, settings.language);
         let menu_texts = texts.take(11);
         let mut fe = FrontEnd {
@@ -436,6 +437,7 @@ impl FrontEnd {
         let mut gfx = Graphics::load(&self.data, &world, map)?;
         gfx.show_hud = true;
         gfx.hud_level = self.settings.game_stats;
+        crate::messages::LANGUAGE.store(self.settings.language, std::sync::atomic::Ordering::Relaxed);
         // A user map with PlayRecord= plays its recording (LevelLoad -> DemoLoad).
         let pairs = script_pairs(&script_of(map));
         let demo = pairs
