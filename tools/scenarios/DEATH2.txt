@@ -1,0 +1,18 @@
+# DEATH1, then key 6 pressed while dead: the restart (GameFrame 4e60 = 10) ends the recording.
+level GRINDER
+mouse 20 12
+40
+50 kp6
+51 kp8 kp6
+15 kp6
+31 kp8 kp6
+10 kp6
+48 kp8 kp6
+3 kp6
+6
+4 kp4
+34 kp8 kp4
+8 kp4
+1500
+3 key6
+60

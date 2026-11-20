@@ -10,8 +10,10 @@ demos="$*"
 for d in $demos; do
   p=work/cd/BIN/USERMAPS/$d.DMO
   [ -e "$p" ] || p=work/demos/BIN/USERMAPS/$d.DMO
-  w=$(cd port && ./target/release/eatthis --headless --demo ../$p --dump ../work/port_dump_$d.tsv 2>/dev/null | grep -E "RandSeed matched" | sed "s/.*RandSeed matched in /windows /")
+  out=$(cd port && ./target/release/eatthis --headless --demo ../$p --dump ../work/port_dump_$d.tsv 2>/dev/null)
+  w=$(echo "$out" | grep -E "RandSeed matched" | sed "s/.*RandSeed matched in /windows /; s/ windows$//")
+  e=$(echo "$out" | grep "ended by itself" | sed "s/the level ended by itself/, ended/")
   v=$(python3 tools/valdiff.py "$d" 2>/dev/null | head -1 | sed 's/.*mismatches: //')
   h=$(python3 tools/compare_watch.py work/tracer/$d/watch.tsv work/port_dump_$d.tsv 2>/dev/null | head -1)
-  printf '%-9s %s | valdiff %s | hero: %s\n' "$d" "$w" "$v" "${h:-same}"
+  printf '%-9s %s%s | valdiff %s | hero: %s\n' "$d" "$w" "$e" "$v" "${h:-same}"
 done

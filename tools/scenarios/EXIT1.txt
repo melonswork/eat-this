@@ -1,0 +1,159 @@
+# GRINDER: BROYEUR's own input (it walks into the level exit on its last frame), then 100 more
+# frames: the original's recorder stops by itself at the exit (GameFrame 4e60 = 100), the port too.
+level GRINDER
+mouse 20 12
+40
+50 kp6
+51 kp8 kp6
+15 kp6
+31 kp8 kp6
+10 kp6
+48 kp8 kp6
+3 kp6
+6
+4 kp4
+34 kp8 kp4
+27 kp4
+58 kp8 kp4
+10 kp4
+3 kp8 kp4
+1 kp8
+10 kp8 kp6
+5 kp6
+27 kp8 kp6
+24 kp6
+42 kp8 kp6
+8 kp6
+28 kp8 kp6
+22 kp6
+26 kp8 kp6
+7 kp6
+2 kp4 kp6
+2 kp8 kp4 kp6
+48 kp8 kp4
+3 kp8 kp4 kp6
+7 kp6
+9 kp8 kp6
+8 kp6
+26 kp8 kp6
+6 kp6
+4
+3 kp4
+54 kp8 kp4
+2 kp4
+9
+6 kp6
+59 kp8 kp6
+11 kp6
+1 kp8 kp6
+10 kp8 kp4 kp6
+5 kp8 kp4
+2 kp4
+30 kp8 kp4
+17 kp4
+40 kp8 kp4
+24 kp4
+42 kp8 kp4
+7 kp4
+7
+1 kp6
+48 kp8 kp6
+24 kp6
+19 kp8 kp6
+9 kp6
+42 kp8 kp6
+2 kp6
+29
+1 kp8
+38 kp8 kp6
+5 kp6
+21
+2 kp4
+59 kp8 kp4
+50 kp4
+26 kp8 kp4
+8 kp4
+1 kp6
+39 kp8 kp6
+31 kp6
+44 kp8 kp6
+13 kp6
+48 kp8 kp6
+11 kp6
+2 kp4 kp6
+2 kp8 kp4 kp6
+55 kp8 kp4
+45 kp4
+56 kp8 kp4
+2 kp8
+12
+8 kp8
+38 kp8 kp4
+1 kp4
+16
+3 kp6
+39 kp8 kp6
+20 kp6
+58 kp8 kp6
+11 kp6
+1 kp8 kp6
+3 kp8 kp4 kp6
+43 kp8 kp4
+16 kp4
+45 kp8 kp4
+2 kp4
+9
+1 kp6
+19 kp8 kp6
+6 kp6
+1
+1 kp4
+43 kp8 kp4
+24 kp4
+36 kp8 kp4
+1 kp4
+14
+5 kp8
+41 kp8 kp4
+7 kp4
+3
+6 kp8
+43 kp8 kp6
+28 kp6
+32 kp8 kp6
+20 kp6
+57 kp8 kp6
+8 kp6
+5
+2 kp4
+48 kp8 kp4
+26 kp4
+29 kp8 kp4
+11 kp4
+49 kp8 kp4
+2 kp4
+13
+2 kp6
+60 kp8 kp6
+27 kp6
+38 kp8 kp6
+348
+13 kp4
+18
+18 kp6
+11 kp2 kp6
+128 kp6
+4 kp4 kp6
+159 kp4
+17 kp2 kp4
+135 kp4
+2 kp4 kp6
+162 kp6
+18 kp8 kp6
+2 kp6
+30
+31 kp6
+27
+34 kp8
+11
+100 right

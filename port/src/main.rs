@@ -147,6 +147,10 @@ struct Game {
     rng: PascalRandom,
     frame: u32,
     demo: Option<Demo>,
+    /// The demo stopped or the level is over (GameFrame's 4e60).
+    stopped: bool,
+    /// The hero asked to restart the level (4e60 = 10): the window loop reloads the map.
+    restart: bool,
     report: CheckReport,
 }
 
@@ -215,6 +219,8 @@ impl Game {
             rng,
             frame: 0,
             demo,
+            stopped: false,
+            restart: false,
             report: CheckReport::default(),
         };
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
@@ -264,7 +270,7 @@ impl Game {
     }
 
     fn demo_done(&self) -> bool {
-        self.demo.as_ref().is_some_and(|d| self.frame >= d.frames)
+        self.stopped || self.demo.as_ref().is_some_and(|d| self.frame >= d.frames)
     }
 
     /// A pick-up's effect (function 4 of its tile).
@@ -511,6 +517,20 @@ impl Game {
             }
         }
         self.frame += 1;
+        // GameFrame: 4e60 > 0 ends a demo (DemoStop; a recording is saved), else 10 restarts the
+        // level and 100 shows the level's end (video 1, then the stats screen 1080:172a).
+        match std::mem::take(&mut self.hero.level_end) {
+            0 => {}
+            e if self.demo.is_some() => {
+                println!("the level ended by itself (4e60 = {e}) after {} frames", self.frame);
+                self.stopped = true;
+            }
+            10 => self.restart = true,
+            e => {
+                eprintln!("level over ({e}) at frame {}", self.frame);
+                self.stopped = true;
+            }
+        }
     }
 
     /// GameFrameInGame from the particles of group 0 on (also LevelFirstFrame's): group 0,
@@ -1195,7 +1215,7 @@ fn run_headless(mut game: Game, trace: Option<(u32, u32)>, dump: Option<&Path>) 
     );
 }
 
-fn run_window(mut game: Game, mut gfx: Graphics, scale: u32) -> Result<(), Box<dyn Error>> {
+fn run_window(mut game: Game, mut gfx: Graphics, scale: u32, reload: impl Fn() -> Result<World, Box<dyn Error>>) -> Result<(), Box<dyn Error>> {
     use sdl2::{event::Event, keyboard::Scancode, pixels::PixelFormatEnum};
     let sdl = sdl2::init()?;
     let window = sdl
@@ -1250,6 +1270,10 @@ fn run_window(mut game: Game, mut gfx: Graphics, scale: u32) -> Result<(), Box<d
             }
             if !game.demo_done() {
                 game.step(keys);
+            }
+            if std::mem::take(&mut game.restart) {
+                // GameFrame 4e60 = 10: HeroReset, the level loaded again (LevelInit randomizes).
+                game = Game::new(reload()?, None);
             }
             next += tick;
         }
@@ -1332,6 +1356,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     let world = World::load(&map_path, &o.data.join("TILES"))?;
     if std::env::var_os("ET_PICKUPS").is_some() {
         println!("START {:?}", world.map.start);
+        for ty in 0..world.main().height {
+            for tx in 0..world.main().width {
+                let (y, x) = (ty * 16 + 15, tx * 16);
+                for pl in [0usize, 2] {
+                    if world.tile_function_in(pl, y, x) == 9000 {
+                        let c = world.cell_at(pl, y, x).unwrap_or(0);
+                        println!("EXIT plane {pl} at x {x} y {y} f2 {:#x}", world.cell_function(c, 2));
+                    }
+                }
+            }
+        }
         // Weapon pick-ups: plane-2 cells with function 30000 and effect 67; weapon = function 3 - 0x1e.
         if let Some(Some(p)) = world.planes.get(2) {
             for ty in 0..p.height {
@@ -1358,7 +1393,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some((frames, path)) = &o.shot {
         return Ok(screenshot(game, &gfx, *frames, path)?);
     }
-    run_window(game, gfx, o.scale)
+    let tiles = o.data.join("TILES");
+    run_window(game, gfx, o.scale, || Ok(World::load(&map_path, &tiles)?))
 }
 
 #[cfg(test)]

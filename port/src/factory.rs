@@ -589,7 +589,14 @@ impl Level {
                 continue;
             }
             match kind {
-                1000 => self.teleports.push(rec.clone()),
+                1000 => {
+                    if std::env::var_os("ET_TELE").is_some() {
+                        let wd = world.main().width;
+                        let c = |v: i16| { let v = v as u16 as i32; (v % wd * 16, v / wd * 16 + 15) };
+                        eprintln!("TELEPORT {:?} two-way {} leave {} a {:?} b {:?}", rec, rec[1] & 0xff, (rec[1] >> 8) & 0xff, c(rec[2]), rec.get(3).map(|&v| c(v)));
+                    }
+                    self.teleports.push(rec.clone())
+                }
                 0x4b0 => {
                     let mut o = Obj::new(kind, 0xaec, 0x18);
                     // LevelInit copies 0x16 bytes from the record's word 2 to +2.

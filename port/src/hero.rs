@@ -116,6 +116,9 @@ pub struct Hero {
     pub pickups: Vec<((i32, i32), u16, u16, i32, i32)>,
     /// 1170:4e62: counts down to the teleport (FUN_1088_517a) at the end of the frame it hits 0.
     pub exit_timer: i32,
+    /// 1170:4e60: what GameFrame does after this frame (10 restart the level, 100 + n the level
+    /// is over through a teleport record that leaves it, 0x1e back to the menu).
+    pub level_end: i32,
     /// 1170:4e1e: the exit's kind (its function 2, low byte): 0 a door, 1 a hatch.
     exit_kind: i32,
     /// 1170:5123: 3 while a lever is in reach this frame (then 1: Up jumps again).
@@ -298,6 +301,7 @@ impl Hero {
             weapons: WEAPON_AMMO.map(|(pickup, max)| Weapon { pickup, max, next: 0, ammo: 0, owned: false }),
             pickups: Vec::new(),
             exit_timer: 0,
+            level_end: 0,
             exit_kind: 0,
             slope: -1,
             collide_flags: 3,
@@ -552,6 +556,10 @@ impl Hero {
                 if self.anim == 0 {
                     rng.random(6);
                 }
+            }
+            // Inputs 6 or 7 (or Space/Enter) just pressed: restart the level.
+            if input[6] == 1 || input[7] == 1 {
+                self.level_end = 10;
             }
             self.run_platforms(w, lv, &input, cam, ps, rng, plat_objs, 0, 0);
             return;
@@ -901,6 +909,9 @@ impl Hero {
         // Exits: function 2's high byte 0x10 leaves at once; 0 when Up is held standing (the
         // use pose first, walking to the exit's middle, then into it).
         let e = exit_at(w, true, self.y, self.x);
+        if std::env::var_os("ET_EXIT").is_some() && held(UP) {
+            eprintln!("EXIT at {},{} e {e:#x} door {} state {} use {}", self.x, self.y, lv.door_state(w, self.y, self.x), self.state, self.use_count);
+        }
         if (e >> 8) & 0xff == 0x10 && self.exit_timer < 1 {
             self.exit_timer = 2;
         } else if (e >> 8) & 0xff == 0
@@ -1374,6 +1385,9 @@ impl Hero {
                     m.set(0x42, 0x2148);
                 }
             }
+            if input[6] == 1 || input[7] == 1 {
+                self.level_end = 10;
+            }
         } else {
             self.frame = 0x3400;
             self.vehicle_weapon(input, ps, rng, now);
@@ -1747,7 +1761,10 @@ impl Hero {
                 continue;
             }
             if leave != 0 {
-                eprintln!("warning: a level exit (teleport record leaving the level) not ported");
+                // The level is over (GameFrame: 4e60 = 100 + ...), the frame isn't drawn.
+                if self.level_end != 0x1e {
+                    self.level_end = leave as i32 + 99;
+                }
                 continue;
             }
             let to = if cell == a { b } else { a };
