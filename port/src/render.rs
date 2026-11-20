@@ -75,11 +75,6 @@ impl Bank {
             s.pixels[(r * s.width) as usize..((r + 1) * s.width) as usize].to_vec()
         })
     }
-
-    /// (width, height, hotspot) of sprite `id`.
-    pub fn size(&self, id: i32) -> Option<(i32, i32, (i32, i32))> {
-        self.with(id, |s| (s.width, s.height, s.hotspot))
-    }
 }
 
 /// The colour tables the modes use.
@@ -317,12 +312,6 @@ impl<'a> Painter<'a> {
         }
     }
 
-    /// A filled rectangle in screen coordinates (the HUD's bars).
-    pub fn rect(&mut self, x: i32, y: i32, w: i32, h: i32, c: u8) {
-        for yy in y.max(0)..(y + h).min(H) {
-            for xx in x.max(0)..(x + w).min(W) {
-                self.fb[(yy * W + xx) as usize] = c;
-            }
         }
     }
 }
