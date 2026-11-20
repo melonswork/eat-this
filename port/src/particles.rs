@@ -398,11 +398,16 @@ impl Particles {
 
     /// The particles of FUN_1040_014a (a bonus picked up): sparks flying off.
     pub fn bonus_pickup(&mut self, y: i32, x: i32) {
+        self.sparks_pickup(0x2100, y, x);
+    }
+
+    /// FUN_1040_014a / 01d9's sparks, of sprite `s`.
+    pub fn sparks_pickup(&mut self, s: i32, y: i32, x: i32) {
         self.p.group = 0;
         for i in 0..2 {
-            self.spawn_seq(0x2100, 9, 4, y, x, 1);
+            self.spawn_seq(s, 9, 4, y, x, 1);
             self.throw(0x1c, 0x10, i * 0x200 + 0x4a0);
-            self.spawn_seq(0x2100, 7, 4, y, x, 1);
+            self.spawn_seq(s, 7, 4, y, x, 1);
             self.throw(0x1c, 8, i * 0xb40);
         }
         self.p.group = 1;

@@ -2089,9 +2089,14 @@ impl Hero {
         self.weapon = w;
     }
 
-    /// The update half of FUN_1088_2501 (the status bar), once a frame.
+    /// The update half of FUN_1088_2501 (the status bar), once a frame (the end of the frame).
+    /// It also keeps the health (4e6c) within 0..=0x2c6: hearts can't push it over.
     pub fn status_bar(&mut self) {
-        let target = self.health.clamp(0, 0x2c6) * 0x47 / 0x2c6;
+        self.health = self.health.clamp(0, 0x2c6);
+        if std::env::var_os("ET_HEALTH").is_some() {
+            eprintln!("health {}", self.health);
+        }
+        let target = self.health * 0x47 / 0x2c6;
         self.hud_bar = if self.hud_bar == 0x7fff { target } else { self.hud_bar + (target - self.hud_bar).signum() };
         if self.hud_slide < 0 {
             self.hud_slide += 2;

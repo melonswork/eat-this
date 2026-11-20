@@ -325,6 +325,14 @@ impl Game {
             self.hero.health += 10;
             level::tally(|t| t.bios += 1);
             self.level.particles.bonus_pickup(y, x);
+        } else if effect == 3 {
+            // FUN_1040_0264: full health, a weapon pick-up's sparks around sprite 0x2105.
+            self.hero.health = 0x2c6;
+            self.level.particles.weapon_pickup(5, y, x);
+        } else if effect == 74 {
+            // FUN_1040_01d9: health +20, sparks of sprite 0x212d.
+            self.hero.health += 0x14;
+            self.level.particles.sparks_pickup(0x212d, y, x);
         } else if effect == 70 {
             // FUN_1040_043c: a key (1170:5104 + f3), sparks like a weapon's.
             self.hero.keys[(f3 as usize) & 0xf] = true;
