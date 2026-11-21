@@ -201,6 +201,7 @@ fn looks(p: &mut Painter, o: &Obj) {
         p.mode = l.mode;
         p.colour = if l.colour == Look::FLASH { p.flash } else { l.colour as u8 };
         p.hflip = l.hflip;
+        p.vflip = l.vflip;
         p.mix = match l.mix {
             1 => Mix::Tint,
             2 => Mix::Light,
@@ -247,6 +248,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
         crate::weight::SLAB => crate::weight::draw_slab(p, o),
         // FUN_1070_cb38: the granny, sprite +0x3a mirrored by her facing (1170:1b54).
         crate::tank::KIND => crate::tank::draw(p, o),
+        crate::spikeball::KIND => looks(p, o),
         crate::granny::KIND => {
             p.hflip = o.w(0x20) < 0;
             p.at(o.w(0x3a), x, y);

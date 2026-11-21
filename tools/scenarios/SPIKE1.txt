@@ -1,0 +1,15 @@
+# The spiked ball (OBJECTS 0x14e6, FUN_1070_9a66): FOREST05's ball hanging under the branch at
+# (2261,1411). Its lever cell (138,91) is set on (tile 0x308) so it swings from the start; the hero
+# stands on the branch where it swings up: hit kind 3, the ball gets bloody and drips. Then he
+# shoots down at it (pushes) and walks to the edge.
+level MAPS/FOREST05.MAP
+start 2318 1407
+cell 1 138 91 0x308
+mouse 100 190
+250
+10 lmb
+30
+10 lmb
+30
+10 left
+120

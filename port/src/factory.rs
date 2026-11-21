@@ -622,6 +622,33 @@ impl Level {
                 let (y, x) = (o.w(0x10), o.w(0xe));
                 self.add_actor(world, o, y, x);
             }
+            crate::spikeball::KIND => {
+                let mut o = actor(kind, 0xda0, 0x23);
+                o.set(10, r.byte2());
+                o.set(0xe, r.at(4));
+                o.set(0x10, r.at(6));
+                let s = r.at(8);
+                o.set(0x14, if s < 1 { 0x30 } else { 0x10 });
+                o.set(0x1a, s.abs());
+                o.set(0x16, r.at(10));
+                o.set(0x18, (o.w(0x16) + 1) * 0xd);
+                o.set(0x1c, r.at(0xc));
+                o.set(0x1e, 0x3314);
+                o.set_b(0x20, 0);
+                o.set(0x21, 0);
+                let (x, y, len) = (o.w(0xe), o.w(0x10), o.w(0x18));
+                o.set(2, (x - len) - 0x18);
+                o.set(4, y - 0x10);
+                o.set(6, x + len + 0x18);
+                o.set(8, y + len + 0x30);
+                if std::env::var_os("ET_KINDS").is_some() {
+                    let c = o.uw(0x1c) as i32;
+                    let w = world.main().width;
+                    let v = world.main().cells[c as usize];
+                    eprintln!("SPIKEBALL at ({x}, {y}) links {} lever {:#x} (tx {} ty {}) cell {v:#x} f1 {} f2 {} swing {}", o.w(0x16), c, c % w, c / w, world.cell_function(v, 1), world.cell_function(v, 2) as i16, o.w(0x1a));
+                }
+                self.add_actor(world, o, y, x);
+            }
             crate::tank::KIND => {
                 // FUN_1068_111e + FUN_1068_0d84.
                 let mut o = actor(kind, 0xdf8, 0x4d);

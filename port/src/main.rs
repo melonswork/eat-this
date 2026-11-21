@@ -9,6 +9,7 @@ mod actors;
 mod ambient;
 mod alien;
 mod tank;
+mod spikeball;
 mod bigali;
 mod archive;
 mod bg;

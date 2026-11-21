@@ -224,6 +224,7 @@ impl Level {
             0x145a => self.smallbot(id, env),
             crate::granny::KIND => self.granny(id, env),
             crate::tank::KIND => self.tank(id, env),
+            crate::spikeball::KIND => self.spikeball(id, env),
             crate::carrier::KIND => self.carrier(id, env),
             crate::wallgun::KIND => self.wallgun(id, env),
             crate::weight::KIND => self.weight(id, env),

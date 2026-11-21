@@ -24,7 +24,7 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 | 8 | ~~OBJECTS 0x14a0~~ the falling sign (VMT 0xbd8, FUN_1068_1f3c) | EnemyFactory | GRANNY | DONE (`weight.rs` SLAB, SLAB1: chain cleared (5c10/5b33), falls on the hero = hit kind 2, lands, stood on with the original's mixed-up FUN_1070_00b6 arguments) |
 | 9 | OBJECTS 0x2715 | LevelInit | GRANNY | the background building collapse FUN_1088_a481 (lever 4ed4 starts it; draws Randoms for debris in particle group 2, sound loop 0x53): simulation, not ported |
 | 10 | ~~OBJECTS 0x14b4~~ the pumping door (VMT 0xd44, FUN_1070_a0bd -> FUN_10a8_11e9) | EnemyFactory | CITY_I04 | DONE (`Level::door_pump`, PUMPDOOR1). Weak check: no Random involved; the hero's path through it matches |
-| 11 | OBJECTS 0x14e6 (VMT 0xda0) | EnemyFactory | FOREST05 | a spiked ball on a chain (FUN_1070_9a66, nested 9a16): swings once its lever (+0x1c) is on or it is shot; the quake (45ba/45bc/45c0) pushes it (Random(0x18), Random(2)); hits the hero with kind 3 (0xc0, sound 0xf), drips blood (callback at 1170:23b7). Seven long divisions: disassemble before porting |
+| 11 | ~~OBJECTS 0x14e6~~ (VMT 0xda0) | EnemyFactory | FOREST05 | DONE (`spikeball.rs`, SPIKE1). A spiked ball on a chain (FUN_1070_9a66, nested 9a16): swings once its lever (+0x1c) is on or it is shot; the quake (45ba/45bc/45c0) pushes it (Random(0x18), Random(2)); hits the hero with kind 3 (0xc0, sound 0xf), drips blood (callback at 1170:23b7). Seven long divisions: disassemble before porting |
 | 12 | OBJECTS 0x2716 | LevelInit | FORPLANE | draw only: 1170:534e/5350 for the background proc FUN_1090_178e (renderer's) |
 | — | OBJECTS 0x272e (decor layer, VMT 0xaf8, draw procs 1088:a25d/a371/...) | LevelInit | many | drawn by main.rs; no update method: warning silenced |
 
@@ -36,7 +36,7 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
 ## Left (2026-11-21), in priority order
 
 1. ~~OBJECTS 0x146e~~ the tank: DONE (`tank.rs`, TANK1, TANK2).
-2. OBJECTS 0x14e6 (FOREST05): the swinging spiked ball, see row 11.
+2. ~~OBJECTS 0x14e6~~ the spiked ball: DONE (`spikeball.rs`, SPIKE1).
 3. OBJECTS 0x1414 (BUTCHERY, VMT 0xd04, update FUN_1070_4b9b, 221 lines; constructor calls FUN_1070_4b4e per
    32 px: check for Randoms there, they change the setup RNG).
 4. OBJECTS 0x2715 (GRANNY): the background collapse FUN_1088_a481 (simulation with Randoms).
@@ -56,6 +56,7 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
   +0x4b (priority 0x11f4, pitch 0x100 / 0x11e turning at volume 0xaa) while the hull lives, then 0x1e at 0x80;
   0x30 arm shot / claw cycle, 0x1d gun, 0x15/0x14 gun recoil, 0x51 hatch, 0x50 claw hits a wall, 0x1a + 0x16
   grab, 0x26 claw off, 0x4a arm off, 0x17 turret off, 0x4e wreck.
+- Spiked ball (FUN_1070_9a66): wired in `spikeball.rs`: 0xf when it hurts the hero, 1 when shot (sounddiff SPIKE1).
 
 - Granny (FUN_1070_cb38): 0x9d when hit alive, pitch `0x100 - Random(0x20)` (FUN_10e8_03ae; the Random is
   already drawn in `granny.rs`); 0x25 at half volume (1ab8 = 0x80) when she lands (state -5, counter 0x18);

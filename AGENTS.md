@@ -88,6 +88,7 @@ streams and EVERY CHECK, so the method is the original's own.
 | `SLAB1` | GRANNY, start moved to (1060,975) | the falling sign 0x14a0 (FUN_1068_1f3c, `Level::slab`): walks under it, it drops and knocks him flat (hit kind 2), he climbs on it | exact |
 | `TANK1` | F_LAST, start moved to (2060,735), two weapon-3 pick-ups | the tank 0x146e (FUN_1070_b9d3, `tank.rs`): patrols 2144..2511, turns, lobs grenades from its arm (FUN_1040_6187), knocks the hero back | exact |
 | `TANK2` | F_LAST, start (2050,735), six weapon-3 pick-ups | the tank shot to pieces: arm off (b7cd, effects 9 and 47 = FUN_1040_4d4c), claw out, turret off (b8d3), gun bursts (state -1), hull: the wreck (plates, fan, burning); also: a group-0 ScreenShake acts before the actors (trees) | exact |
+| `SPIKE1` | FOREST05, lever cell (138,91) set on (0x308), start on the branch (2318,1407) | the spiked ball 0x14e6 (FUN_1070_9a66, `spikeball.rs`): swings from the lever, hits the hero standing where it swings up (hit kind 3, bloody 0x3315, drips), two pistol shots push it. Not exercised: shakes pushing it (amp > 7) | exact |
 
 ## Tools (non-obvious usage)
 
