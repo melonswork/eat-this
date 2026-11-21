@@ -435,6 +435,7 @@ impl Level {
         ps.p.colour = 0x10;
         crate::particles::smoke(ps, env.rng, y - 7, x);
         ps.p.colour = 0;
+        crate::sound::play_at(0x4b, y, x);
         env.fx.shakes.push((0x18, 8));
         self.remove_current(id);
     }

@@ -377,6 +377,7 @@ impl Level {
         ps.p.colour = 0x10;
         // Effect 23 (FUN_1040_2af4): the blast.
         ps.spawn_seq(0x6900, 2, 0x19, y - 6, x, 1);
+        crate::sound::play_at(0x26, y, x);
         ps.p.delay = 0x1e;
         smoke_cloud(ps, y - 0x10, x);
         ps.p.delay = 0;

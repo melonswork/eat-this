@@ -98,6 +98,11 @@ impl Level {
         if self.storm.level < 0x3bf {
             self.storm.level += 1;
         }
+        // The rain's loop (handle 4de0), louder as the storm grows.
+        let v = (self.storm.level * 0x100) / 0x3bf;
+        crate::sound::priority(0x17d0);
+        crate::sound::volumes(v, v);
+        crate::sound::keep(crate::sound::key::RAIN, 0x54);
         if self.storm.due <= self.now {
             self.storm.due = self.now.wrapping_add(0x8c + rng.random(0x6d6) as u32);
             let k = rng.random(3);

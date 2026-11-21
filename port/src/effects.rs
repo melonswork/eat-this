@@ -139,6 +139,8 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             ps.p.callback = 0;
             ps.p.colour = 0;
             fx.shakes.push((0x20, 0x10));
+            sound::play_at(0x47, cy, cx);
+            sound::play_at(0x4a, cy, cx);
         }
         18 => {
             // FUN_1040_11b0: a tile falls to bits.
@@ -188,6 +190,9 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             ps.p.on_death = 0;
             ps.p.hits = 0;
             ps.p.delay = 0;
+            for s in [0x7b, 1, 0x1a] {
+                sound::play_at(s, y, x);
+            }
             fx.shakes.push((0x20, 0x10));
             let rec = [0i16, 2, 0x172, 0x223];
             let mut cx = crate::factory::Ctx { hero_x: lv.hero_x, rng };
@@ -493,6 +498,7 @@ fn explosion(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut Pascal
     ps.p.hits = 0;
     ps.p.group = 1;
     fx.shakes.push((0x18, 0xe));
+    sound::play_at(0x4a, cy, cx);
 }
 
 /// Effect 43, FUN_1040_45db(y, x): a wall tile bursts into chunks (what flies depends on the
@@ -547,6 +553,7 @@ fn wall_chunks(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut Pasc
         eprintln!("warning: a wall's bonus 0xd10 (FUN_1040_6b03) not ported");
     }
     fx.shakes.push((0x18, 0xe));
+    sound::play_at(0x4a, y, x);
 }
 
 /// FUN_1040_3aed(y, x) (FUN_10f0_5c10/5b33): clear the block of tiles joined to (x, y) that

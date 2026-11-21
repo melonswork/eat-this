@@ -1728,6 +1728,7 @@ impl Level {
                 world.main_mut().cells[below] = next;
                 self.cell_changed(world, below as i32, fx);
             }
+            sound::play_at(0x4b, y, x);
         } else {
             ps.p.callback = CB_WALL_REGROW;
             ps.spawn_seq(0x7518, 1, 0x8c, y, x, 0);
@@ -1738,6 +1739,7 @@ impl Level {
         }
         self.particles.p.group = 1;
         world.main_mut().cells[idx] = 0;
+        sound::play_at(1, y, x);
     }
 
     /// A death effect (FUN_1040_60bb) with the dying particle current; its procedure may clear
@@ -1822,6 +1824,7 @@ impl Level {
                 ps.p.hits = 0;
                 ps.p.group = 1;
                 ps.spawn_seq(0x6500, 2, 0x14, py, px, 1); // effect 9
+                sound::play_at(0x4e, py, px);
                 ps.p.delay = 0x1e;
                 smoke4_at(ps, py, px + 10);
                 ps.p.delay = 0x46;
@@ -1846,7 +1849,8 @@ impl Level {
                     ps.p.delay = 0x12;
                     puff_at(ps, y - 0x18, x - 10);
                     ps.p.delay = 0;
-                    f.rng.random(0x14);
+                    let p = f.rng.random(0x14);
+                    sound::play_at_pitch(0x4b, p + 0xf6, y, x);
                     f.fx.shakes.push((0x18, 8));
                 }
             }
@@ -2254,6 +2258,7 @@ impl Level {
             }
         }
         ps.p.callback = 0;
+        sound::play_at(0x26, y, x);
         f.fx.shakes.push((0x2a, 0x12));
         let n = f.rng.random(7) + 2;
         crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
@@ -2878,6 +2883,7 @@ fn aim_at(p: &mut Particle, level: i32, dx: i32, dy: i32) {
 
 /// FUN_1050_3422(y, x): a critter bursts: twelve bits of it, four bones, four drops of blood.
 fn critter_gibs(ps: &mut Particles, rng: &mut PascalRandom, y: i32, x: i32) {
+    sound::play_at(0x21, y, x);
     let left = |r: &mut PascalRandom, spread: i32| (r.random(0x80) + 0x960) - spread;
     let right = |r: &mut PascalRandom, spread: i32| ((0x1860 - r.random(0x80)) + spread) % 0x1680;
     ps.p.hits = 0x8000;
