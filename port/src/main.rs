@@ -783,6 +783,7 @@ impl Game {
         self.camera
             .first_frame(&self.world, (self.hero.x, self.hero.y), grinder);
         sound::listener(self.camera.x + 0xa0, self.camera.y + 100); // the end of FUN_1088_0c82
+        sound::stop_loops(); // FUN_10e0_03d5
         let hero_at = (self.hero.x, self.hero.y);
         self.level.doors_near_hero(&mut self.world, hero_at, true);
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };

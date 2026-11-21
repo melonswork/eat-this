@@ -357,6 +357,18 @@ pub fn stop_all() {
     });
 }
 
+/// FUN_10e0_03d5: every loop stops (LevelFirstFrame, after a teleport too).
+pub fn stop_loops() {
+    with(|s| {
+        for l in std::mem::take(&mut s.loops) {
+            log(s, "stop", 0, None, None);
+            if s.on {
+                s.events.push(Ev::Stop { voice: l.voice });
+            }
+        }
+    });
+}
+
 /// CdPlayTrack (10c8:02e0).
 pub fn music(track: u32, looped: bool) {
     with(|s| {

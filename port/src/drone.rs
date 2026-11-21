@@ -300,6 +300,7 @@ impl Particles {
         d.fy = (d.y << 16) | (d.fy & 0xffff);
         d.reload = 0x52;
         self.flare(angle, my, mx);
+        crate::sound::play_at(0x79, my, mx);
     }
 
     /// FUN_1050_09f8(angle, y, x): the flare thrown off.
