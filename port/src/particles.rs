@@ -1195,7 +1195,23 @@ impl Level {
         if hits as i16 != -0x8000 {
             let func = w.tile_function_at(y, x);
             if (6000..=0x1779).contains(&func) {
-                eprintln!("warning: a shot lever (FUN_1088_14a3) not ported");
+                // FUN_1088_14a3: a shot lever steps to its next state, after the last back to
+                // its first (FUN_1088_1364 sets the cell: its scripts run).
+                let wd = f.world.main().width;
+                let idx = ((y >> 4) * wd + (x >> 4)) as u16;
+                let v = f.world.main().cells[idx as usize];
+                let fn0 = |t: u16| f.world.cell_function(t, 0);
+                let mut t = v;
+                if func != 0x1779 && fn0(v.wrapping_add(1)) == func + 1 {
+                    t = v.wrapping_add(1);
+                } else {
+                    let mut g = func;
+                    while g > 6000 && fn0(t.wrapping_sub(1)) == g - 1 {
+                        g -= 1;
+                        t = t.wrapping_sub(1);
+                    }
+                }
+                self.set_cell(f.world, t, idx, f.fx);
             } else if func == crate::doors::DOOR {
                 self.door_hit(f.world, strength, y, x, 0, f.fx);
             }
