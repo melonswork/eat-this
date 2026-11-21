@@ -1429,8 +1429,10 @@ impl Hero {
                 }
                 if self.anim > 0x9d && self.anim % 0xc == 0 {
                     let t = 0x15e - self.anim;
-                    rng.random(0x20);
-                    rng.random(0x40);
+                    let v = rng.random(0x20);
+                    let p = rng.random(0x40);
+                    sound::pitch(0x100 - p);
+                    sound::play_at_vol(0x47, (0x100 - t / 2) - v, self.y, self.x);
                     let px = self.x - 0x10 + rng.random(0x21);
                     let py = (self.y - 0x16 - 0x10) + rng.random(0x21);
                     ps.spawn_seq(0x7000, 2, 0x18, py, px, 1);
@@ -1496,6 +1498,7 @@ impl Hero {
                     }
                     ps.p.group = 1;
                 }
+                sound::play_at_vol(1, if kind == 2 { 0xaa } else { 0x100 }, self.y, self.x);
                 let old = self.health;
                 self.health = (self.health - 10).max(0);
                 // FUN_1088_5b41: health falling under 0x8f shows WARNING - SITUATION CRITICAL.
@@ -1545,6 +1548,13 @@ impl Hero {
                 self.turn = NO_TURN;
             }
         }
+        if self.state != DEAD {
+            // The engine (handle 4e92), pitched down with the speed.
+            sound::priority(0x13e8);
+            sound::audible(self.y, self.x);
+            sound::pitch(0x100 - (self.veh.vx.abs() * 0x40) / 0x80);
+            sound::keep(sound::key::ENGINE, 0x29);
+        }
         if self.state == DEAD {
             self.frame = 0x3401;
         } else if self.veh.vx.abs() > 100 && now % 6 == 0 {
@@ -1569,14 +1579,17 @@ impl Hero {
             self.y = water + 0x12;
         }
         if water + 0x1c <= prev_y && self.y < water + 0x1c {
-            rng.random(0x50);
+            let p = rng.random(0x50);
+            sound::pitch(p + 0xd0);
+            sound::play_at_vol(0x6f, 0x55, water, self.x);
         }
         if self.state != DEAD {
             let v = self.veh;
             if v.vy > 0x20 && v.bump_y > 2 && v.bump_y < 0x40 && v.bump_y % 3 == 0 {
                 if v.bump_y == 3 {
-                    rng.random(2);
-                    rng.random(0x50);
+                    let id = rng.random(2) + 0x40;
+                    let p = rng.random(0x50);
+                    sound::play_at_pitch(id as usize, p + 0xd0, self.y, self.x);
                 }
                 ps.p.group = 0;
                 let px = (self.x - 0xc) + rng.random(0x18);
@@ -1587,8 +1600,10 @@ impl Hero {
             }
             if now % 0xf0 < 0x14 && now % 5 == 0 {
                 if now % 0xf0 == 0 {
-                    rng.random(0x80);
-                    rng.random(0x60);
+                    let v = rng.random(0x80);
+                    let p = rng.random(0x60);
+                    sound::pitch(p + 0xd0);
+                    sound::play_at_vol(0x41, 0xc0 - v, self.y, self.x);
                 }
                 ps.p.group = 0;
                 let px = (self.x - 8) + rng.random(0x10);

@@ -219,7 +219,7 @@ impl Particles {
         self.last = self.list.len() - 1;
         self.last_pending = false;
         if p.on_spawn != 0 {
-            eprintln!("warning: particle spawn effect {} not ported", p.on_spawn);
+            spawn_effect(p.on_spawn, y, x);
         }
         self.last
     }
@@ -246,7 +246,7 @@ impl Particles {
         while self.pending.first().is_some_and(|(d, _)| *d <= self.now) {
             let (_, p) = self.pending.remove(0);
             if p.m.w(0x28) != 0 {
-                eprintln!("warning: particle spawn effect {} not ported", p.m.w(0x28));
+                spawn_effect(p.m.w(0x28), p.m.w(0xa), p.m.w(8));
             }
             self.list.push(p);
         }
@@ -1339,8 +1339,10 @@ impl Level {
                     ps.p.colour = 0;
                     ps.p.group = 1;
                     if sprite == 0x64b {
-                        f.rng.random(0x80); // the pops' pitches
-                        f.rng.random(0x80);
+                        let p = f.rng.random(0x80);
+                        let v = f.rng.random(0x80);
+                        crate::sound::pitch(p + 0xc0);
+                        crate::sound::play_at_vol(0x3f, 0x100 - v, y, x);
                     }
                 } else {
                     let w = &*f.world;
@@ -2921,4 +2923,14 @@ fn smoke4_at(ps: &mut Particles, y: i32, x: i32) {
     puff_at(ps, y + 5, x - 2);
     ps.p.delay += 0x13;
     puff_at(ps, y - 1, x);
+}
+
+/// A particle's spawn effect (091e, FUN_1040_60bb when it appears): only plain sounds
+/// (30000 + id) are used this way.
+fn spawn_effect(id: i32, y: i32, x: i32) {
+    if (30000..0x8000).contains(&id) {
+        crate::sound::play_at(id as usize - 30000, y, x);
+    } else {
+        eprintln!("warning: particle spawn effect {id} not ported");
+    }
 }
