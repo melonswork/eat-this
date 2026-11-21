@@ -221,7 +221,8 @@ impl Particles {
         self.last = self.list.len() - 1;
         self.last_pending = false;
         if p.on_spawn != 0 {
-            eprintln!("warning: particle spawn effect {} not ported", p.on_spawn);
+            let m = &self.list[self.last].m;
+            spawn_effect(p.on_spawn, m.w(0xa), m.w(8));
         }
         self.last
     }
@@ -248,7 +249,7 @@ impl Particles {
         while self.pending.first().is_some_and(|(d, _)| *d <= self.now) {
             let (_, p) = self.pending.remove(0);
             if p.m.w(0x28) != 0 {
-                eprintln!("warning: particle spawn effect {} not ported", p.m.w(0x28));
+                spawn_effect(p.m.w(0x28), p.m.w(0xa), p.m.w(8));
             }
             self.list.push(p);
         }
@@ -2893,6 +2894,17 @@ pub fn fan(
         }
     }
     ps.p.hits = 0;
+}
+
+/// FUN_1040_60bb(091e, y, x) when a particle joins the array (FUN_1050_3f77, or FUN_10a0_023f for
+/// a delayed one): 30000 + n plays sound n there; the procedures (< 30000) aren't used this way.
+fn spawn_effect(id: i32, y: i32, x: i32) {
+    let id = id as u16 as i32;
+    if id >= 30000 {
+        sound::play_at((id - 30000) as usize, y, x);
+    } else {
+        eprintln!("warning: particle spawn effect {id} not ported");
+    }
 }
 
 /// FUN_1050_00a7: the frame to draw. Animations (negative sprites) aren't ported.
