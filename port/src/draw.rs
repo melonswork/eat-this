@@ -132,6 +132,12 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
             p.scaled_at(0x200, 0x200, sprite, x, y);
             return;
         }
+        0x232e => {
+            // FUN_1050_232e: in the half-speed background layer.
+            let (cx, cy) = p.cam;
+            p.sprite(sprite, x - ((cx as u16) >> 1) as i32, y - ((cy as u16) >> 1) as i32);
+            return;
+        }
         0x2588 => {
             // A bonus flying out (FUN_1088_022b on its tile +0x40).
             let kind = world.cell_function(m.uw(0x40), 2) as i32;

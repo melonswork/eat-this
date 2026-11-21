@@ -50,6 +50,8 @@ pub const MOVE_ROCKET: u16 = 0x3c4f;
 pub const MOVE_AGE: u16 = 0x2ac9;
 /// FUN_1050_36a9: a running critter (FUN_1050_4622).
 pub const MOVE_CRITTER: u16 = 0x36a9;
+/// FUN_1050_3d06: a throw in the half-speed background layer (no walls; gone below 0x1c8 + camY / 2).
+pub const MOVE_BG_THROW: u16 = 0x3d06;
 
 /// Per-frame procedures (segment 1050 offsets).
 pub const CB_BULLET: u16 = 0x126;
@@ -285,6 +287,25 @@ impl Particles {
         v.set(0xc, bounce);
         p.m.set(0x4e, 0x7fff);
         p.m.set(0x3c, p.m.w(0x3c) | 0x200);
+    }
+
+    /// FUN_1050_4999(gravity, speed, angle): a throw in the background layer (GRANNY's collapse).
+    pub fn bg_throw(&mut self, gravity: i32, speed: i32, angle: i32) {
+        let bounce = self.p.bounce;
+        let p = self.last_mut();
+        p.m.set(0x4a, MOVE_BG_THROW as i32);
+        p.m.set(0x4c, 0xe);
+        let v = &mut p.v;
+        v.set_l(0, trig::cos(angle) * speed);
+        v.set_l(4, trig::sin(angle) * speed);
+        v.set(8, 0);
+        v.set(0xa, gravity);
+        v.set(0xc, bounce);
+    }
+
+    /// FUN_1050_2a6c(group): every particle of the group goes.
+    pub fn remove_group(&mut self, group: i32) {
+        self.list.retain(|p| p.m.w(0) != group);
     }
 
     /// FUN_1040_621f(speed, angle, y, x): the hero's grenade (effect 21 when it hits or its
@@ -963,6 +984,19 @@ impl Level {
                     m.set(0x24, m.w(0x24) + 1);
                 }
             }
+            MOVE_BG_THROW => {
+                let t = v.w(8);
+                m.set(8, m.w(4) + v.l(0).wrapping_mul(t) / 0x40000);
+                let fall = ((t * t) as i16 as i32) / v.w(0xa);
+                m.set(0xa, fall + (m.w(6) - v.l(4).wrapping_mul(t) / 0x40000));
+                v.set(8, t + 1);
+                if (m.w(0xa) - ((cam.1 as u16) >> 1) as i32) < 0x1c8 {
+                    m.set(0x24, m.w(0x24) + 1);
+                } else {
+                    m.set(0x24, m.w(0x22));
+                    m.set(0x3e, -10);
+                }
+            }
             MOVE_THROW => {
                 let t = v.w(8);
                 m.set(8, m.w(4) + v.l(0).wrapping_mul(t) / 0x40000);
@@ -1404,7 +1438,7 @@ impl Level {
                 let m = &mut self.particles.list[i].m;
                 m.set(0x16, if t < 5 { ((m.uw(0x24) >> 3) & 3) as i32 + 0x1900 } else { 0x1904 });
             }
-            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
+            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a | 0x232e => {} // drawing only
             0x2299 => {
                 // FUN_1050_2299: a burning bit trails smoke.
                 if m.w(0x24) % 4 == 3 {

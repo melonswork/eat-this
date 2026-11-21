@@ -11,6 +11,7 @@ mod alien;
 mod tank;
 mod spikeball;
 mod meathook;
+mod collapse;
 mod bigali;
 mod archive;
 mod bg;
@@ -584,6 +585,28 @@ impl Game {
         }
         self.level.cam = (self.camera.x, self.camera.y);
         self.level.doors_near_hero(&mut self.world, hero_at, false);
+        // The level's background proc (*4c32): GRANNY's collapse (FUN_1088_a481) and its debris
+        // (FUN_1050_4ca5(2)).
+        if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
+            let cam = (self.camera.x, self.camera.y);
+            for (a, b) in self.level.collapse_frame(&self.world, &mut self.rng, cam) {
+                self.camera.shake(a, b);
+            }
+            if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
+                let mut fx2 = Effects::default();
+                let mut pf = particles::Frame {
+                    world: &mut self.world,
+                    rng: &mut self.rng,
+                    fx: &mut fx2,
+                    camera: cam,
+                    hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
+                };
+                self.level.update_particles(2, &mut pf);
+                for (a, b) in std::mem::take(&mut fx2.shakes) {
+                    self.camera.shake(a, b);
+                }
+            }
+        }
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, false, &mut cx);
         self.hero.hide_in_exit();

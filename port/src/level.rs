@@ -153,6 +153,8 @@ pub struct Level {
     pub hero_x: i32,
     /// gCameraX/Y as the scripts and decals see them.
     pub cam: (i32, i32),
+    /// GRANNY's collapsing building (OBJECTS 0x2715).
+    pub collapse: Option<crate::collapse::Collapse>,
     /// The platform objects (records 100..103).
     pub plat_objs: Vec<crate::platobj::PlatObj>,
     /// The ambient sound emitters' next times (1170:4ec0, 4ebc, 4ec4).
@@ -221,6 +223,7 @@ impl Level {
             hero_x: 0,
             cam: (0, 0),
             plat_objs: Vec::new(),
+            collapse: None,
             amb: [509, 329, 0], // HeroReset's Random(0x230) calls ran before DemoLoad zeroed the seed: the same in every demo
             walk_index: 0,
             walking: (0, 0),

@@ -29,6 +29,7 @@ const DEFAULT_PRIORITY: i32 = 0x1000;
 pub mod key {
     pub const GRINDER: u64 = 1 << 40; // 1170:4ee8
     pub const RAIN: u64 = (1 << 40) + 1; // 1170:4de0
+    pub const COLLAPSE: u64 = (1 << 40) + 2; // 1170:4ed2
     /// An object's handle field at `off` (objects are numbered by their record index).
     pub fn obj(index: usize, off: u32) -> u64 {
         (2 << 40) | ((index as u64) << 8) | off as u64

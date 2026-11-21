@@ -90,6 +90,7 @@ streams and EVERY CHECK, so the method is the original's own.
 | `TANK2` | F_LAST, start (2050,735), six weapon-3 pick-ups | the tank shot to pieces: arm off (b7cd, effects 9 and 47 = FUN_1040_4d4c), claw out, turret off (b8d3), gun bursts (state -1), hull: the wreck (plates, fan, burning); also: a group-0 ScreenShake acts before the actors (trees) | exact |
 | `SPIKE1` | FOREST05, lever cell (138,91) set on (0x308), start on the branch (2318,1407) | the spiked ball 0x14e6 (FUN_1070_9a66, `spikeball.rs`): swings from the lever, hits the hero standing where it swings up (hit kind 3, bloody 0x3315, drips), two pistol shots push it. Not exercised: shakes pushing it (amp > 7) | exact |
 | `MEATHOOK1` | BUTCHERY, lever (158,48) set on (0xf58), start (2575,817) | the meat hooks 0x1414 (FUN_1070_4b9b, `meathook.rs`): speed ramps up, meat shot apart, the knocked-down hero carried up (gHeroDY set after FUN_1088_532c carries into the next HeroUpdate: `Hero::carry`); its draw's Random(2) under a saved seed is IGNOREd (1070:51af) | exact |
+| `COLLAPSE1` | GRANNY, lever (146,30) set on (0xfd8) | the collapsing building 0x2715 (FUN_1088_a481 from background proc 15, `collapse.rs`): 0x42a frames of shakes and debris (particle group 2, mover FUN_1050_3d06 = `MOVE_BG_THROW`, callback 0x232e), the rumble loop; the tilted building (extra map plane 4 rotated, FUN_10f0_545b) is not drawn | exact |
 
 ## Tools (non-obvious usage)
 

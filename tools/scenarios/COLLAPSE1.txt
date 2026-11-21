@@ -1,0 +1,6 @@
+# GRANNY's collapsing building (OBJECTS 0x2715, FUN_1088_a481 from background proc 15): its lever
+# (146,30) is set on (tile 0xfd8), so it collapses from the first frame for 0x42a frames: shakes,
+# debris in particle group 2 (Random positions, mover FUN_1050_3d06), the rumble loop; then stops.
+level MAPS/GRANNY.MAP
+cell 1 146 30 0xfd8
+1120

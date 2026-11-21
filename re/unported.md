@@ -22,7 +22,7 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 | 6 | ~~OBJECTS 0x146e~~ the tank (VMT 0xdf8 shared with 0x1478, FUN_1070_b9d3) | EnemyFactory | CITY_I00, F_LAST | DONE (`tank.rs`, TANK1/TANK2: patrol, grenades, arm/claw/turret/hatch/hull destroyed, the wreck; hero state -3 = held by the claw in `Hero` (HELD), hit kinds 0 and 3). Not exercised: the claw grabbing the hero, the hero standing on it |
 | 7 | ~~OBJECTS 0x1414~~ the meat hooks (VMT 0xd04, FUN_1070_4b9b) | EnemyFactory | BUTCHERY | DONE (`meathook.rs`, MEATHOOK1); FUN_1070_4b4e = Random(100) per hook at setup |
 | 8 | ~~OBJECTS 0x14a0~~ the falling sign (VMT 0xbd8, FUN_1068_1f3c) | EnemyFactory | GRANNY | DONE (`weight.rs` SLAB, SLAB1: chain cleared (5c10/5b33), falls on the hero = hit kind 2, lands, stood on with the original's mixed-up FUN_1070_00b6 arguments) |
-| 9 | OBJECTS 0x2715 | LevelInit | GRANNY | the background building collapse FUN_1088_a481 (lever 4ed4 starts it; draws Randoms for debris in particle group 2, sound loop 0x53): simulation, not ported |
+| 9 | ~~OBJECTS 0x2715~~ | LevelInit | GRANNY | DONE (`collapse.rs`, COLLAPSE1): the background building collapse FUN_1088_a481 (run by background proc 15 = FUN_1090_1f6f). Its draw (the building rotated, FUN_10f0_513c/545b on extra map planes 4/5) is not ported |
 | 10 | ~~OBJECTS 0x14b4~~ the pumping door (VMT 0xd44, FUN_1070_a0bd -> FUN_10a8_11e9) | EnemyFactory | CITY_I04 | DONE (`Level::door_pump`, PUMPDOOR1). Weak check: no Random involved; the hero's path through it matches |
 | 11 | ~~OBJECTS 0x14e6~~ (VMT 0xda0) | EnemyFactory | FOREST05 | DONE (`spikeball.rs`, SPIKE1). A spiked ball on a chain (FUN_1070_9a66, nested 9a16): swings once its lever (+0x1c) is on or it is shot; the quake (45ba/45bc/45c0) pushes it (Random(0x18), Random(2)); hits the hero with kind 3 (0xc0, sound 0xf), drips blood (callback at 1170:23b7). Seven long divisions: disassemble before porting |
 | 12 | OBJECTS 0x2716 | LevelInit | FORPLANE | draw only: 1170:534e/5350 for the background proc FUN_1090_178e (renderer's) |
@@ -38,7 +38,7 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
 1. ~~OBJECTS 0x146e~~ the tank: DONE (`tank.rs`, TANK1, TANK2).
 2. ~~OBJECTS 0x14e6~~ the spiked ball: DONE (`spikeball.rs`, SPIKE1).
 3. ~~OBJECTS 0x1414~~ the meat hooks: DONE (`meathook.rs`, MEATHOOK1).
-4. OBJECTS 0x2715 (GRANNY): the background collapse FUN_1088_a481 (simulation with Randoms).
+4. ~~OBJECTS 0x2715~~ (GRANNY): the collapse: DONE (`collapse.rs`, COLLAPSE1); the rotated building's draw is left.
 5. Draw only: 0x2716 (FORPLANE, FUN_1090_178e's 534e/5350) for the renderer.
 6. From AGENTS.md, not seen on the episode maps' load: riding the smallbot (FUN_1070_a18e), levers needing a
    key, pick-up effects 3/74, particle spawn effects 30064/30065/30070, mover 1050:19f8, platform shake/dust
@@ -57,6 +57,8 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
   grab, 0x26 claw off, 0x4a arm off, 0x17 turret off, 0x4e wreck.
 - Meat hooks (FUN_1070_4b9b): wired in `meathook.rs`: 0x33 at speed 0x30 going up, 0x30 going down, the motor loop
   0x2b on +0x26 (volume (speed*256/full)*2/3, pitch 0x100 - that/2, priority 0x11f4), 0x4b a piece shot apart.
+- Collapse (FUN_1088_a481): wired in `collapse.rs`: 0x4b per debris burst (at the background position), the rumble
+  loop 0x53 on 4ed2 (priority 0x13e8, volumes min(0x42a - t, 0x100)).
 - Spiked ball (FUN_1070_9a66): wired in `spikeball.rs`: 0xf when it hurts the hero, 1 when shot (sounddiff SPIKE1).
 
 - Granny (FUN_1070_cb38): 0x9d when hit alive, pitch `0x100 - Random(0x20)` (FUN_10e8_03ae; the Random is

@@ -822,6 +822,16 @@ impl Level {
                     world.sectors[s].water[4] = ((g(3) - 100) >> 1) + 100;
                 }
                 0x271a => self.vehicle = true,
+                crate::collapse::KIND => {
+                    let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
+                    let sector = world.sector_at(g(3), g(2));
+                    self.collapse = Some(crate::collapse::Collapse { x: g(2) / 2, y: g(3) / 2 - 0x90, t: 0, next: 0, lever: g(4) as u16, sector });
+                    if std::env::var_os("ET_KINDS").is_some() {
+                        let (c, w) = (g(4) as usize, world.main().width as usize);
+                        let v = world.main().cells[c];
+                        eprintln!("COLLAPSE at ({}, {}) lever {:#x} (tx {} ty {}) cell {v:#x} f0 {}", g(2), g(3), g(4), c % w, c / w, world.cell_function(v, 0));
+                    }
+                }
                 // 0x272e: decor layers (LevelInit, VMT 0xaf8: draw procs only), drawn by main.rs.
                 0x44c | 0x44d | 0x2724 | 0x272e => {}
                 k => eprintln!("warning: OBJECTS type {k:#x} not ported"),
