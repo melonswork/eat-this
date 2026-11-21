@@ -2000,7 +2000,8 @@ impl Level {
                     m.set(0x1c, r + 0x200);
                     m.set(0x1e, r + 0x240);
                     m.set(0x42, 0x2148);
-                    f.rng.random(0x14);
+                    let p = f.rng.random(0x14);
+                    sound::play_at_pitch(0x4b, p + 0xf6, y, x);
                     f.fx.shakes.push((0x12, 5));
                 } else if side == 3 {
                     ps.spawn_seq(0x1918, 3, 3, y, x, 1);

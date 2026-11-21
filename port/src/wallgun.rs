@@ -93,7 +93,8 @@ impl Level {
                 ps.p.colour = 0x28;
                 ps.spawn_seq(0x1b04, 4, 2, by, bx, 1);
                 ps.p.colour = 0;
-                ps.spawn_seq(0x190a, 3, 2, by, bx, 1); // sound 0x65
+                ps.spawn_seq(0x190a, 3, 2, by, bx, 1);
+                crate::sound::play_at(0x65, by, bx);
                 self.o(id).set(0x18, 10);
             }
             let o = self.o(id);
@@ -153,9 +154,17 @@ impl Level {
             ps.p.on_death = 0;
             ps.p.hits = 0;
             ps.p.group = 1;
-            env.fx.shakes.push((0x24, 0xe)); // sound 100
+            env.fx.shakes.push((0x24, 0xe));
+            let o = self.o(id);
+            crate::sound::play_at(100, o.w(0x10), o.w(0xe));
         } else {
-            env.fx.shakes.push((0xc, 4)); // sound 1 (dead) or 0x49, unless 25aa = 0x48 or still flashing
+            env.fx.shakes.push((0xc, 4));
+            let mask = self.particles.hit_mask;
+            let o = self.o(id);
+            if mask != 0x48 && o.w(0x1c) < 0x7e {
+                // Dead already: a thud; else the hit.
+                crate::sound::play_at(if o.w(0x1a) < 0 { 1 } else { 0x49 }, o.w(0x10), o.w(0xe));
+            }
         }
         if self.o(id).w(0x1a) < -0x80 {
             let ps = &mut self.particles;
@@ -181,7 +190,9 @@ impl Level {
             ps.p.on_death = 0;
             ps.p.hits = 0;
             ps.p.group = 1;
-            env.fx.shakes.push((0x18, 8)); // sound 0x4a
+            env.fx.shakes.push((0x18, 8));
+            let o = self.o(id);
+            crate::sound::play_at(0x4a, o.w(0x10), o.w(0xe));
             self.remove_current(id);
             return;
         }
