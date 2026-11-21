@@ -197,10 +197,38 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   tree); nothing in the simulation reads it.
 - Extra maps (`LoadExtraMap=`, slots 8..) keep only PLANE 0 and use the main map's tile groups; 0x272e
   records are parallax decor layers (depth < 0x100 behind the tiles, else over everything).
-- Not drawn yet: the city background's extra parts (FUN_1090_0292/04d7, the START bridge), the forest
-  background's two parallax layers (proc 4), messages/tips (FUN_1088_2187), the kill/secret counters
-  (totals 4eb2/4eae/4eaa unknown in the port), platform objects of unported kinds sit at their start.
-  Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`.
+- Background procs (`BackgroundProc=N` -> table 1170:189e, 17 entries; `ForegroundProc` -> 1170:18e2):
+  0 = 1090:075c (decor only, yet CITY01 shows the city: the port draws `bg::city` for it), 1 = 0a8c and
+  16 = 0ace (START: the city 0797, the bridge 0292 with its train when the sector's +0x1c >= 0 (OBJECTS
+  0x2719), the rain 0418 while the storm 4eda runs, decor; 16 also the truck), 3 = 147b, 4 = 1629 (+ extra
+  maps 9 and 8 at camera/4 and /2, `FUN_1088_a401` = repeated both ways), 5 = 178e (FORPLANE), 6 = 1a06.
+  Not ported: 12..15 (BUTCHERY/CITY_NET/RADIO_AC/STONES, CITY_I06, FALL, GRANNY; no demo shows them).
+- START's storm: script command 0x16 darkens the palette once (FUN_1088_293a: each colour 3/4 of the way to
+  its grey; `Graphics::palette_of`), rain drops come from a table drawn at boot under RandSeed 1000
+  (`storm::rain_drops`, 4f0c = 4eda / 32 of them behind the tiles, the same count from drop 0x1e in front
+  (FUN_1090_0567, which also spawns splash particles 0x615)), lightning kind 1 lights the sky (PalMixLight
+  row 0x80), kind 0 tints the screen (tint row 3) three frames in six.
+- HUD (FUN_1088_4b64 -> 2501): GameStats (1a92) 1 = status bar, 2 = + the kill/hidden-area/bios counters
+  (FUN_1088_248e: 4eb0/4eb2 kills at the bottom, 4eac/4eae, 4ea8/4eaa; icons STATSOBJ 0x2800 + f/6 % 12,
+  0x280c + f/9 % 12, 0x2824 + f/3 & 7). Totals: `Game::totals` (`frontend::level_totals` + COUNTED_KINDS +
+  alien icons over wall holes). The bar follows health a pixel a frame (4e30), the weapon icon slides in
+  after a change (4e32 = -14, -16 in the vehicle); 2501 also CLAMPS health to 0..0x2c6 (`Hero::status_bar`).
+  HeroReset selects gWeaponForDigitKey[0] (weapon 2). The pointer (4e50, `Particles::pointer`): enemy hit
+  tests (mask & 0x59) whose box holds the pointer (4e42/4e44 = mouse + camera, set after the camera update)
+  make it red (0x7802+weapon), the alien's corpse test KICK/ME (0x7803/04, 163e = 3).
+- Message box (`messages.rs`, 4f10/5110/5112/5114): HeroDamage(id) (1088:1109) = message id of ETMAIN's
+  AddMsg lines (negative, -1 the last) or, from 0, of the level script's (script command 0x0b); sources:
+  weapon/keycard/drone pick-ups, death (-14 - Random(6)), the vehicle (-12 under 0x8f health, -13), key slots
+  (-20, "needs a keycard" only if not the last line). Typed a byte a frame in PPFONT3 (slot 0x20) through the
+  tint table over rows darkened by PalMixLight 0x20/0x24; markup ^| ^Cxx ^O ^Bxx. Pixel-exact on CITY01.
+- HeroClothes= in a script: the hero is PPHEROA/A2/A3 and slot 3 PPDOORA (`sprites::set_clothes`).
+- Still different: FUN_1088_2187 is the automap (1a94, toggled by a typed cheat), not drawn; the
+  little movie screen on START's skyline (4d9c, slot 0x7d MOVIE); FORPLANE's object at 534e
+  (FUN_10d0_01e4); the HUD message blip's sound; platform objects of unported kinds sit at their start;
+  some kills totals are off by one (forest: other EnemyFactory counting); a few actor frames (FORPLANE's
+  pumpkin turret, WEAPON9's mines' lights) and the flamethrower's burning ground in START differ.
+  Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`,
+  `ET_MSG=1` the messages shown, `ET_HEALTH=1` the health each frame.
 
 ## State (2026-11-20: + WEAPON6/WEAPON9, next level; all oracle demos exact via tools/checkall.sh)
 
