@@ -73,7 +73,8 @@ def main():
         used[hit] = True
         matched += 1
         p = port[hit]
-        if p[2] != o[2] or p[3] != o[3]:
+        # Only the fields the original set (its flags) are compared.
+        if (o[2] is not None and p[2] != o[2]) or (o[3] is not None and p[3] != o[3]):
             bad.append((o, p))
     extra = [p for i, p in enumerate(port) if not used[i]]
     print(f"{name}: original {len(orig)} plays, port {len(port)}; matched {matched}, missing {len(missing)}, extra {len(extra)}, value mismatches {len(bad)}")

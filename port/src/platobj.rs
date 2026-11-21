@@ -531,10 +531,20 @@ fn update_lift_move(
     let rel = (hero.x + hero.dx) - p.x;
     let w = p.width();
     let (top, bottom) = p.stops;
-    let mut start = |p: &mut PlatObj, dir: i32| {
+    // The lift's sounds (row word +4 of 1170:09ce: start s, loop s + 1, stop s + 2) at its middle.
+    let snd = ds_word(0x9d2 + p.row * 14);
+    let key = crate::sound::key::lift(p.x, top);
+    let start = |p: &mut PlatObj, dir: i32| {
         if p.dir == 0 {
-            p.dir = dir;
+            lift_start(p, dir, snd, key, w);
         }
+    };
+    // FUN_1060_152f: the stop sound, the loop ends.
+    let stop = |p: &PlatObj| {
+        if snd != 0x7fff {
+            crate::sound::play_at(snd as usize + 2, p.y, (w >> 1) + p.x);
+        }
+        crate::sound::stop(key);
     };
     if p.dir == 0 {
         p.age = 0;
@@ -548,15 +558,21 @@ fn update_lift_move(
             }
         }
     } else {
+        if snd != 0x7fff && crate::sound::audible(p.y, (w >> 1) + p.x) {
+            crate::sound::priority(0x11f4);
+            crate::sound::keep(key, snd as usize + 1);
+        }
         if p.y < top + 0x24 {
             p.speed_count += p.dir;
             if p.speed_count < 1 {
+                stop(p);
                 p.dir = 0;
             }
             p.y = top + (p.speed_count * p.speed_count) / 0x1c;
         } else if bottom - 0x24 < p.y {
             p.speed_count -= p.dir;
             if p.speed_count < 1 {
+                stop(p);
                 p.dir = 0;
             }
             p.y = bottom - (p.speed_count * p.speed_count) / 0x1c;
@@ -570,7 +586,8 @@ fn update_lift_move(
             for _ in 0..=((w - 1) >> 4) {
                 if world.tile_function_in(2, p.y, x) == 0x3336 {
                     shakes.push((0x10, 4));
-                    rng.random(0x18);
+                    let r = rng.random(0x18);
+                    crate::sound::play_at_pitch(0x4c, 0x100 - r, p.y, x);
                 }
                 x += 0x10;
             }
@@ -588,7 +605,7 @@ fn update_lift_move(
         // FUN_1060_1689: Down (pressed anew) rides it the other way.
         if down && *released_down && hero.prev_ground != 9 {
             if p.dir == 0 {
-                p.dir = if top < p.y { -1 } else { 1 };
+                lift_start(p, if top < p.y { -1 } else { 1 }, snd, key, w);
             } else {
                 p.dir = -p.dir;
             }
@@ -610,6 +627,18 @@ fn update_lift_move(
     }
 }
 
+/// FUN_1060_15a6: a lift starts moving: the start sound, the loop queued after it.
+fn lift_start(p: &mut PlatObj, dir: i32, snd: i32, key: u64, w: i32) {
+    if snd != 0x7fff && crate::sound::audible(p.y, (w >> 1) + p.x) {
+        crate::sound::priority(0x11f4);
+        crate::sound::play(snd as usize);
+        crate::sound::audible(p.y, (w >> 1) + p.x);
+        crate::sound::priority(0x11f4);
+        crate::sound::keep(key, snd as usize + 1);
+    }
+    p.dir = dir;
+}
+
 /// FUN_1060_1cee, a lift's draw routine (FUN_1060_14a7's second pass, after the hero): dust falls
 /// off both ends every 16th moving frame. Rows 0 and 3 of the table at 1170:09ce have it at +0xc
 /// (the table is filled at run time, so it isn't in the EXE's data).
@@ -619,6 +648,10 @@ pub fn lift_dust(
     ps: &mut crate::particles::Particles,
     rng: &mut crate::rng::PascalRandom,
 ) {
+    // FUN_1060_2242 (row 8, the cable lift): a click each time it crosses a tile row.
+    if p.row == 8 && ((p.y + 7) as u16 >> 4) != ((p.prev_y + 7) as u16 >> 4) {
+        crate::sound::play_at(0x44, p.y, p.x + 0xf);
+    }
     if !(matches!(p.row, 0 | 3) && p.age % 0x10 == 0xf) {
         return;
     }

@@ -33,6 +33,10 @@ pub mod key {
     pub fn obj(index: usize, off: u32) -> u64 {
         (2 << 40) | ((index as u64) << 8) | off as u64
     }
+    /// A lift's handle (record +0x1e), by its x and top stop.
+    pub fn lift(x: i32, top: i32) -> u64 {
+        (4 << 40) | ((x as u16 as u64) << 16) | top as u16 as u64
+    }
     /// A platform's handle (record word 0xf).
     pub fn platform(index: usize) -> u64 {
         (3 << 40) | index as u64
