@@ -91,6 +91,7 @@ impl MessageBox {
         self.text.extend_from_slice(msg);
         self.shown = skip_markup(&self.text, self.shown);
         self.lines += 1 + count(msg, NEW_LINE);
+        crate::sound::play(0x57); // the blip (if 1170:16d8, on by default)
     }
 
     /// FUN_1088_0f2e: the first line goes.
