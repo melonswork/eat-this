@@ -41,6 +41,7 @@ impl Level {
             o.set(0x20, dir);
             o.set(0x2c, 0x2e);
             o.set(0x2a, 0);
+            crate::sound::play_at(0x5a, o.w(0x10), o.w(0xe));
         }
     }
 
@@ -65,6 +66,8 @@ impl Level {
         ps.p.hits = 0;
         ps.spawn_seq(0x6900, 2, 0x19, y - 8, x, 1); // effect 23
         env.fx.shakes.push((0x24, 0xc));
+        let o = self.o(id);
+        crate::sound::play_at(0x4a, o.w(0x10), o.w(0xe));
     }
 
     /// FUN_1070_3d85: the rider blows up at `y`.
@@ -115,6 +118,7 @@ impl Level {
         ps.p.on_death = 0;
         ps.p.hits = 0;
         env.fx.shakes.push((0x24, 0xe));
+        crate::sound::play_at(0x4a, y, x);
         env.fx.kills += 1;
     }
 
@@ -152,7 +156,8 @@ impl Level {
             if self.o(id).w(0x2a) % 0x10 == 1 && env.rng.random(6) == 0 {
                 let dy = env.rng.random(5);
                 self.particles.spawn_seq(0x1928, 3, 4, (y - 0x20) - dy, x, 1);
-                env.rng.random(0x14);
+                let p = env.rng.random(0x14);
+                crate::sound::play_at_pitch(0x46, p + 0x100, y, x);
             }
         } else {
             let (facing, turn) = (self.o(id).w(0x20), self.o(id).w(0x2c));
@@ -210,6 +215,12 @@ impl Level {
                 let a = (self.o(id).w(0x2a) + 1) % 0x50;
                 self.o(id).set(0x2a, a);
                 mount = a / 4 + 0x5602;
+                if a % 0x28 == 0xc {
+                    crate::sound::play_at(0x4f, y, x);
+                } else if a % 0x28 == 0 {
+                    let vol = if self.o(id).w(0x32) < 1 { 0xaa } else { 0x100 };
+                    crate::sound::play_at_vol(0x50, vol, y, x);
+                }
                 if a % 0x28 == 0 && self.o(id).w(0x32) > 0 && visible(env, x) {
                     env.fx.shakes.push((6, 2));
                 }
@@ -219,6 +230,7 @@ impl Level {
                     if old != self.o(id).w(0x20) {
                         self.o(id).set(0x2c, 0x2e);
                         self.o(id).set(0x2a, 0);
+                        crate::sound::play_at(0x5a, self.o(id).w(0x10), self.o(id).w(0xe));
                     }
                 }
             } else {
@@ -283,6 +295,7 @@ impl Level {
                         puff(ps, y - 0x10, x);
                         ps.p.delay = 0;
                         env.fx.shakes.push((0xc, 4));
+                        crate::sound::play_at(0x49, self.o(id).w(0x10) + off, x);
                     }
                     self.o(id).set(0x28, 3);
                     if self.o(id).w(0x2c) < 1 && self.o(id).w(0x32) > 0 {
@@ -316,6 +329,7 @@ impl Level {
                 self.particles.hit_mask = 0x48;
                 self.o(id).set(0x10, y - 3);
                 env.fx.shakes.push((0xc, 4));
+                crate::sound::play_at(1, y - 3, x);
             }
             if d > 0 {
                 let hp = self.o(id).w(0x32) - d;
@@ -364,6 +378,7 @@ impl Level {
                         }
                     }
                     if mask != 0x48 && self.o(id).w(0x26) < 1 {
+                        crate::sound::play_at(0x49, muzzle, x);
                         env.fx.shakes.push((0xc, 4));
                     }
                     self.o(id).set(0x26, 3);
@@ -375,6 +390,7 @@ impl Level {
                 if self.o(id).b(0x3c) == 0 {
                     self.o(id).set_b(0x3c, 1);
                     self.o(id).set(0x3a, 0x6e);
+                    crate::sound::play_at(0x60, muzzle, x);
                 }
                 let cd = self.o(id).w(0x3a);
                 let now = self.particles.now;
@@ -386,6 +402,7 @@ impl Level {
                     }
                     let sx = x + (0x1c * crate::trig::sin((a + 0x5a0) % 0x1680)) / 0x4000;
                     let sy = (self.o(id).w(0x10) + off - 8) - (0x1c * crate::trig::sin(a % 0x1680)) / 0x4000;
+                    crate::sound::play_at(0x42, sy, sx);
                     let ps = &mut self.particles;
                     ps.p.hits = 0x20;
                     ps.p.damage = 0x10;
