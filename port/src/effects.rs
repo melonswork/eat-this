@@ -504,6 +504,7 @@ fn explosion(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut Pascal
 fn wall_chunks(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
     let f = world.tile_function_at(y, x);
     let (mut y, mut x) = (y, x);
+    let mut bottom = y; // 1170:6686
     if f == 0 {
         // (The plane-2 cell is cleared; FUN_10f0_3f68.)
         if let Some(p) = world.planes[2].as_mut() {
@@ -515,6 +516,7 @@ fn wall_chunks(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut Pasc
         }
     } else {
         let (x1, y1, x2, y2) = clear_block(world, y, x);
+        bottom = y2;
         x = ((x1 + x2 + 0xf) as u16 >> 1) as i32;
         y = ((y1 + y2 + 0xf) as u16 >> 1) as i32;
     }
@@ -523,7 +525,33 @@ fn wall_chunks(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut Pasc
     ps.p.hits = 0x8000;
     ps.p.on_death = 0x10;
     match f as i16 {
-        -0x146c | -0x1470 => eprintln!("warning: wall chunks of tile function {f} (FUN_1040_45db) not ported"),
+        -0x146c => {
+            // 60308: three chunks and a puff of smoke (FUN_1040_66fa).
+            for i in 0..3 {
+                ps.spawn(0x7531, y, (x - 4) + i * 4);
+                let a = i * -0x50 + 0x5b0 + rng.random(0x81);
+                let speed = rng.random(0x10);
+                ps.throw(9, speed + 0x50, a);
+            }
+            ps.p.callback = 0x236b;
+            ps.p.colour = 0x10;
+            ps.spawn_seq(0x6c00, 4, 0x19, y, x, 1);
+            ps.p.colour = 0;
+            ps.p.callback = 0;
+        }
+        -0x1470 => {
+            // 60304: four bits (30000), half of them mirrored.
+            for i in 0..4 {
+                ps.p.draw = rng.random(2);
+                let px = (x - 6) + i * 4;
+                let py = (y + 8) - rng.random(0x10);
+                ps.spawn(30000, py, px);
+                let a = i * -0x50 + 0x5d0 + rng.random(0x81);
+                let speed = rng.random(0x20);
+                ps.throw(9, speed + 0x40, a);
+            }
+            ps.p.draw = 0;
+        }
         _ => {
             for i in 0..2 {
                 ps.spawn(29999, y, x - 4 + i * 8);
@@ -548,9 +576,13 @@ fn wall_chunks(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut Pasc
     ps.p.hits = 0;
     ps.p.group = 1;
     if rng.random(3) == 0 {
-        eprintln!("warning: a wall's bonus 0xd10 (FUN_1040_6b03) not ported");
+        lv.bonus(world, 0xd10, bottom, x);
     }
     fx.shakes.push((0x18, 0xe));
+    sound::play_at(0x4a, y, x);
+    if f as i16 == -0x1470 {
+        crate::alien::smoke_sprite(&mut lv.particles, y + 0x10, x);
+    }
 }
 
 /// FUN_1040_3aed(y, x) (FUN_10f0_5c10/5b33): clear the block of tiles joined to (x, y) that

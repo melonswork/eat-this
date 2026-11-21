@@ -43,7 +43,7 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
 6. From AGENTS.md, not seen on the episode maps' load: riding the smallbot (FUN_1070_a18e), levers needing a
    key, pick-up effects 3/74, particle spawn effects 30064/30065/30070, mover 1050:19f8, ~~platform shake/dust
    (flags 8)~~ (ported, untested: no demo has one), ~~frozen/burnt deaths~~ (DONE: `deaths.rs`, FREEZE1/BURN1; aliens and big aliens wired, untested), barrels >= 0xb, the
-   hero on the big alien's shield, wall chunks 60308/60304 (45db), bonus 0xd10, path-platform modes
+   hero on the big alien's shield, ~~wall chunks 60308/60304 (45db), bonus 0xd10~~ (ported, untested), path-platform modes
    0x4000/0x680/0x8000 and platform kinds 2/3, the press (icon 61001) and the carrier's mid-air blast are
    ported but not exercised by a scenario.
 
