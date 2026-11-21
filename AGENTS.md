@@ -85,6 +85,7 @@ streams and EVERY CHECK, so the method is the original's own.
 | `PATHPLAT1` | CITY_I01, start moved onto a platform (2680,1135) | path platforms (OBJECTS type 100, kind 0, `platobj::update_path` = FUN_1060_0819): mode 4 loops round the rectangle carrying the hero, jumps on it, steps off | exact |
 | `WEIGHT1` | CITY_I03, start moved to (1960,881) | the falling weight (icon 61000, kind 0x13a6, FUN_1068_215e, `weight.rs`): drops on the hero (hit kind 2, knocked flat), breaks the plank bridge (effect 50, nested FUN_1088_1364 negative-tile blasts), he falls through (any state < 1 but -1..-5 falls) | exact |
 | `PUMPDOOR1` | CITY_I04, start moved to (380,863) | the pumping door 0x14b4 (FUN_1070_a0bd, `Level::door_pump` = FUN_10a8_11e9); no Random involved, only the hero's walk through it checks it | exact |
+| `SLAB1` | GRANNY, start moved to (1060,975) | the falling sign 0x14a0 (FUN_1068_1f3c, `Level::slab`): walks under it, it drops and knocks him flat (hit kind 2), he climbs on it | exact |
 
 ## Tools (non-obvious usage)
 

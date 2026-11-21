@@ -21,7 +21,7 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 | 5 | ~~icons 61000/61001~~ falling weights (FUN_1070_fa6a, kind 0x13a6, VMT 0xbe8, FUN_1068_215e) | SpawnFromIconTiles | CITY02, CITYHS, CITY_I03 | DONE (`weight.rs`, WEIGHT1: drop, chain bits, crush = hero hit kind 2, planks = effect 50 with its nested negative-tile blasts; the hero now falls from any state < 1 but -1..-5). Not exercised: the press (61001: animation, standing on it, FUN_1040_677d), shooting a landed weight broken |
 | 6 | OBJECTS 0x146e (VMT 0xdf8 shared with 0x1478, FUN_1068_0d84) | EnemyFactory | CITY_I00, F_LAST | enemy (4eb2) |
 | 7 | OBJECTS 0x1414 (VMT 0xd04) | EnemyFactory | BUTCHERY | calls FUN_1070_4b4e per 32 px |
-| 8 | OBJECTS 0x14a0 (VMT 0xbd8, update FUN_1068_1f3c = hero hit kind 2) | EnemyFactory | GRANNY | |
+| 8 | ~~OBJECTS 0x14a0~~ the falling sign (VMT 0xbd8, FUN_1068_1f3c) | EnemyFactory | GRANNY | DONE (`weight.rs` SLAB, SLAB1: chain cleared (5c10/5b33), falls on the hero = hit kind 2, lands, stood on with the original's mixed-up FUN_1070_00b6 arguments) |
 | 9 | OBJECTS 0x2715 | LevelInit | GRANNY | the background building collapse FUN_1088_a481 (lever 4ed4 starts it; draws Randoms for debris in particle group 2, sound loop 0x53): simulation, not ported |
 | 10 | ~~OBJECTS 0x14b4~~ the pumping door (VMT 0xd44, FUN_1070_a0bd -> FUN_10a8_11e9) | EnemyFactory | CITY_I04 | DONE (`Level::door_pump`, PUMPDOOR1). Weak check: no Random involved; the hero's path through it matches |
 | 11 | OBJECTS 0x14e6 (VMT 0xda0) | EnemyFactory | FOREST05 | |
@@ -49,6 +49,7 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
   0xf6 + Random(0x14) (drawn).
 - Weights (FUN_1068_215e): 0x19 on the drop; landing 0x18 (weight) / 0x1c (press); the press 0x1f each cycle
   ((0x1a % ((frames-1)*speed)) == 0, type 1). Effect 50 (planks, FUN_1040_50cf): 0x26 and 0x1c at half volume.
+- Falling sign (FUN_1068_1f3c): 0x19 when it drops, 1 and 0x17 when it lands, all at x + 0x34.
 - Pumping door (FUN_10a8_11e9): 0x81 at (y + 0x20, x + 0x10) when (frame*0x60) % 0x1680 == 0xb40.
 - Splashes (FUN_1070_0105 / HeroUpdate): 0x6f at (water line, x), pitch 0xd0 + Random(0x50) (drawn in
   `Level::splash` / `Hero::update`), volume 1ab8 = 0xaa (alien), 0x100 (big alien), 0x180 (215e), the hero

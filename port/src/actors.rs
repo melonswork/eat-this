@@ -226,6 +226,7 @@ impl Level {
             crate::carrier::KIND => self.carrier(id, env),
             crate::wallgun::KIND => self.wallgun(id, env),
             crate::weight::KIND => self.weight(id, env),
+            crate::weight::SLAB => self.slab(id, env),
             0x14b4 => {
                 // FUN_1070_a0bd: the door pumps until its lever is on, then this goes.
                 let o = self.o(id);

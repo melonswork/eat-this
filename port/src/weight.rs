@@ -235,3 +235,76 @@ pub fn draw(p: &mut crate::render::Painter, o: &crate::objects::Obj) {
         p.at(s + 1, x - (v * 4) / 0x4000, y + (v * 3) / 0x4000);
     }
 }
+
+/// The falling slab (OBJECTS 0x14a0, VMT 0xbd8, FUN_1068_1f3c, sprites 0x3300..): it hangs on a
+/// chain (tile function 60300) until the hero comes near x + 0x40 below it, then the chain goes
+/// and it falls (hero hit kind 2 for 0x60), lands and can be stood on.
+/// +0x14: the y it hung at; +0x16: -2 hanging, >= 0 falling (time), -1 landed.
+pub const SLAB: u16 = 0x14a0;
+
+impl Level {
+    /// FUN_1068_1f3c.
+    pub(crate) fn slab(&mut self, id: usize, env: &mut Env) {
+        let h = env.h;
+        let (x, y, t) = (self.o(id).w(0xe), self.o(id).w(0x10), self.o(id).w(0x16));
+        if t == -2 {
+            if y <= h.y && h.y <= y + 0x60 && ((h.x - x) - 0x40).abs() < 0x10 {
+                clear_joined(env.world, 60300, y, x);
+                let o = self.o(id);
+                o.set(0x16, 0);
+                crate::actors::unbounded(o); // sound 0x19 at x + 0x34
+            }
+        } else if t < 0 {
+            // (FUN_1070_00b6 gets its arguments mixed up here: the last top is x + 0x6e and
+            // the right edge y - 1.)
+            self.stand_on(env, y - 1, x + 0x6e, y - 1, x - 5);
+        } else {
+            let o = self.o(id);
+            let y = (t * t) / 0xe + o.w(0x14);
+            o.set(0x10, y);
+            o.set(0x16, t + 1);
+            if !env.hero_obj.invulnerable()
+                && ranges(h.x + h.half_width, h.x - h.half_width, x + 0x60, x + 8)
+                && ranges(h.y, (h.y - h.height) + 1, y - 4, y - 0x10)
+            {
+                env.hero_obj.crushed(0x60, env.rng);
+            }
+            if env.world.solidity_at(y + 1, x) & 1 != 0 {
+                let y = ((y + 1) & !0xf) - 1;
+                let o = self.o(id);
+                o.set(0x10, y);
+                o.set(0x16, -1);
+                o.set(2, x - 0x10);
+                o.set(4, y - 0x10);
+                o.set(6, x + 0x70);
+                o.set(8, y + 0x10);
+                env.fx.shakes.push((0x24, 0x10));
+                crate::alien::dust(&mut self.particles, y, x + 0x34);
+                let m = &mut self.particles.last_mut().m; // FUN_1050_4a29(0x100, 0x5a)
+                m.set(0x1c, 0x5a);
+                m.set(0x1e, 0x100);
+                m.set(0x42, 0x2148);
+                // sounds 1 and 0x17 at x + 0x34
+            }
+        }
+    }
+}
+
+/// FUN_10f0_5c10(0, f, y, x) / 5b33: clear the cells joined to (x, y) whose tile function is `f`.
+fn clear_joined(world: &mut crate::world::World, f: u16, y: i32, x: i32) {
+    let width = world.main().width;
+    let mut stack = vec![(x, y)];
+    while let Some((cx, cy)) = stack.pop() {
+        if world.tile_function_at(cy, cx) != f {
+            continue;
+        }
+        world.main_mut().cells[((cy >> 4) * width + (cx as u16 >> 4) as i32) as usize] = 0;
+        stack.extend([(cx - 0x10, cy), (cx + 0x10, cy), (cx, cy - 0x10), (cx, cy + 0x10)]);
+    }
+}
+
+/// FUN_1068_1f3c's draw: the slab, its sprite by how far it has fallen.
+pub fn draw_slab(p: &mut crate::render::Painter, o: &crate::objects::Obj) {
+    let (x, y) = (o.w(0xe), o.w(0x10));
+    p.at((y - o.w(0x14)) / 0x14 + 0x3300, x, y);
+}

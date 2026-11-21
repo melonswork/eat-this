@@ -531,6 +531,17 @@ impl Level {
                 o.set(6, o.w(0xe));
                 o.set(8, o.w(0x10));
             }
+            crate::weight::SLAB => {
+                let o = base(kind, 0xbd8, 0x18);
+                let id = self.from_rec(world, o, r);
+                let o = self.obj(id);
+                o.set(0x14, o.w(0x10));
+                o.set(0x16, -2);
+                o.set(2, o.w(0xe) - 0x10);
+                o.set(4, o.w(0x10) - 0x20);
+                o.set(6, o.w(0xe) + 0x70);
+                o.set(8, o.w(0x10) + 0x70);
+            }
             0x14b4 => {
                 // A door that pumps until a lever is on (FUN_1070_a0bd).
                 let o = base(kind, 0xd44, 0x16);
