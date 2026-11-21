@@ -83,13 +83,13 @@ impl Level {
                 }
                 env.fx.shakes.push((0x1e, 0xc));
                 if t == 0 {
-                    // sound 0x18
+                    crate::sound::play_at(0x18, y, x);
                     crate::alien::dust(&mut self.particles, y, x);
                     if env.rng.random(2) == 0 {
                         self.o(id).set(0x18, broken);
                     }
                 } else if t == 1 {
-                    // sound 0x1c
+                    crate::sound::play_at(0x1c, y, x);
                     self.press_bits(env, y, x);
                     crate::alien::dust(&mut self.particles, y - 0xe, x);
                     self.o(id).set(0x18, broken);
@@ -134,7 +134,10 @@ impl Level {
             } else {
                 let o = self.o(id);
                 let c = o.uw(0x1a) as i32;
-                // (type 1: sound 0x1f when c % ((frames - 1) * speed) == 0)
+                let n = (frames - 1) * speed;
+                if t == 1 && n != 0 && c % n == 0 {
+                    crate::sound::play_at(0x1f, o.w(0x10), o.w(0xe));
+                }
                 if frames > 1 {
                     let k = ((c / speed) % (frames * 2 - 2) - frames + 1).abs();
                     o.set(0x18, base + frames - 1 - k);
@@ -158,7 +161,7 @@ impl Level {
                     o.set(0x14, 2);
                     o.set(0x12, o.w(0x10));
                     crate::actors::unbounded(o);
-                    // sound 0x19
+                    crate::sound::play_at(0x19, o.w(0x10), o.w(0xe));
                     if t == 0 {
                         self.chain_bits(env, y, x);
                     }
@@ -252,7 +255,8 @@ impl Level {
                 clear_joined(env.world, 60300, y, x);
                 let o = self.o(id);
                 o.set(0x16, 0);
-                crate::actors::unbounded(o); // sound 0x19 at x + 0x34
+                crate::actors::unbounded(o);
+                crate::sound::play_at(0x19, o.w(0x10), x + 0x34);
             }
         } else if t < 0 {
             // (FUN_1070_00b6 gets its arguments mixed up here: the last top is x + 0x6e and
@@ -284,7 +288,8 @@ impl Level {
                 m.set(0x1c, 0x5a);
                 m.set(0x1e, 0x100);
                 m.set(0x42, 0x2148);
-                // sounds 1 and 0x17 at x + 0x34
+                crate::sound::play_at(1, y, x + 0x34);
+                crate::sound::play_at(0x17, y, x + 0x34);
             }
         }
     }

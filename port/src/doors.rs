@@ -97,6 +97,9 @@ impl Level {
         };
         let base = (TYPES[d.kind].0 * 3) / 4;
         let a = ((frame as i64 * 0x60) % 0x1680) as i32;
+        if a == 0xb40 {
+            crate::sound::play_at(0x81, y + 0x20, x + 0x10);
+        }
         d.progress = (base + (crate::trig::sin(a) * 6) / 0x4000).max(base - 2);
     }
 
