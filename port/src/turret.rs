@@ -23,6 +23,7 @@ impl Level {
         m.set(0x1e, r + 600);
         m.set(0x42, 0x2148);
         ps.p.colour = 0;
+        crate::sound::play_at(0x26, y, x);
         ps.p.group = 0;
         let n = env.rng.random(4) + 3;
         plates(ps, env.rng, 0xc0, n, y, x);
@@ -76,9 +77,13 @@ impl Level {
                 }
                 let t = o.w(0x2a) + 1;
                 o.set(0x2a, t);
+                if t == -0x18 {
+                    crate::sound::play_at_pitch(0x84, 0xc0, o.w(0x10), o.w(0xe));
+                }
                 if t >= 0 {
                     if t - 10 >= 0 && t < 0x27 && (t - 10) % 7 == 0 {
                         self.o(id).set(0x32, 8);
+                        crate::sound::play_at(0x9b, self.o(id).w(0x10), self.o(id).w(0xe));
                         let a = (0x10e0 + angle) % 0x1680;
                         if a < 0x5f0 {
                             angle = 0xb90;
@@ -136,6 +141,7 @@ impl Level {
                     self.particles.hit_mask = 0x848;
                     self.o(id).set(0x10, y - 3);
                     env.fx.shakes.push((0xc, 4));
+                    crate::sound::play_at(1, y - 3, x);
                 }
                 self.particles.p.aim_level = 0x100;
                 self.particles.p.aim_level2 = 0x100;
@@ -219,6 +225,8 @@ impl Level {
                     let n = env.rng.random(4) + 2;
                     plates(ps, env.rng, 0x80, n, y, x);
                     env.fx.shakes.push((0x1e, 0xc));
+                    let o = self.o(id);
+                    crate::sound::play_at(0x26, o.w(0x10), o.w(0xe));
                 } else {
                     env.fx.shakes.push((0xc, 6));
                 }
@@ -273,7 +281,8 @@ impl Level {
                 m.set(0x42, 0x2148);
                 ps.p.colour = 0;
                 env.fx.shakes.push((0x18, 8));
-                env.rng.random(0x3c); // the sound's pitch
+                let p = env.rng.random(0x3c);
+                crate::sound::play_at_pitch(0x4b, 0x100 - p, y, x);
                 if env.rng.random(3) == 0 {
                     let d = env.rng.random(0x1e) + 0x32;
                     let ps = &mut self.particles;
