@@ -1920,7 +1920,8 @@ impl Level {
                     return;
                 }
                 if m.w(0x3e) == -1 && f.rng.random(8) == 0 {
-                    f.rng.random(0x40);
+                    let p = f.rng.random(0x40);
+                    crate::sound::play_at_pitch(0x7c, 0x100 - p, y, x);
                 }
                 self.sparks(0x1918, y, x);
             }
@@ -2639,6 +2640,10 @@ impl Level {
 
     /// Effect 14, FUN_1040_09d4(y, x): a rocket explodes.
     fn rocket_blast(&mut self, y: i32, x: i32, f: &mut Frame) {
+        let m = &self.particles.list[self.particles.current].m;
+        if m.w(0x3e) != -10 {
+            crate::sound::play_at(0x49, m.w(0xa), m.w(8));
+        }
         f.fx.shakes.push((0x12, 5));
         if DETAIL > 3 {
             let ps = &mut self.particles;
@@ -2717,7 +2722,8 @@ impl Level {
             return;
         }
         if m.w(0x3e) == -1 && f.rng.random(0xc) == 0 {
-            f.rng.random(0x40); // the ricochet sound's pitch
+            let p = f.rng.random(0x40); // a ricochet
+            crate::sound::play_at_pitch(0x7c, 0x100 - p, y, x);
         }
         self.sparks(0x190c, y, x);
     }

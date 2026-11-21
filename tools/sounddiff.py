@@ -61,11 +61,11 @@ def main():
     for o in orig:
         hit = None
         for d in (0, 1, -1, 2):
-            for i in by_id[o[1]]:
-                if not used[i] and port[i][0] == o[0] + d:
-                    hit = i
-                    break
-            if hit is not None:
+            cands = [i for i in by_id[o[1]] if not used[i] and port[i][0] == o[0] + d]
+            # Several plays of one id in a frame: prefer the one with the same values.
+            same = [i for i in cands if (o[2] is None or port[i][2] == o[2]) and (o[3] is None or port[i][3] == o[3])]
+            if same or cands:
+                hit = (same or cands)[0]
                 break
         if hit is None:
             missing.append(o)
