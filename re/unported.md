@@ -28,24 +28,33 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 | 12 | ~~OBJECTS 0x2716~~ | LevelInit | FORPLANE | DONE: draw only, the black quad background proc 5 fills (FUN_10d0_01e4; `render::fill_polygon`, `Level::quad`) |
 | — | OBJECTS 0x272e (decor layer, VMT 0xaf8, draw procs 1088:a25d/a371/...) | LevelInit | many | drawn by main.rs; no update method: warning silenced |
 
-Also from AGENTS.md (not counted per map yet): riding the smallbot (FUN_1070_a18e), levers needing a key,
-pick-up effects 3/74, ~~particle spawn effects 30064/30065/30070~~ (sounds, done), ~~callback 1050:19f8~~ (the long fire FUN_1040_63c9: done), platform shake/dust (flags 8),
-frozen/burnt deaths, barrels >= 0xb (in), ~~the hero on the big alien's shield~~ (FUN_1070_00b6, untested), wall chunks 60308/60304 (45db),
-bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, b9d3).
+The extra items from AGENTS.md are all in now (2026-11-21, branch claude/objects-rest-c3eb40): see "Left" below
+for what is ported but not checked against an oracle.
 
-## Left (2026-11-21), in priority order
+## Left (2026-11-21, after the objects-rest pass)
 
-1. ~~OBJECTS 0x146e~~ the tank: DONE (`tank.rs`, TANK1, TANK2).
-2. ~~OBJECTS 0x14e6~~ the spiked ball: DONE (`spikeball.rs`, SPIKE1).
-3. ~~OBJECTS 0x1414~~ the meat hooks: DONE (`meathook.rs`, MEATHOOK1).
-4. ~~OBJECTS 0x2715~~ (GRANNY): the collapse: DONE (`collapse.rs`, COLLAPSE1); the rotated building's draw is left.
-5. ~~0x2716~~ (FORPLANE's quad): DONE.
-6. From AGENTS.md, not seen on the episode maps' load: riding the smallbot (FUN_1070_a18e), levers needing a
-   key, pick-up effects 3/74, particle spawn effects 30064/30065/30070, ~~callback 1050:19f8~~ (the long fire FUN_1040_63c9: done), ~~platform shake/dust
-   (flags 8)~~ (ported, untested: no demo has one), ~~frozen/burnt deaths~~ (DONE: `deaths.rs`, FREEZE1/BURN1; aliens and big aliens wired, untested), barrels >= 0xb (in), the
-   ~~hero on the big alien's shield~~ (done, untested), ~~wall chunks 60308/60304 (45db), bonus 0xd10~~ (ported, untested), path-platform modes
-   0x4000/0x680/0x8000 and platform kinds 2/3, the press (icon 61001) and the carrier's mid-air blast are
-   ported but not exercised by a scenario.
+Every OBJECTS type the three episodes' maps create is ported. Done this pass, each with an exact scenario:
+the tank 0x146e (TANK1, TANK2), the spiked ball 0x14e6 (SPIKE1), the meat hooks 0x1414 (MEATHOOK1), GRANNY's
+collapse 0x2715 (COLLAPSE1), FORPLANE's quad 0x2716 (draw only), the burnt/frozen deaths and the frozen
+statue (BURN1, FREEZE1). Side fixes: a group-0 ScreenShake acts before the actors; gHeroDX/DY set by objects
+carry into the next HeroUpdate (`Hero::carry`); effects 9, 47, 59; particle spawn sounds (30000 + n).
+
+Ported, never exercised by an oracle (write scenarios to check them):
+1. The tank's claw grabbing the hero (hero state -3, `Hero::HELD`) and the hero standing on the tank.
+2. The spiked ball pushed by shakes (amplitude > 7).
+3. Platform shake (flags 8), dust (0x10) and end shake (4) in FUN_1078_0aef (no demo map has one).
+4. Wall chunks of tile functions 60308/60304 and the wall's bonus 0xd10 (FUN_1040_45db).
+5. Shot levers (FUN_1088_14a3): only solid lever tiles stop bullets (GRANNY's posts don't).
+6. The hero on a big alien's shield; burnt/frozen aliens and big aliens (the granny's are tested).
+7. The long fire callback 1050:19f8 (its floor test; it ages only when the game runs late).
+8. Earlier: path-platform modes 0x4000/0x680/0x8000, platform kinds 2/3, the press (icon 61001), the
+   carrier's mid-air blast.
+
+Still not ported (warnings): GRANNY's tilting building's draw (FUN_10f0_545b on extra map planes 4/5),
+particle splashes (FUN_1050_2bcf), slippery slopes (HeroUpdate row flag 2), FUN_1088_55bd (tile functions
+8000..8099), the vehicle's destruction (FUN_1088_4a34), bonus tiles uncovered by particles (FUN_1040_6b03 from
+FUN_1050_*), FUN_1088_1364 with a negative tile from particles, platform objects with a lever, path platforms
+driven by the hero / bobbing / slowing, FUN_1088_11a3 (a big alien's taunt), the big alien's sideways shake.
 
 ## Sounds the new objects play (for the sound session)
 

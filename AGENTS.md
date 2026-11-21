@@ -328,6 +328,9 @@ Done 2026-11-20 (second pass): weapons 6 and 9 (WEAPON6/WEAPON9), the next level
 hit kinds 2/3 in `Hero::hit` (kind 2 tested by WEIGHT1; their callers FUN_1068_1f3c, FUN_1068_215e (kind 2), FUN_1070_9a66,
 FUN_1070_b9d3 (kind 3, b9d3 also kind 0) are objects not ported yet; port one with a scenario to test them).
 
+Ported on 2026-11-21 (branch claude/objects-rest-c3eb40): the tank 0x146e, the spiked ball 0x14e6, the meat
+hooks 0x1414, GRANNY's collapse 0x2715, FORPLANE's quad 0x2716, burnt/frozen deaths and the frozen statue,
+platform shake/dust, wall chunks, shot levers (scenarios TANK1/2, SPIKE1, MEATHOOK1, COLLAPSE1, BURN1, FREEZE1).
 Still unported (warnings in the port run): see `re/unported.md` (census of the three episodes' maps and the
 priority list: the tank 0x146e of CITY_I00/F_LAST, the spiked ball 0x14e6, 0x1414, GRANNY's 0x2715). Ported on
 2026-11-21 (branch claude/gameplay-objects-9a00ca): granny 0x1482, carrier 0x14be, gun turret 0x13ec, path
