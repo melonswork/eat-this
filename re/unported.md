@@ -22,10 +22,10 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 | 6 | OBJECTS 0x146e (VMT 0xdf8 shared with 0x1478, FUN_1068_0d84) | EnemyFactory | CITY_I00, F_LAST | enemy (4eb2) |
 | 7 | OBJECTS 0x1414 (VMT 0xd04) | EnemyFactory | BUTCHERY | calls FUN_1070_4b4e per 32 px |
 | 8 | OBJECTS 0x14a0 (VMT 0xbd8, update FUN_1068_1f3c = hero hit kind 2) | EnemyFactory | GRANNY | |
-| 9 | OBJECTS 0x2715 | LevelInit | GRANNY | |
-| 10 | OBJECTS 0x14b4 (VMT 0xd44) | EnemyFactory | CITY_I04 | |
+| 9 | OBJECTS 0x2715 | LevelInit | GRANNY | the background building collapse FUN_1088_a481 (lever 4ed4 starts it; draws Randoms for debris in particle group 2, sound loop 0x53): simulation, not ported |
+| 10 | ~~OBJECTS 0x14b4~~ the pumping door (VMT 0xd44, FUN_1070_a0bd -> FUN_10a8_11e9) | EnemyFactory | CITY_I04 | DONE (`Level::door_pump`, PUMPDOOR1). Weak check: no Random involved; the hero's path through it matches |
 | 11 | OBJECTS 0x14e6 (VMT 0xda0) | EnemyFactory | FOREST05 | |
-| 12 | OBJECTS 0x2716 | LevelInit | FORPLANE | |
+| 12 | OBJECTS 0x2716 | LevelInit | FORPLANE | draw only: 1170:534e/5350 for the background proc FUN_1090_178e (renderer's) |
 | — | OBJECTS 0x272e (decor layer, VMT 0xaf8, draw procs 1088:a25d/a371/...) | LevelInit | many | drawn by main.rs; no update method: warning silenced |
 
 Also from AGENTS.md (not counted per map yet): riding the smallbot (FUN_1070_a18e), levers needing a key,
@@ -49,6 +49,7 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
   0xf6 + Random(0x14) (drawn).
 - Weights (FUN_1068_215e): 0x19 on the drop; landing 0x18 (weight) / 0x1c (press); the press 0x1f each cycle
   ((0x1a % ((frames-1)*speed)) == 0, type 1). Effect 50 (planks, FUN_1040_50cf): 0x26 and 0x1c at half volume.
+- Pumping door (FUN_10a8_11e9): 0x81 at (y + 0x20, x + 0x10) when (frame*0x60) % 0x1680 == 0xb40.
 - Splashes (FUN_1070_0105 / HeroUpdate): 0x6f at (water line, x), pitch 0xd0 + Random(0x50) (drawn in
   `Level::splash` / `Hero::update`), volume 1ab8 = 0xaa (alien), 0x100 (big alien), 0x180 (215e), the hero
   min(fall*2 + 0x80, 0x100).

@@ -226,6 +226,16 @@ impl Level {
             crate::carrier::KIND => self.carrier(id, env),
             crate::wallgun::KIND => self.wallgun(id, env),
             crate::weight::KIND => self.weight(id, env),
+            0x14b4 => {
+                // FUN_1070_a0bd: the door pumps until its lever is on, then this goes.
+                let o = self.o(id);
+                let (lever, y, x) = (o.w(0x14), o.w(0x10), o.w(0xe));
+                if Level::lever_state(env.world, lever as u16) < 1 {
+                    self.door_pump(env.world, y, x, env.frame, env.h.x);
+                } else {
+                    self.remove_current(id);
+                }
+            }
             0x143c => self.crate_box(id, env),
             0x13d8 => self.mine(id, env),
             0x13e2 => self.gunship(id, env),

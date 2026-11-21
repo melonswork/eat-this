@@ -1,0 +1,13 @@
+# The pumping door (OBJECTS 0x14b4, FUN_1070_a0bd -> FUN_10a8_11e9): CITY_I04's door at (435,802),
+# no lever, so it pumps for ever, about 3/4 shut; the start moved left of it. The hero walks into
+# it and shoots it.
+level MAPS/CITY_I04.MAP
+start 380 863
+mouse 220 110
+120
+40 right
+60
+5 lmb
+30
+5 lmb
+200

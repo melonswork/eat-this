@@ -82,6 +82,24 @@ impl Level {
         self.doors.iter().find(|d| d.cell == idx).map_or(-1, |d| d.open)
     }
 
+    /// FUN_10a8_11e9(y, x): a door that pumps (OBJECTS 0x14b4 until its lever is on): started
+    /// (closing, then opening) the first time, then held around 3/4 shut, 6 px up and down
+    /// (sound 0x81 at the top of each stroke).
+    pub fn door_pump(&mut self, w: &mut World, y: i32, x: i32, frame: u32, hero_x: i32) {
+        let idx = cell_index(w, y, x);
+        if !self.doors.iter().any(|d| d.cell == idx) {
+            self.door_set(w, false, 0, y, x, true, hero_x);
+            self.door_set(w, false, 1, y, x, true, hero_x);
+        }
+        let Some(d) = self.doors.iter_mut().find(|d| d.cell == idx) else {
+            eprintln!("warning: no door at ({x},{y}) for FUN_10a8_11e9");
+            return;
+        };
+        let base = (TYPES[d.kind].0 * 3) / 4;
+        let a = ((frame as i64 * 0x60) % 0x1680) as i32;
+        d.progress = (base + (crate::trig::sin(a) * 6) / 0x4000).max(base - 2);
+    }
+
     /// FUN_10a8_0975(auto, open, y, x): start a door opening (`open` 1) or closing. `first`
     /// is 1170:19d6 (LevelFirstFrame: no effects, already at the end). Sets 1170:465e = 3.
     pub fn door_set(&mut self, w: &mut World, auto: bool, open: i32, y: i32, x: i32, first: bool, hero_x: i32) {
