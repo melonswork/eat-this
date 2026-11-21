@@ -14,6 +14,18 @@ static LEVEL_GROUPS: RwLock<Vec<String>> = RwLock::new(Vec::new());
 /// index the mix tables, like PPGLIGHT's).
 static LEVEL_RAW: RwLock<Vec<bool>> = RwLock::new(Vec::new());
 
+/// The script's HeroClothes= (FUN_1088_45df): non-empty, the hero's groups (slots 0..3) are
+/// PPHEROA, PPHEROA2, PPHEROA3, PPDOORA instead of PPHERO.., PPDOOR (1170:170c = "a").
+static CLOTHES: RwLock<bool> = RwLock::new(false);
+
+/// HeroClothes= for the level being loaded.
+pub fn set_clothes(on: bool) {
+    *CLOTHES.write().unwrap() = on;
+    if let Some(m) = GROUPS.get() {
+        m.lock().unwrap().retain(|&slot, _| slot > 3);
+    }
+}
+
 /// A new level's LoadSpriteGroup= lines (names, `,N` flags): the level slots load anew.
 pub fn set_level(groups: Vec<String>, raw: Vec<bool>) {
     *LEVEL_GROUPS.write().unwrap() = groups;
@@ -25,7 +37,7 @@ pub fn set_level(groups: Vec<String>, raw: Vec<bool>) {
 
 /// Slot -> file, as FUN_1088_c98f loads them (seen with the tracer's --dump-groups).
 const SLOTS: &[(u16, &str)] = &[
-    (0x00, "PPHERO"), (0x01, "PPHERO2"), (0x02, "PPHERO3"),
+    (0x00, "PPHERO"), (0x01, "PPHERO2"), (0x02, "PPHERO3"), (0x03, "PPDOOR"),
     (0x06, "PI2ANIM"), (0x09, "FIREDRO2"), (0x18, "PPWEAPON"), (0x19, "PPWEAP02"),
     (0x1a, "PPFLAMER"), (0x1f, "ETSCORE"), (0x20, "PPFONT3"), (0x21, "BONUSANI"),
     (0x22, "ETBONUS"), (0x23, "PPFONT3"), (0x24, "MENUSL"), (0x27, "ETCIFER3"), (0x29, "EPISPIC"), (0x2a, "EXITPIC"), (0x28, "STATSOBJ"), (0x47, "BOWL"), (0x48, "CRATE"), (0x4c, "MINE2"),
@@ -72,11 +84,17 @@ fn slot_name(slot: u16, draw: bool) -> Option<String> {
         .flatten()
         .filter(|n| !n.is_empty())
         .map(|n| n.trim_end_matches(".spr").trim_end_matches(".SPR").to_ascii_uppercase());
+    let clothes = *CLOTHES.read().unwrap();
     let fixed = SLOTS
         .iter()
         .chain(if draw { DRAW_SLOTS } else { &[] })
         .find(|(s, _)| *s == slot)
-        .map(|&(_, n)| n.to_string());
+        .map(|&(_, n)| match (clothes && slot <= 3, slot) {
+            (true, 1) => "PPHEROA2".to_string(),
+            (true, 2) => "PPHEROA3".to_string(),
+            (true, _) => format!("{n}A"),
+            _ => n.to_string(),
+        });
     fixed.or(level)
 }
 

@@ -1056,7 +1056,7 @@ impl Graphics {
         }
         // The sector's background decor (list +0x1e, FUN_1068_09bf from the background proc).
         let sector = g.level.sector.unwrap_or(0);
-        if self.background.proc_ == 16 {
+        if matches!(self.background.proc_, 1 | 16) {
             self.start_extras(fb, g, sector, (cam_x, cam_y), frame);
         }
         self.decor(fb, g, sector, false, (cam_x, cam_y), frame);
@@ -1130,7 +1130,7 @@ impl Graphics {
         self.hud(fb, g, frame);
     }
 
-    /// FUN_1090_0ace's middle part: the bridge (FUN_1090_0292, sectors with +0x1c >= 0: OBJECTS
+    /// FUN_1090_0ace's (and 0a8c's, proc 1) middle part: the bridge (FUN_1090_0292, sectors with +0x1c >= 0: OBJECTS
     /// 0x2719) and the rain (FUN_1090_0418, while the storm 4eda runs).
     fn start_extras(&self, fb: &mut [u8], g: &Game, sector: usize, cam: (i32, i32), frame: u32) {
         let by = g.world.sectors.get(sector).map_or(-1, |s| s.water[4]);
@@ -1796,6 +1796,7 @@ fn load_world(data: &Path, map_path: &Path) -> Result<World, Box<dyn Error>> {
         .map(|v| v.split(',').nth(1).is_some_and(|f| f.trim().eq_ignore_ascii_case("N")))
         .collect();
     sprites::set_level(groups, raw);
+    sprites::set_clothes(script_lines(map_path).iter().any(|(k, v)| k.eq_ignore_ascii_case("HeroClothes") && !v.is_empty()));
     messages::set_level(map_path);
     Ok(World::load(map_path, &data.join("TILES"))?)
 }

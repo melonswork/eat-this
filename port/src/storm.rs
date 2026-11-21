@@ -20,8 +20,13 @@ pub struct Storm {
 pub fn rain_drops() -> &'static [(i32, i32)] {
     static DROPS: std::sync::OnceLock<Vec<(i32, i32)>> = std::sync::OnceLock::new();
     DROPS.get_or_init(|| {
-        let mut r = PascalRandom::new(1000);
-        (0..0x5a).map(|_| (r.random(0x148), r.random(0xd0))).collect()
+        // Pascal's Random (as rng.rs) from 1000, without touching the game's generator's dump.
+        let mut seed: u32 = 1000;
+        let mut random = |n: u64| {
+            seed = seed.wrapping_mul(0x0808_8405).wrapping_add(1);
+            ((seed as u64 * n) >> 32) as i32
+        };
+        (0..0x5a).map(|_| (random(0x148), random(0xd0))).collect()
     })
 }
 
