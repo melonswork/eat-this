@@ -1727,9 +1727,7 @@ impl Hero {
         }
         self.health -= damage;
         if self.health < 1 {
-            let p = rng.random(0x20); // FUN_1088_3c05: the cry
-            sound::discard(0x1a);
-            sound::play_at_pitch(0x1a, p + 0xf0, self.y, self.x);
+            self.cry(rng);
             self.death = Some((self.y, self.x)); // main: the gibs, smoke and a splat (FUN_1068_186c, 637a, 0218)
             self.hurt = 0x7fff;
             self.anim = 0x8c;
@@ -1739,7 +1737,7 @@ impl Hero {
         self.hurt = 0x52;
         match kind {
             1 => {
-                rng.random(0x20);
+                self.cry(rng);
                 self.throw_back();
                 self.shakes.push((0x10, 8));
                 if damage > 0x4f && rng.random(3) != 0 {
@@ -1748,7 +1746,7 @@ impl Hero {
                 }
             }
             4 => {
-                rng.random(0x20);
+                self.cry(rng);
                 self.hurt = 1;
                 if self.state != KNOCKED_BACK {
                     self.throw_back();
@@ -1757,7 +1755,7 @@ impl Hero {
             }
             // Kinds 2 and 3 (FUN_1068_1f3c/215e, FUN_1070_9a66/b9d3, none ported yet: untested).
             2 => {
-                rng.random(0x20);
+                self.cry(rng);
                 self.shakes.push((0x10, 8));
                 if self.state < 1 {
                     self.state = KNOCKED_DOWN;
@@ -1768,7 +1766,7 @@ impl Hero {
                 }
             }
             3 => {
-                rng.random(0x20);
+                self.cry(rng);
                 self.throw_back();
                 self.side_shakes.push((0x32, 0x12));
             }
@@ -1776,6 +1774,13 @@ impl Hero {
         }
         self.hurt_blink = self.hurt;
         1
+    }
+
+    /// FUN_1088_3c05: the hero's cry (any earlier one cut short).
+    fn cry(&self, rng: &mut PascalRandom) {
+        let p = rng.random(0x20);
+        sound::discard(0x1a);
+        sound::play_at_pitch(0x1a, p + 0xf0, self.y, self.x);
     }
 
     /// FUN_1088_3bee: thrown back unless the head is against a ceiling.
