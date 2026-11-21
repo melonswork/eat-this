@@ -24,6 +24,7 @@ mod frontend;
 mod gunship;
 mod hero;
 mod level;
+mod messages;
 mod objects;
 mod particles;
 mod palette;
@@ -172,6 +173,10 @@ struct Game {
     live_mouse: Option<(i32, i32)>,
     /// Live play: a weapon key went down (ReadGameInput: 0..9 = keys 1..9 0, 10 PgUp, 11 PgDn).
     weapon_key: Option<usize>,
+    /// The level's totals (4eb2 kills, 4eae hidden areas, 4eaa bios spheres) for the HUD.
+    totals: level::Tally,
+    /// The message box (1170:4f10..5114), only drawn.
+    messages: messages::MessageBox,
 }
 
 #[derive(Default)]
@@ -207,8 +212,11 @@ impl Game {
             let m = d.input(0).1;
             hero.set_mouse((m.0 as i32, m.1 as i32));
         }
+        // SpawnFromIconTiles' totals (plane 2), then the constructors that count themselves.
+        let mut totals = frontend::level_totals(&world);
         // LevelInit: icons and OBJECTS records become objects (their constructors draw Random).
         level.spawn_all(&mut world, hero.x, &mut rng);
+        totals.kills += level.objects.iter().flatten().filter(|o| frontend::COUNTED_KINDS.contains(&o.kind)).count() as i32;
         // LevelFirstFrame (1088:b4db): enter the start sector (its scripts run), face its far side.
         let mut fx = Effects::default();
         let sector = world.sector_at(hero.y, hero.x);
@@ -248,6 +256,8 @@ impl Game {
             sound: Vec::new(),
             live_mouse: None,
             weapon_key: None,
+            totals,
+            messages: messages::MessageBox::default(),
         };
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
         let hero_at = (g.hero.x, g.hero.y);
@@ -265,6 +275,7 @@ impl Game {
             let (y, x) = (g.hero.y - 0x10, g.hero.x);
             crate::effects::explode_tile(&mut g.level, &mut g.world, 0x60, 0x104, y, x, &mut g.rng, &mut fx);
         }
+        g.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
         for &(a, b) in &fx.shakes {
             g.camera.shake(a, b);
         }
@@ -306,15 +317,26 @@ impl Game {
             self.hero.weapon_pickup(f3);
             self.level.particles.weapon_pickup(f3 as i32, y, x);
         } else if effect == 6 {
+            // GOT THE BATTLE DRONE / BATTLE DRONE UPGRADED.
+            self.hero.messages.push((if self.level.particles.drone.active < 1 { -34 } else { -35 }, false));
             self.level.particles.drone.pickup(y, x);
         } else if effect == 1 {
             // FUN_1040_014a: health +10 (1170:4e6c, a heart), a counter 4ea8 += 1, sparks.
             self.hero.health += 10;
             level::tally(|t| t.bios += 1);
             self.level.particles.bonus_pickup(y, x);
+        } else if effect == 3 {
+            // FUN_1040_0264: full health, a weapon pick-up's sparks around sprite 0x2105.
+            self.hero.health = 0x2c6;
+            self.level.particles.weapon_pickup(5, y, x);
+        } else if effect == 74 {
+            // FUN_1040_01d9: health +20, sparks of sprite 0x212d.
+            self.hero.health += 0x14;
+            self.level.particles.sparks_pickup(0x212d, y, x);
         } else if effect == 70 {
             // FUN_1040_043c: a key (1170:5104 + f3), sparks like a weapon's.
             self.hero.keys[(f3 as usize) & 0xf] = true;
+            self.hero.messages.push((-0x15 - (f3 as i32 - 0x14), false));
             self.level.particles.weapon_pickup(f3 as i32, y, x);
         } else if effect != 0 && effect < 30000 {
             eprintln!("warning: pick-up effect {effect} not ported");
@@ -332,6 +354,8 @@ impl Game {
     /// One game frame. `keys` is ignored while a demo plays.
     fn step(&mut self, keys: [i8; 9]) {
         sound::begin_frame(self.frame + 1);
+        // FUN_1088_4b64 clears 4e50 after drawing the pointer.
+        self.level.particles.pointer = 0;
         self.rng.frame = self.frame + 1;
         self.rng.log = std::env::var("ET_RNG").ok().and_then(|v| v.parse::<u32>().ok()) == Some(self.frame);
         // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
@@ -352,6 +376,7 @@ impl Game {
             let mut fx = Effects::default();
             self.level.release_tile_events(&mut self.world, &mut fx, self.hero.x);
             self.flush_spawns(&mut fx);
+            self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
             for &(a, b) in &fx.shakes {
                 self.camera.shake(a, b);
             }
@@ -539,8 +564,11 @@ impl Game {
         let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
         self.camera
             .update(&self.world, (self.hero.x, self.hero.y), true, grinder);
-        // The end of FUN_1088_0c82: the listener (FUN_10e0_0002) is the camera's centre.
+        // The end of FUN_1088_0c82: the listener (FUN_10e0_0002) is the camera's centre, and
+        // the pointer's world position (4e42/4e44) for the next frame's hit tests.
         sound::listener(self.camera.x + 0xa0, self.camera.y + 100);
+        let m = self.hero.gun_mouse();
+        self.level.particles.mouse = (m.0 + self.camera.x, m.1 + self.camera.y);
         // FUN_10a8_1311 (doors opening by themselves), then after the level's background
         // procedure FUN_10a8_0dab (the moving doors).
         let hero_at = (self.hero.x, self.hero.y);
@@ -567,9 +595,20 @@ impl Game {
             let (effect, f3) = (self.world.cell_function(tile, 4), self.world.cell_function(tile, 3));
             self.pick_effect(effect, f3, y, x);
         }
+        // Script command 0x0b: HeroDamage(id), a message.
+        self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
         for &(a, b) in &fx.shakes {
             self.camera.shake(a, b);
         }
+        // FUN_1088_4b64: the message box, FUN_1088_2501 (the status bar). Only the HUD reads them.
+        for (id, unless_last) in std::mem::take(&mut self.hero.messages) {
+            if std::env::var_os("ET_MSG").is_some() {
+                eprintln!("message {id} at frame {}", self.frame + 1);
+            }
+            self.messages.show_id(id, unless_last);
+        }
+        self.messages.frame();
+        self.hero.status_bar();
         // The end of GameFrameInGame: 1170:4e62 counts down to the teleport.
         if self.hero.exit_timer > 0 {
             self.hero.exit_timer -= 1;
@@ -695,6 +734,7 @@ impl Game {
             self.hero_death_effects();
         }
         self.level.storm_frame(&mut self.rng);
+        self.level.rain_splashes(&self.world, (self.camera.x, self.camera.y));
         self.level.water_frame(&self.world);
         // START's foreground (FUN_1090_0ace): the ship the hero was thrown from is a platform
         // (FUN_1070_00b6 on each of sprite 0x3700's plain boxes).
@@ -750,6 +790,8 @@ impl Game {
             let (y, x) = (self.hero.y - 0x10, self.hero.x);
             crate::effects::explode_tile(&mut self.level, &mut self.world, 0x60, 0x104, y, x, &mut self.rng, &mut fx);
         }
+        // Script command 0x0b: HeroDamage(id), a message.
+        self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
         for &(a, b) in &fx.shakes {
             self.camera.shake(a, b);
         }
@@ -827,6 +869,14 @@ struct Graphics {
     decor: Vec<Decor>,
     /// Draw the pointer and the status bar (H toggles it in the window).
     show_hud: bool,
+    /// GameStats (1a92): 0 none, 1 the status bar, 2 also the counters.
+    hud_level: i32,
+    /// The palette after script command 0x16 starts the storm (FUN_1088_293a: each colour 3/4
+    /// of the way to its grey, (r * 0x12b + g * 0x24b + b * 0x72) / 1000).
+    storm_palette: Palette,
+    /// 1170:512a: the level colour nearest to RGB (0x10, 0x14, 0x19) (FUN_10f0_6039): the rain
+    /// is PalMix[512a][pixel].
+    rain_colour: u8,
 }
 
 impl Graphics {
@@ -925,12 +975,22 @@ impl Graphics {
             .collect();
         // The lists keep the farthest last and are drawn from the end.
         decor.sort_by_key(|d| d.depth);
+        let colors6 = level.colors;
+        let storm_palette = LevelPalette {
+            colors: colors6.map(|c| {
+                let lum = (c[0] as i32 * 0x12b + c[2] as i32 * 0x72 + c[1] as i32 * 0x24b) / 1000;
+                c.map(|v| ((v as i32 * 0xc0 + lum * 0x40) / 0x100) as u8)
+            }),
+            foreground: level.foreground,
+        }
+        .rgb();
         Ok(Graphics {
             background: bg::Background {
                 proc_: script.map_or(0, |s| s.background_proc),
                 picture,
                 groups,
                 mix,
+                sky_flash: tables.light.as_ref().map(|t| t[0x80 * 256..0x81 * 256].to_vec()),
             },
             camera: None,
             bg_only: false,
@@ -940,13 +1000,29 @@ impl Graphics {
             extra,
             decor,
             show_hud: true,
+            hud_level: 2,
+            storm_palette,
+            rain_colour: {
+                // FUN_10f0_6039(b, g, r): the smallest (dr^2 + dg^2)^2 + db^4, the first one.
+                let d = |c: [u8; 3]| -> i64 {
+                    let (r, g, b) = (0x10 - c[0] as i64, 0x14 - c[1] as i64, 0x19 - c[2] as i64);
+                    (r * r + g * g).pow(2) + b.pow(4)
+                };
+                (0..256).min_by_key(|&i| (d(colors6[i]), i)).unwrap_or(0) as u8
+            },
         })
     }
 
+    /// The palette `g` shows: the level's, darkened once START's storm runs (1170:4eda > 0).
+    pub fn palette_of(&self, g: &Game) -> Palette {
+        if g.level.storm.level > 0 { self.storm_palette } else { self.palette }
+    }
+
     /// Indexed frame -> RGB24.
-    fn present(&self, fb: &[u8], rgb: &mut [u8]) {
+    fn present(&self, g: &Game, fb: &[u8], rgb: &mut [u8]) {
+        let pal = self.palette_of(g);
         for (px, &i) in rgb.chunks_exact_mut(3).zip(fb) {
-            px.copy_from_slice(&self.palette[i as usize]);
+            px.copy_from_slice(&pal[i as usize]);
         }
     }
 
@@ -955,9 +1031,19 @@ impl Graphics {
         let (cam_x, cam_y) = self.camera.unwrap_or((g.camera.x, g.camera.y));
         // The level frame counter as the original's draw sees it: frames completed before this one.
         let frame = g.frame.saturating_sub(1);
-        self.background.draw(fb, (cam_x, cam_y), frame);
+        let st = &g.level.storm;
+        self.background.draw(fb, (cam_x, cam_y), frame, st.sky_flash > 0 && st.kind == 1);
         if self.bg_only {
             return;
+        }
+        if self.background.proc_ == 4 {
+            // FUN_1090_1629 (detail 3, as in demos): extra map 9 at a quarter of the camera, then
+            // extra map 8 at half of it, both repeated across and down (FUN_1088_a401).
+            for (k, div) in [(1, 4), (0, 2)] {
+                if let Some(Some(pl)) = self.extra.get(k) {
+                    self.layer(fb, g, pl, 3, (cam_x / div, cam_y / div), frame);
+                }
+            }
         }
         if let Some(Some(pl)) = self.extra.first() {
             match self.background.proc_ {
@@ -970,6 +1056,9 @@ impl Graphics {
         }
         // The sector's background decor (list +0x1e, FUN_1068_09bf from the background proc).
         let sector = g.level.sector.unwrap_or(0);
+        if matches!(self.background.proc_, 1 | 16) {
+            self.start_extras(fb, g, sector, (cam_x, cam_y), frame);
+        }
         self.decor(fb, g, sector, false, (cam_x, cam_y), frame);
         // The map planes, then the platforms (their own planes, at their positions).
         let mut layers: Vec<(usize, i32, i32)> = vec![(0, 0, 0), (MAIN_PLANE, 0, 0)];
@@ -1026,7 +1115,83 @@ impl Graphics {
         // The level's foreground proc: the water, the sector's foreground decor (list +0x2a).
         draw::water(&mut p, &g.level, &g.world);
         self.decor(fb, g, sector, true, (cam_x, cam_y), frame);
+        if g.level.storm.level > 0 {
+            // FUN_1090_0567 (START's foreground): the front drops, and a lightning flash of kind
+            // 0 tints the whole screen (tint row 3) three frames in six.
+            self.rain(fb, g, 0x1e, frame);
+            let st = &g.level.storm;
+            if st.flash > 0 && st.kind == 0 && st.flash % 6 < 3 {
+                let row = &self.tables.tint[3 * 256..4 * 256];
+                for px in fb.iter_mut() {
+                    *px = row[*px as usize];
+                }
+            }
+        }
         self.hud(fb, g, frame);
+    }
+
+    /// FUN_1090_0ace's (and 0a8c's, proc 1) middle part: the bridge (FUN_1090_0292, sectors with +0x1c >= 0: OBJECTS
+    /// 0x2719) and the rain (FUN_1090_0418, while the storm 4eda runs).
+    fn start_extras(&self, fb: &mut [u8], g: &Game, sector: usize, cam: (i32, i32), frame: u32) {
+        let by = g.world.sectors.get(sector).map_or(-1, |s| s.water[4]);
+        if by >= 0 {
+            // A train of four cars (slot 0x35) crossing at half the camera's speed, its place
+            // (617e * 3) mod (map width + 0x75 * 0x10), then extra map 8 across (FUN_1088_a371).
+            let span = g.world.main().width * 16 + 0x750;
+            let pos = ((frame as i64 * 3) % span as i64) as i32 - 0x2be;
+            let mut x = pos - (cam.0 >> 1);
+            let y = by - (cam.1 >> 1);
+            let mut p = self.painter(fb, frame);
+            p.mode = 4;
+            for k in (0..=3).rev() {
+                p.sprite(0x3500, x, y);
+                if k > 0 {
+                    p.sprite(0x3501, x, y);
+                }
+                x += 0x75;
+            }
+            if let Some(Some(pl)) = self.extra.first() {
+                self.layer(fb, g, pl, 1, (cam.0 >> 1, 0x38 - y), frame);
+            }
+        }
+        self.rain(fb, g, 0, frame);
+    }
+
+    /// FUN_1090_0418 (`first` 0, behind the tiles) / FUN_1090_0567 (0x1e, in front): storm level
+    /// / 32 drops (4f0c), each 4 pixels going down-left through PalMix row 512a (FUN_1090_0390).
+    fn rain(&self, fb: &mut [u8], g: &Game, first: usize, frame: u32) {
+        let n = (g.level.storm.level / 0x20).max(0) as usize;
+        let Some(mix) = self.tables.mix.as_deref() else { return };
+        let row = self.rain_colour as usize * 256;
+        for &d in storm::rain_drops()[first..first + n].iter().rev() {
+            let (x, y) = storm::drop_at(d, frame);
+            for k in 0..4 {
+                let (px, py) = (x - k, y - 3 + k);
+                if (0..W).contains(&px) && (0..H).contains(&py) {
+                    let at = (py * W + px) as usize;
+                    fb[at] = mix[row + fb[at] as usize];
+                }
+            }
+        }
+    }
+
+    fn painter<'a>(&'a self, fb: &'a mut [u8], frame: u32) -> render::Painter<'a> {
+        render::Painter {
+            fb,
+            bank: &self.bank,
+            tables: &self.tables,
+            cam: (0, 0),
+            fg: self.bank.foreground(),
+            mode: 0,
+            colour: 0,
+            key: 0,
+            hflip: false,
+            vflip: false,
+            mix: render::Mix::Level,
+            frame,
+            flash: draw::FLASH,
+            clip: render::SCREEN,
+        }
     }
 
     /// The pointer and the status bar (FUN_1088_4b64), over everything.
@@ -1050,7 +1215,9 @@ impl Graphics {
             flash: draw::FLASH,
             clip: render::SCREEN,
         };
-        draw::hud(&mut p, &g.hero);
+        let got = level::TALLY.with(|t| t.get());
+        draw::hud(&mut p, &g.hero, g.level.particles.pointer, self.hud_level, got, g.totals);
+        draw::messages(&mut p, &g.messages);
     }
 
     /// FUN_1068_09bf over the sector's decor list: each layer is an extra map drawn with its
@@ -1442,7 +1609,7 @@ fn run_window(
             next += tick;
         }
         gfx.draw(&game, &mut fb);
-        gfx.present(&fb, &mut rgb);
+        gfx.present(&game, &fb, &mut rgb);
         tex.update(None, &rgb, W as usize * 3)?;
         canvas.copy(&tex, None, None)?;
         canvas.present();
@@ -1472,7 +1639,7 @@ fn screenshot(mut game: Game, gfx: &Graphics, frames: u32, path: &Path) -> std::
         return std::fs::write(path, &fb); // the raw indexed frame, for comparing with tools/dumpframe.py
     }
     let mut rgb = vec![0u8; (W * H * 3) as usize];
-    gfx.present(&fb, &mut rgb);
+    gfx.present(&game, &fb, &mut rgb);
     let mut out = format!("P6\n{W} {H}\n255\n").into_bytes();
     out.extend(&rgb);
     std::fs::write(path, out)
@@ -1629,6 +1796,8 @@ fn load_world(data: &Path, map_path: &Path) -> Result<World, Box<dyn Error>> {
         .map(|v| v.split(',').nth(1).is_some_and(|f| f.trim().eq_ignore_ascii_case("N")))
         .collect();
     sprites::set_level(groups, raw);
+    sprites::set_clothes(script_lines(map_path).iter().any(|(k, v)| k.eq_ignore_ascii_case("HeroClothes") && !v.is_empty()));
+    messages::set_level(map_path);
     Ok(World::load(map_path, &data.join("TILES"))?)
 }
 

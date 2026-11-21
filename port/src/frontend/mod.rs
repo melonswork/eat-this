@@ -117,6 +117,7 @@ impl FrontEnd {
             gfx.back.copy_from_slice(&p.pixels[..(W * H) as usize]);
         }
         let main = MainScript::load(data, settings.language);
+        crate::messages::LANGUAGE.store(settings.language, std::sync::atomic::Ordering::Relaxed);
         let mut texts = MenuTexts::load(data, settings.language);
         let menu_texts = texts.take(11);
         let mut fe = FrontEnd {
@@ -339,7 +340,7 @@ impl FrontEnd {
         self.in_game = false;
         if !self.back_is_snapshot {
             if let Some(r) = &self.level {
-                let lp: [[u8; 3]; 256] = r.gfx.palette.map(|c| c.map(|v| v >> 2));
+                let lp: [[u8; 3]; 256] = r.gfx.palette_of(&r.game).map(|c| c.map(|v| v >> 2));
                 let row = gfx::grey_row(&lp);
                 for (b, &p) in self.gfx.back.iter_mut().zip(&self.game_fb) {
                     *b = row[p as usize];
@@ -472,7 +473,9 @@ impl FrontEnd {
         sound::stop_all();
         let world = crate::load_world(&self.data, map)?;
         let mut gfx = Graphics::load(&self.data, &world, map)?;
-        gfx.show_hud = self.settings.game_stats > 0;
+        gfx.show_hud = true;
+        gfx.hud_level = self.settings.game_stats;
+        crate::messages::LANGUAGE.store(self.settings.language, std::sync::atomic::Ordering::Relaxed);
         // A user map with PlayRecord= plays its recording (LevelLoad -> DemoLoad).
         let pairs = script_pairs(&script_of(map));
         let demo = pairs
@@ -987,14 +990,20 @@ fn script_of(map: &Path) -> PathBuf {
 /// SpawnFromIconTiles' totals (FUN_1088_1797): plane-2 cells 0xd00 (bios spheres), function
 /// 61800 (hidden areas), 61900 (enemies). The constructors that also add to the enemy total
 /// (EnemyFactory during LevelInit) are counted from the objects the setup made.
-fn level_totals(world: &crate::world::World) -> Tally {
+pub fn level_totals(world: &crate::world::World) -> Tally {
     let mut t = Tally::default();
     if let Some(Some(p)) = world.planes.get(2) {
-        for &c in &p.cells {
+        let main = world.main();
+        for (i, &c) in p.cells.iter().enumerate() {
             if c == 0 {
                 continue;
             }
             let f = world.cell_function(c, 0);
+            // FUN_1088_0d5a: an alien icon (61400, 61300) over a wall hole (main-plane function
+            // 7050) makes no object yet but counts as an enemy.
+            if (f == 61400 || f == 61300) && main.cells.get(i).is_some_and(|&m| m > 0 && world.cell_function(m, 0) == 7050) {
+                t.kills += 1;
+            }
             if f < 61000 {
                 t.bios += (c == 0xd00) as i32;
             } else if f == 61800 {
@@ -1008,7 +1017,7 @@ fn level_totals(world: &crate::world::World) -> Tally {
 }
 
 /// The enemy kinds whose constructors count themselves (1170:4eb2) during LevelInit.
-const COUNTED_KINDS: [u16; 10] = [0x1428, 0x1432, 0x145a, 0x14d2, 0x13e2, 0x13ec, 0x13f6, 0x140a, 0x146e, 0x1482];
+pub const COUNTED_KINDS: [u16; 10] = [0x1428, 0x1432, 0x145a, 0x14d2, 0x13e2, 0x13ec, 0x13f6, 0x140a, 0x146e, 0x1482];
 
 // ---- the window ------------------------------------------------------------------------------
 
@@ -1394,7 +1403,7 @@ impl FrontEnd {
                 self.show(Id::Main);
             }
             if let Some(r) = self.level.as_mut() {
-                r.gfx.show_hud = self.settings.game_stats > 0;
+                r.gfx.hud_level = self.settings.game_stats;
             }
         } else {
             let sets: [&[Scancode]; 9] = [
@@ -1425,7 +1434,7 @@ impl FrontEnd {
         let pal = if self.in_game {
             let r = self.level.as_ref().unwrap();
             r.gfx.draw(&r.game, &mut fb);
-            r.gfx.palette.map(|c| c.map(|v| v >> 2))
+            r.gfx.palette_of(&r.game).map(|c| c.map(|v| v >> 2))
         } else {
             self.gfx.palette
         };

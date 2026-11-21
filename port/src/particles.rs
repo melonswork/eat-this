@@ -133,6 +133,14 @@ pub struct Particles {
     pub hit_index: i32,
     /// The hero's drone (FUN_1088_03a3).
     pub drone: crate::drone::Drone,
+    /// 1170:4e42 / 4e44: the pointer in the world (set at the end of the camera update).
+    pub mouse: (i32, i32),
+    /// 1170:4e50: what the pointer is over, set by enemy hit tests (mask & 0x59) whose box holds
+    /// `mouse`: 2 an enemy, 3 an alien to kick (`kick_pointer`); 0 none. Only the HUD reads it
+    /// (FUN_1088_4b64); main clears it every frame.
+    pub pointer: i32,
+    /// 1170:163e = 3 around the alien's corpse test (FUN_1070_60ca), else 2.
+    pub kick_pointer: bool,
 }
 
 impl Default for Particle {
@@ -390,11 +398,16 @@ impl Particles {
 
     /// The particles of FUN_1040_014a (a bonus picked up): sparks flying off.
     pub fn bonus_pickup(&mut self, y: i32, x: i32) {
+        self.sparks_pickup(0x2100, y, x);
+    }
+
+    /// FUN_1040_014a / 01d9's sparks, of sprite `s`.
+    pub fn sparks_pickup(&mut self, s: i32, y: i32, x: i32) {
         self.p.group = 0;
         for i in 0..2 {
-            self.spawn_seq(0x2100, 9, 4, y, x, 1);
+            self.spawn_seq(s, 9, 4, y, x, 1);
             self.throw(0x1c, 0x10, i * 0x200 + 0x4a0);
-            self.spawn_seq(0x2100, 7, 4, y, x, 1);
+            self.spawn_seq(s, 7, 4, y, x, 1);
             self.throw(0x1c, 8, i * 0xb40);
         }
         self.p.group = 1;
@@ -741,6 +754,10 @@ impl Particles {
         }
         if mask & 0x59 != 0 {
             self.drone.consider(bottom, right, top, left, self.p.aim_level2);
+            let (mx, my) = self.mouse;
+            if left <= mx && top <= my && mx <= right && my <= bottom {
+                self.pointer = if self.kick_pointer { 3 } else { 2 };
+            }
         }
         damage
     }
@@ -816,6 +833,24 @@ impl Particles {
                     let (dx, dy) = (cx - p.m.w(8), cy - p.m.w(0xa));
                     aim_at(p, level, dx, dy);
                 }
+            }
+        }
+        if mask & 0x59 != 0 {
+            // FUN_10f0_2240 with the pointer as a one-pixel box.
+            let (mx, my) = self.mouse;
+            let (mut px, mut py) = (mx - sx, my - sy);
+            if hflip != 0 {
+                px = -px;
+            }
+            if vflip != 0 {
+                py = -py;
+            }
+            let over = boxes.iter().take_while(|hb| hb.kind <= 0).any(|hb| {
+                let (x1, y1, x2, y2) = hb.rect;
+                hb.kind == 0 && x1 <= px && px <= x2 && y1 <= py && py <= y2
+            });
+            if over {
+                self.pointer = if self.kick_pointer { 3 } else { 2 };
             }
         }
         damage

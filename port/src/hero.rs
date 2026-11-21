@@ -113,6 +113,14 @@ pub struct Hero {
     pub push: Option<(i32, i32, i32)>,
     /// 1170:4dec: the right button's weapon (-1 none yet; its procedure 4dee is table 188a).
     pub weapon: i32,
+    /// 1170:4e30 / 4e32: the status bar's health length (follows the health one pixel a frame)
+    /// and the weapon icon's slide-in offset (-14 on a weapon change, +2 a frame); FUN_1088_2501
+    /// updates them every frame (`status_bar`). Only the HUD reads them.
+    pub hud_bar: i32,
+    pub hud_slide: i32,
+    /// HeroDamage(id) calls this frame (1088:1109: message `id` of ETMAIN for the message box;
+    /// main moves them to `Game::messages`); true = FUN_1088_10e1, only if not the last line).
+    pub messages: Vec<(i32, bool)>,
     /// 1170:1656: the weapons.
     pub weapons: [Weapon; 10],
     /// Pick-ups taken this frame: (plane-2 cell (tx, ty), effect, its function 3, y, x).
@@ -307,7 +315,11 @@ impl Hero {
             side_shakes: Vec::new(),
             cam_nudge: (0, 0),
             gun: Gun::default(),
-            weapon: -1,
+            // HeroReset (FUN_1088_06b8) ends with SelectWeapon(gWeaponForDigitKey[0]).
+            weapon: WEAPON_FOR_DIGIT[0],
+            hud_bar: 0,
+            hud_slide: -14,
+            messages: Vec::new(),
             weapons: WEAPON_AMMO.map(|(pickup, max)| Weapon { pickup, max, next: 0, ammo: 0, owned: false }),
             pickups: Vec::new(),
             exit_timer: 0,
@@ -567,7 +579,8 @@ impl Hero {
             if self.anim > 0 {
                 self.anim -= 1;
                 if self.anim == 0 {
-                    rng.random(6);
+                    let r = rng.random(6);
+                    self.messages.push((-0xe - r, false));
                 }
             }
             // Inputs 6 or 7 (or Space/Enter) just pressed: restart the level.
@@ -893,9 +906,13 @@ impl Hero {
                         if !self.keys[key] {
                             if w.cell_at(MAIN_PLANE, ly - 0x20, self.x) == Some(0x308) {
                                 self.script_cells.push((((ly - 0x20) >> 4) * width + (self.x >> 4)) as u16);
+                            } else {
+                                // THIS POD NEEDS A ... KEYCARD (FUN_1088_10e1).
+                                self.messages.push((-1 - (above - 14000), true));
                             }
                             skip = true;
                         } else {
+                            self.messages.push((-20, false)); // - UNLOCKED -
                             self.keys[key] = false;
                             self.cell_steps.push((((ly - 0x10) >> 4) * width + (self.x >> 4)) as u16);
                         }
@@ -1381,6 +1398,8 @@ impl Hero {
         let water = lv.water;
         let now = ps.now;
         self.veh_fired = false;
+        // HeroUpdateVehicle keeps the weapon icon hidden (4e32 = -16).
+        self.hud_slide = -16;
         let old_facing = self.facing;
         self.half_width = 0x14;
         self.height = 0x1e;
@@ -1391,6 +1410,9 @@ impl Hero {
         if self.state == DEAD {
             if self.anim > 0 {
                 self.anim -= 1;
+                if self.anim == 0 {
+                    self.messages.push((-13, false));
+                }
                 if self.anim > 0x9d && self.anim % 0xc == 0 {
                     let t = 0x15e - self.anim;
                     rng.random(0x20);
@@ -1462,7 +1484,10 @@ impl Hero {
                 }
                 let old = self.health;
                 self.health = (self.health - 10).max(0);
-                let _ = old; // FUN_1088_5b41: HeroDamage(-12) is a score entry
+                // FUN_1088_5b41: health falling under 0x8f shows WARNING - SITUATION CRITICAL.
+                if old > 0x8e && self.health < 0x8f {
+                    self.messages.push((-12, false));
+                }
                 self.shakes.push((10, 4));
             }
         }
@@ -1608,6 +1633,9 @@ impl Hero {
                 self.turn = NO_TURN;
                 self.health = left;
             } else {
+                if self.health > 0x8e && left < 0x8f {
+                    self.messages.push((-12, false));
+                }
                 self.health = left;
                 self.hurt = 0x52;
                 self.hurt_blink = 0x52;
@@ -2056,8 +2084,23 @@ impl Hero {
         if w != self.weapon {
             sound::discard(0x88);
             sound::play_at_listener(0x88, -200 + (w * 400) / 9);
+            self.hud_slide = -14;
         }
         self.weapon = w;
+    }
+
+    /// The update half of FUN_1088_2501 (the status bar), once a frame (the end of the frame).
+    /// It also keeps the health (4e6c) within 0..=0x2c6: hearts can't push it over.
+    pub fn status_bar(&mut self) {
+        self.health = self.health.clamp(0, 0x2c6);
+        if std::env::var_os("ET_HEALTH").is_some() {
+            eprintln!("health {}", self.health);
+        }
+        let target = self.health * 0x47 / 0x2c6;
+        self.hud_bar = if self.hud_bar == 0x7fff { target } else { self.hud_bar + (target - self.hud_bar).signum() };
+        if self.hud_slide < 0 {
+            self.hud_slide += 2;
+        }
     }
 
     /// The start of FUN_1088_55f0: pick-ups (function 30000 in plane 2) under the hero's two
@@ -2091,7 +2134,8 @@ impl Hero {
         let i = f3 as i32 - 0x1e;
         let w = &mut self.weapons[i as usize];
         let select = if !w.owned {
-            w.owned = true; // and HeroDamage(f3 - 0x3f): score
+            w.owned = true;
+            self.messages.push((f3 as i32 - 0x3f, false));
             true
         } else {
             w.ammo == 0

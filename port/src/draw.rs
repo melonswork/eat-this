@@ -98,11 +98,16 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
         }
         0x21c5 => sprite = m.w(0x14),
         // Burning ground (napalm and the like): a flame scaled by +0x1e / +0x1c, cut at the
-        // ground. (The original grows it while it dies out.)
+        // ground; over its last 0x120 frames the steps grow by k * k >> 5 (2/3 of it across),
+        // k = age - life + 0x120: it shrinks away.
         0x18e6 | 0x19f8 | 0x1b90 => {
             p.clip.3 = (y - p.cam.1).min(p.clip.3);
             match m.uw(0x42) {
-                0x18e6 => p.flame(m.w(0x1e), m.w(0x1c), age as u32, x, y),
+                0x18e6 => {
+                    let k = age - m.w(0x22) + 0x120;
+                    let g = if k > 0 { (k * k) >> 5 } else { 0 };
+                    p.flame(m.w(0x1e) + g, m.w(0x1c) + g * 2 / 3, age as u32, x, y)
+                }
                 0x19f8 => {
                     // A column of smoke over it.
                     p.scaled_at(0x100, 0x400, (age / 4) % 0xd + 0x6b00, x, y);
@@ -713,24 +718,167 @@ pub fn doors(p: &mut Painter, level: &Level) {
     }
 }
 
-/// FUN_1088_4b64's pointer and FUN_1088_2501's status bar (HUD level 1: health, keys left out,
-/// the right button's weapon and its ammo). Screen coordinates; ETSCORE is slot 0x1f.
-pub fn hud(p: &mut Painter, hero: &crate::hero::Hero) {
+/// FUN_1088_4b64's pointer and FUN_1088_2501's status bar: `level` is GameStats (1a92):
+/// 1 = health, keys, the right button's weapon and its ammo, 2 = also the kill / hidden area /
+/// bios sphere counters on the right (`got` of `totals`). Screen coordinates; ETSCORE is slot 0x1f.
+pub fn hud(p: &mut Painter, hero: &crate::hero::Hero, pointer: i32, level: i32, got: crate::level::Tally, totals: crate::level::Tally) {
     use crate::world::ds_word;
     p.reset();
     let byte = |a: usize| ds_word(a) & 0xff;
     let w = hero.weapon;
     let rec = 0x1656 + (w.max(0) as usize) * 0xd;
-    // The pointer: two frames blinking every 12, plus the weapon's own (record +5).
-    let mut ptr = 0x7800 + (per(p, 12) & 1);
-    if w >= 0 {
+    // The pointer (4e50): two frames blinking every 12; red over an enemy (2); KICK / ME
+    // blinking over an alien to kick (3). The first three get the weapon's own (record +5).
+    let mut ptr = match pointer {
+        0 => 0x7800 + (per(p, 12) & 1),
+        3 => 0x7803 + (per(p, 50) & 1),
+        k => 0x7800 + k,
+    };
+    if w >= 0 && ptr < 0x7803 {
         ptr += byte(rec + 5);
     }
     let (mx, my) = hero.gun_mouse();
     p.mode = 0x30;
     p.sprite(ptr, mx, my);
-    // Health: the frame, then the bar cut at its length (health * 0x47 / 0x2c6); red when low.
-    let len = hero.health.clamp(0, 0x2c6) * 0x47 / 0x2c6;
+    if level > 0 {
+        status_bar(p, hero);
+    }
+    if level > 1 {
+        // FUN_1088_248e for each counter with a total: the box (mode 0x30), the count and the
+        // total right-aligned, the animated icon (STATSOBJ, slot 0x28); bottom up from y 0xbe.
+        let f = p.frame as i32;
+        let mut y = 0xbe;
+        for (icon, n, total) in [
+            (0x2800 + (f / 6) % 12, got.kills, totals.kills),
+            (0x280c + (f / 9) % 12, got.secrets, totals.secrets),
+            (0x2824 + ((f / 3) & 7), got.bios, totals.bios),
+        ] {
+            if total <= 0 {
+                continue;
+            }
+            p.mode = 0x30;
+            p.sprite(0x1f11, 0x107, y);
+            p.mode = 4;
+            number(p, n, 0x115, y);
+            number(p, total, 0x12d, y);
+            p.sprite(icon, 0x105, y);
+            y -= 0xc;
+        }
+    }
+    p.reset();
+}
+
+/// FUN_1088_4b64's message box (as it was before this frame's update, `MessageBox::drawn`): the
+/// top rows darkened through PalMixLight (rows 0x20 / 0x24 in a checkerboard, FUN_1088_43e1),
+/// the lines in PPFONT3 (slot 0x20) through the tint table, clipped at row 0x1d, sliding up as
+/// the timer runs out, and a block cursor after the typed text (blinking once all is shown).
+pub fn messages(p: &mut Painter, mb: &crate::messages::MessageBox) {
+    let (text, shown, lines, timer) = (&mb.drawn.0, mb.drawn.1, mb.drawn.2, mb.drawn.3);
+    if timer <= 0 {
+        return;
+    }
+    p.reset();
+    let y = if timer < 0xd { 9 - (0xd - timer) } else { 9 };
+    let h = if lines < 1 { y + 2 } else { y - 7 + lines * 9 }.min(0x1d);
+    if let Some(light) = p.tables.light.as_deref() {
+        let (mut a, mut b) = (0x20usize, 0x24usize);
+        for row in 0..(h + 2).clamp(0, crate::H) {
+            for x in 0..crate::W {
+                let at = (row * crate::W + x) as usize;
+                let r = if x & 1 == 0 { a } else { b };
+                p.fb[at] = light[r * 256 + p.fb[at] as usize];
+            }
+            std::mem::swap(&mut a, &mut b);
+        }
+    }
+    p.clip.3 = 0x1d;
+    p.mix = Mix::Tint;
+    let (cx, cy) = text_at(p, text, shown, 6, y);
+    p.mix = Mix::Level;
+    let all = shown as usize >= text.len();
+    if !all {
+        text_at(p, b"\xdb", 0x7fff, cx, cy);
+    } else if p.frame % 0x18 < 0xc {
+        text_at(p, b" \xdb", 0x7fff, cx, cy);
+    }
+    p.reset();
+}
+
+/// FUN_1028_006e with FUN_1028_03bc(2, 0, 0x20): `t` in PPFONT3 from (x, y), bytes 0..=`limit`
+/// (01ce), mode 4 (01cc); `^|` goes down a line ('0''s height + 2), `^Cxx` tints (mode 0x2c,
+/// colour xx), `^O` stops it, `^Bxx` skips the codes after it every other xx ticks. Returns where
+/// the text ended (2444, 2446).
+fn text_at(p: &mut Painter, t: &[u8], limit: i32, x: i32, y: i32) -> (i32, i32) {
+    let line = p.bank.size(0x2030).map_or(8, |s| s.1) + 2;
+    let hex = |i: usize| -> u8 {
+        let d = |c: u8| if c > b'9' { c.wrapping_sub(0x37) } else { c.wrapping_sub(b'0') };
+        d(t.get(i).copied().unwrap_or(b'0')).wrapping_mul(16).wrapping_add(d(t.get(i + 1).copied().unwrap_or(b'0')))
+    };
+    let (mut cx, mut cy) = (x, y);
+    p.mode = 4;
+    let mut i = 0usize;
+    while i < t.len() && t[i] != 0 && i as i32 <= limit {
+        let c = t[i];
+        if c == b'^' {
+            match t.get(i + 1) {
+                Some(b'|') => {
+                    cx = x;
+                    cy += line;
+                    i += 2;
+                }
+                Some(b'C') => {
+                    p.mode = 0x2c;
+                    p.colour = hex(i + 2);
+                    i += 4;
+                }
+                Some(b'O') => {
+                    p.mode = 4;
+                    i += 2;
+                }
+                Some(b'B') => {
+                    let n = hex(i + 2).max(1) as u32;
+                    i += 4;
+                    if (p.frame / n) & 1 == 0 {
+                        i = crate::messages::skip_markup(t, i as i32) as usize;
+                    }
+                }
+                _ => i += 1,
+            }
+            continue;
+        }
+        let id = 0x2000 + c as i32;
+        if let Some((w, _)) = p.bank.size(id) {
+            p.sprite(id, cx, cy);
+            cx += w;
+        }
+        i += 1;
+    }
+    p.mode = 0;
+    (cx, cy)
+}
+
+/// FUN_1088_2410: `n` in ETSCORE's digits, at most three, its last digit at x, 5 pixels apart.
+fn number(p: &mut Painter, n: i32, x: i32, y: i32) {
+    let mut n = n;
+    for k in 0..3 {
+        p.sprite(n % 10 + 0x1f00, x - k * 5, y);
+        n /= 10;
+        if n <= 0 {
+            break;
+        }
+    }
+}
+
+/// The status bar of FUN_1088_2501 (GameStats >= 1).
+fn status_bar(p: &mut Painter, hero: &crate::hero::Hero) {
+    use crate::world::ds_word;
+    let byte = |a: usize| ds_word(a) & 0xff;
+    let w = hero.weapon;
+    let rec = 0x1656 + (w.max(0) as usize) * 0xd;
+    // Health: the frame, then the bar cut at 4e30 (it follows health * 0x47 / 0x2c6 a pixel a
+    // frame); flashing red when short.
+    let len = hero.hud_bar;
+    p.mode = 0x30;
     p.sprite(0x1f0d, 4, 0xc6);
     p.mode = 4;
     if len < 9 {
@@ -777,10 +925,12 @@ pub fn hud(p: &mut Painter, hero: &crate::hero::Hero) {
     }
     p.mode = 0x30;
     p.sprite(0x1f0c, x, 0xc6);
-    // The weapon's icon; with none chosen yet (-1) this is 0x1f13, the pistol's.
+    // The weapon's icon, sliding in from the left after a change (4e32), the edge 0x1f10 over it.
     p.mode = 4;
-    p.sprite(0x1f14 + w, x, 0xc6);
-    p.reset();
+    p.sprite(0x1f14 + w, x + hero.hud_slide, 0xc6);
+    if hero.hud_slide < 0 {
+        p.sprite(0x1f10, x + hero.hud_slide, 0xc6);
+    }
 }
 
 /// FUN_1090_009c (the foreground procs of the levels with water): below the hero's sector's

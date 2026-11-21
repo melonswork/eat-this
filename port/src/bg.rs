@@ -3,7 +3,7 @@
 //! segment 1090). Ported so far, checked against the original's frame buffer (tools/dumpframe.py):
 //!
 //! * 0, the city (CITY01): `FUN_1090_0797`.
-//! * 4, the forest (FOREST02..04): `FUN_1090_1629`, its first layer only.
+//! * 4, the forest (FOREST02..04): `FUN_1090_1629` (its two extra-map layers are drawn in main.rs).
 //!
 //! Every other number falls back to the level's picture scrolled at 1/16 of the camera. That is a
 //! guess, not what those routines do.
@@ -17,6 +17,8 @@ pub struct Background {
     pub groups: Vec<Option<SpriteGroup>>,
     /// The level's PalMix table, for the translucent draw mode.
     pub mix: Option<Vec<u8>>,
+    /// Row 0x80 of PalMixLight: the city sky during a lightning flash.
+    pub sky_flash: Option<Vec<u8>>,
 }
 
 /// Row `y` of the picture copied to the screen row with the picture shifted left by `shift`
@@ -73,9 +75,13 @@ impl Background {
 
     /// `frame` is the level frame counter as the original's draw sees it (frames completed before
     /// this one), (cam_x, cam_y) the camera.
-    pub fn draw(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
+    /// `flash`: a lightning flash of kind 1 lights the city's sky (4edc > 0, 4ede = 1).
+    pub fn draw(&self, fb: &mut [u8], cam: (i32, i32), frame: u32, flash: bool) {
         match self.proc_ {
-            0 => self.city(fb, cam, frame),
+            // 0 is FUN_1090_075c (decor only, yet CITY01 shows this city); 1 (FUN_1090_0a8c) and 16
+            // (START, CITY: FUN_1090_0ace) draw the city, then the bridge and the rain (main.rs),
+            // the decor (and 16 the truck).
+            0 | 1 | 16 => self.city(fb, cam, frame, flash),
             3 => self.sea(fb, cam, frame),
             6 => {
                 // FUN_1090_1a06 (GRINDER): the second group's backdrop at 1/4 of the camera,
@@ -85,6 +91,7 @@ impl Background {
                 self.sprite(1, 0, fb, 0, y + H);
             }
             4 => self.forest(fb, cam),
+            5 => self.forplane(fb, cam, frame),
             _ => {
                 if let Some(p) = &self.picture {
                     for y in 0..H as usize {
@@ -100,10 +107,17 @@ impl Background {
     /// below scrolls faster with every row, in fixed point (`acc / 248`); then the skyline strip
     /// and its reflection (draw mode 0x30: through the PalMix table) ride at the horizon's speed. Not
     /// drawn: the little screen on a building (`DAT_4d9c`).
-    fn city(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
+    fn city(&self, fb: &mut [u8], cam: (i32, i32), frame: u32, flash: bool) {
         let sky = -((frame >> 3) as i32 % W);
         self.sprite(0, 1, fb, sky, 0);
         self.sprite(0, 1, fb, sky + W, 0);
+        if let (true, Some(row)) = (flash, &self.sky_flash) {
+            // Mode 0x2c through PalMixLight with colour 0x80: the sky's pixels lit.
+            // (The sky sprite covers rows 0..119; its colour-0 pixels stay as they were.)
+            for px in fb[..(W * 120) as usize].iter_mut().filter(|p| **p != 0) {
+                *px = row[*px as usize];
+            }
+        }
         let Some(pic) = &self.picture else { return };
         let horizon = ((cam.0 + 0x640) / 16 % W) as usize;
         for y in [0x7a, 0x7b] {
@@ -120,6 +134,29 @@ impl Background {
         self.sprite(0, 0, fb, W - s, 0);
         self.sprite_mixed(0, 2, fb, -s, 0);
         self.sprite_mixed(0, 2, fb, W - s, 0);
+    }
+
+    /// `FUN_1090_178e` (FORPLANE): the sky (sprite 0x3200) drifting left a pixel per 16 frames,
+    /// the picture's rows 0x7a.. scrolling faster with every row (`acc / 0x1e8`, acc starting at
+    /// camX * 0x1e8 / 16 and growing by camX a row), then the skyline (0x3201, 0x3202) at 1/16 of
+    /// the camera. Not drawn: the object at 1170:534e (FUN_10d0_01e4).
+    fn forplane(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
+        let sky = -((frame >> 4) as i32 % W);
+        self.sprite(0, 0, fb, sky, 0);
+        self.sprite(0, 0, fb, sky + W, 0);
+        if let Some(pic) = &self.picture {
+            let a = i64::from(cam.0);
+            let mut acc = a * 0x1e8 / 0x10;
+            for y in 0x7a..H as usize {
+                copy_row(fb, pic, y, (acc / 0x1e8 % i64::from(W)).rem_euclid(i64::from(W)) as usize);
+                acc += a;
+            }
+        }
+        let h = ((cam.0 + 0x640) / 0x10) % W;
+        for x in [-h, W - h] {
+            self.sprite(0, 1, fb, x, 0);
+            self.sprite(0, 2, fb, x, 0);
+        }
     }
 
     /// `FUN_1090_147b` (HYDRO): the first LoadSpriteGroup's sprites at 1/6 of the camera: while
@@ -144,9 +181,9 @@ impl Background {
         }
     }
 
-    /// `FUN_1090_1629`: a 320x200 sprite (fourth LoadSpriteGroup, sprite 0) tiled at 1/16 of the
-    /// camera. Not ported: the two parallax tile layers (extra maps 8 and 9) drawn over it at 1/2
-    /// and 1/4 speed.
+    /// `FUN_1090_1629`: a 320x200 sprite (slot 0x35, sprite 0) tiled at 1/16 of the camera. The
+    /// two parallax tile layers over it (extra maps 9 and 8 at 1/4 and 1/2 of the camera) are
+    /// drawn by main.rs.
     fn forest(&self, fb: &mut [u8], cam: (i32, i32)) {
         let x = -((cam.0 >> 4) % W);
         let y = -((cam.1 >> 4) % H);
