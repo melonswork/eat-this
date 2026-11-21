@@ -12,6 +12,7 @@ mod tank;
 mod spikeball;
 mod meathook;
 mod collapse;
+mod deaths;
 mod bigali;
 mod archive;
 mod bg;

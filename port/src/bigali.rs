@@ -243,7 +243,13 @@ impl Level {
                 o.set(0x34, 0x5200);
             }
             -0x140 => {
-                eprintln!("warning: a frozen big alien (FUN_1068_0f32) not ported");
+                // Frozen: a statue until shot (FUN_1068_0f32), then it shatters.
+                if self.frozen_statue(id, env, 0x5d00) {
+                    let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
+                    crate::deaths::frozen(&mut self.particles, env.rng, y - 0x14, x);
+                    env.fx.shakes.push((0x20, 0xe));
+                    self.remove_current(id);
+                }
                 return;
             }
             -300 => {
@@ -661,7 +667,8 @@ impl Level {
                     let y = self.o(id).w(0x10);
                     self.bigali_explode(id, y - 8, env);
                 } else {
-                    eprintln!("warning: a frozen big alien (FUN_1070_564d) not ported");
+                    let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
+                    crate::deaths::frozen(&mut self.particles, env.rng, y - 0x14, x);
                 }
                 let o = self.o(id);
                 if o.w(0x2e) > 0x34 || o.w(0x1c) != 1 || env.rng.random(3) == 0 {

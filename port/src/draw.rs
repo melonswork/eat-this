@@ -132,12 +132,6 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
             p.scaled_at(0x200, 0x200, sprite, x, y);
             return;
         }
-        0x232e => {
-            // FUN_1050_232e: in the half-speed background layer.
-            let (cx, cy) = p.cam;
-            p.sprite(sprite, x - ((cx as u16) >> 1) as i32, y - ((cy as u16) >> 1) as i32);
-            return;
-        }
         0x2588 => {
             // A bonus flying out (FUN_1088_022b on its tile +0x40).
             let kind = world.cell_function(m.uw(0x40), 2) as i32;
@@ -256,6 +250,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
         crate::tank::KIND => crate::tank::draw(p, o),
         crate::spikeball::KIND => looks(p, o),
         crate::meathook::KIND => crate::meathook::draw(p, o),
+        crate::granny::KIND if o.w(0x28) == -0xd2 => crate::deaths::draw_statue(p, o, 0x5d02),
         crate::granny::KIND => {
             p.hflip = o.w(0x20) < 0;
             p.at(o.w(0x3a), x, y);
@@ -381,6 +376,8 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
             p.at_flash(o.w(0x22) > 0, s, x, y);
         }
         // FUN_1070_60ca: the small alien; facing from its speed (+0x20).
+        0x1428 if o.w(0x28) == -0xd2 => crate::deaths::draw_statue(p, o, 0x5d01),
+        0x1432 if o.w(0x28) == -0x140 => crate::deaths::draw_statue(p, o, 0x5d00),
         0x1428 => {
             p.hflip = o.w(0x20) < 0;
             if o.w(0x28) == -500 && o.w(0x2e) > 7 {

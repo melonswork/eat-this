@@ -14,7 +14,7 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 
 | # | feature | original | episode maps | notes |
 |---|---|---|---|---|
-| 1 | ~~OBJECTS 0x1482~~ the granny (VMT 0xe0c, update FUN_1070_cb38) | EnemyFactory | GRANNY 45, CITYHS 7, BUTCHERY 4, CITY02 1 | DONE (`granny.rs`, GRANNY1); her burnt/frozen deaths and frozen corpse (-0xd2) still warn |
+| 1 | ~~OBJECTS 0x1482~~ the granny (VMT 0xe0c, update FUN_1070_cb38) | EnemyFactory | GRANNY 45, CITYHS 7, BUTCHERY 4, CITY02 1 | DONE (`granny.rs`, GRANNY1); burnt/frozen deaths and the frozen statue: `deaths.rs` (BURN1, FREEZE1) |
 | 2 | ~~carrier 0x14be~~ (icon 61600, VMT 0xc84, update FUN_1070_0cce, move hook 0b02) | | CITY02, CITY_I00, CITY_I06, FOREST03, FOREST05, STONES | DONE (`carrier.rs`, CARRIER1: flight, drops, shot down, crash); + splashes (FUN_1070_0105 for aliens/big aliens, the hero's in HeroUpdate), effects 7/23 in the table. Not exercised: blowing up in the air (0b70), the hero riding it |
 | 3 | ~~OBJECTS 0x13ec~~ the gun turret (VMT 0xcbc, FUN_1070_2550) | EnemyFactory | CITYRAIN, FOREST02, FOREST05, CITY02, CITY_I01 | DONE (`wallgun.rs`, WALLGUN1: firing cycle, killed, broken apart; effect 65 = FUN_1040_105d). Not exercised: aiming at a visible hero (FOREST02's sits in the trunk), the lever (CITY02/CITY_I01) |
 | 4 | ~~OBJECTS type 100~~ path platforms (FUN_1060_0166 kind 0, update FUN_1060_0819) | | CITY_I04 5, CITYHS 6, CITY_I01 5, GRANNY 2 | DONE (`PlatObj::path`, `platobj::update_path`, PATHPLAT1). Still warn if met: modes 0x4000 (bobbing), 0x680 (driven by the hero: 5123/5124/4e5a), 0x8000 (slowing at the ends); the lever (GRANNY's) is in but untested; kinds 2/3 (falling, sinking) unported |
@@ -42,7 +42,7 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
 5. ~~0x2716~~ (FORPLANE's quad): DONE.
 6. From AGENTS.md, not seen on the episode maps' load: riding the smallbot (FUN_1070_a18e), levers needing a
    key, pick-up effects 3/74, particle spawn effects 30064/30065/30070, mover 1050:19f8, platform shake/dust
-   (flags 8), frozen/burnt deaths (FUN_1070_564d / 544e: aliens, big aliens, the granny), barrels >= 0xb, the
+   (flags 8), ~~frozen/burnt deaths~~ (DONE: `deaths.rs`, FREEZE1/BURN1; aliens and big aliens wired, untested), barrels >= 0xb, the
    hero on the big alien's shield, wall chunks 60308/60304 (45db), bonus 0xd10, path-platform modes
    0x4000/0x680/0x8000 and platform kinds 2/3, the press (icon 61001) and the carrier's mid-air blast are
    ported but not exercised by a scenario.
@@ -59,6 +59,7 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
   0x2b on +0x26 (volume (speed*256/full)*2/3, pitch 0x100 - that/2, priority 0x11f4), 0x4b a piece shot apart.
 - Collapse (FUN_1088_a481): wired in `collapse.rs`: 0x4b per debris burst (at the background position), the rumble
   loop 0x53 on 4ed2 (priority 0x13e8, volumes min(0x42a - t, 0x100)).
+- Burnt / frozen deaths (FUN_1070_544e / 564d): `deaths.rs`: 0x71; 0x21 at pitch 0x100 - Random(0x20).
 - Spiked ball (FUN_1070_9a66): wired in `spikeball.rs`: 0xf when it hurts the hero, 1 when shot (sounddiff SPIKE1).
 
 - Granny (FUN_1070_cb38): 0x9d when hit alive, pitch `0x100 - Random(0x20)` (FUN_10e8_03ae; the Random is

@@ -91,6 +91,8 @@ streams and EVERY CHECK, so the method is the original's own.
 | `SPIKE1` | FOREST05, lever cell (138,91) set on (0x308), start on the branch (2318,1407) | the spiked ball 0x14e6 (FUN_1070_9a66, `spikeball.rs`): swings from the lever, hits the hero standing where it swings up (hit kind 3, bloody 0x3315, drips), two pistol shots push it. Not exercised: shakes pushing it (amp > 7) | exact |
 | `MEATHOOK1` | BUTCHERY, lever (158,48) set on (0xf58), start (2575,817) | the meat hooks 0x1414 (FUN_1070_4b9b, `meathook.rs`): speed ramps up, meat shot apart, the knocked-down hero carried up (gHeroDY set after FUN_1088_532c carries into the next HeroUpdate: `Hero::carry`); its draw's Random(2) under a saved seed is IGNOREd (1070:51af) | exact |
 | `COLLAPSE1` | GRANNY, lever (146,30) set on (0xfd8) | the collapsing building 0x2715 (FUN_1088_a481 from background proc 15, `collapse.rs`): 0x42a frames of shakes and debris (particle group 2, mover FUN_1050_3d06 = `MOVE_BG_THROW`, callback 0x232e), the rumble loop; the tilted building (extra map plane 4 rotated, FUN_10f0_545b) is not drawn | exact |
+| `FREEZE1` | GRANNY, weapon-1 and weapon-5 pick-ups at (18,30), (19,30) | weapon 5's rockets (hit mask 0x400) freeze grannies (FUN_1070_564d, `deaths.rs`) into statues (state -0xd2, FUN_1068_0f32: wobble, tint row 2) that the pistol shatters (shards land as effect 48) | exact |
+| `BURN1` | GRANNY, weapon-1 pick-up at (19,30) | the flamethrower (mask 8) burns grannies (FUN_1070_544e: ash 0x5132, burning bits 0x5130 landing as effect 59 = FUN_1040_5ec6, smoke); the same deaths are wired for aliens and big aliens | exact |
 
 ## Tools (non-obvious usage)
 

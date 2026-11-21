@@ -122,7 +122,13 @@ impl Level {
                 }
             }
             -0xd2 => {
-                eprintln!("warning: a frozen granny (FUN_1068_0f32) not ported");
+                // Frozen: a statue until shot, then it shatters.
+                if self.frozen_statue(id, env, 0x5d02) {
+                    let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
+                    crate::deaths::frozen(&mut self.particles, env.rng, y - 0x12, x);
+                    env.fx.shakes.push((0x20, 0xe));
+                    self.remove_current(id);
+                }
                 return;
             }
             _ => {}
@@ -209,13 +215,14 @@ impl Level {
                 let s = env.rng.random(5) + 0x531e;
                 self.blood_splat(env.world, s, by, x);
             } else {
-                eprintln!("warning: a burnt granny (FUN_1070_544e) not ported");
+                crate::deaths::burnt(&mut self.particles, env.rng, y - 0x19, x);
                 crate::alien::smoke_sprite(&mut self.particles, y, x);
                 self.particles.last_mut().m.set(0x1e, 0x180);
             }
             self.remove_current(id);
         } else if self.o(id).w(0x28) == -6 {
-            eprintln!("warning: a frozen granny (FUN_1070_564d) not ported");
+            let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
+            crate::deaths::frozen(&mut self.particles, env.rng, y - 0x14, x);
             self.remove_current(id);
         } else {
             self.o(id).set(0x28, -0xd2);

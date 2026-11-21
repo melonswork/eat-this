@@ -1,0 +1,18 @@
+# Burnt deaths (FUN_1070_544e, effect 59 = FUN_1040_5ec6): GRANNY's first grannies right of the
+# start; a weapon-1 pick-up copied where he stops: the flamethrower burns them to ashes.
+level MAPS/GRANNY.MAP
+cell 2 19 30 0xd04
+mouse 300 110
+20
+60 right
+10 up right
+20 right
+20
+12 right
+20
+mouse 310 110
+80 rmb
+40
+30 right
+80 rmb
+100

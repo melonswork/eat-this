@@ -140,7 +140,13 @@ impl Level {
             }
             -200 => false,
             -0xd2 => {
-                eprintln!("warning: alien corpse state -0xd2 (FUN_1068_0f32) not ported");
+                // Frozen: a statue until shot (FUN_1068_0f32), then it shatters.
+                if self.frozen_statue(id, env, 0x5d01) {
+                    let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
+                    crate::deaths::frozen(&mut self.particles, env.rng, y - 0x14, x);
+                    env.fx.shakes.push((0x20, 0xe));
+                    self.remove_current(id);
+                }
                 return;
             }
             -0x208 => {
@@ -934,10 +940,14 @@ impl Level {
                     self.blood_splat(env.world, 0x541e + which, by, x);
                 }
             } else {
-                eprintln!("warning: alien burnt (FUN_1070_544e) not ported");
+                crate::deaths::burnt(&mut self.particles, env.rng, y, x); // FUN_1070_544e
+                let (x, oy) = self.xy(id);
+                smoke_sprite(&mut self.particles, oy, x);
+                self.particles.last_mut().m.set(0x1e, 0x180);
             }
         } else {
-            eprintln!("warning: alien frozen (FUN_1070_564d) not ported");
+            let (x, oy) = self.xy(id);
+            crate::deaths::frozen(&mut self.particles, env.rng, oy - 0x14, x); // FUN_1070_564d
         }
         self.remove_current(id);
     }

@@ -1,0 +1,31 @@
+# Frozen and burnt deaths (FUN_1070_564d / 544e, FUN_1068_0f32): GRANNY's first grannies right of
+# the start. Weapon-1 and weapon-5 pick-ups are copied where he stops (weapon 5 last, selected):
+# rockets freeze grannies into statues (state -0xd2) that the pistol shatters; then the switch key
+# selects the flamethrower and he burns the next ones.
+level MAPS/GRANNY.MAP
+cell 2 18 30 0xd04
+cell 2 19 30 0xd08
+mouse 300 110
+20
+60 right
+10 up right
+20 right
+20
+12 right
+20
+mouse 310 110
+5 rmb
+40
+5 rmb
+60
+40 lmb
+40
+40 lmb
+40
+2 switch
+20
+60 rmb
+60
+40 right
+60 rmb
+80

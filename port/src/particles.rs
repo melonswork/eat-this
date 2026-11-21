@@ -1438,7 +1438,7 @@ impl Level {
                 let m = &mut self.particles.list[i].m;
                 m.set(0x16, if t < 5 { ((m.uw(0x24) >> 3) & 3) as i32 + 0x1900 } else { 0x1904 });
             }
-            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a | 0x232e => {} // drawing only
+            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a | 0x232e | 0x2459 | 0x2497 => {} // drawing only
             0x2299 => {
                 // FUN_1050_2299: a burning bit trails smoke.
                 if m.w(0x24) % 4 == 3 {
@@ -1957,6 +1957,40 @@ impl Level {
                     f.rng.random(0x40);
                 }
                 self.sparks(0x1918, y, x);
+            }
+            59 => {
+                // FUN_1040_5ec6: a burning bit lands: smoke against a wall, on the floor a flame
+                // (one in four also a lingering smoke sprite).
+                let i = self.particles.current;
+                {
+                    let m = &mut self.particles.list[i].m;
+                    m.set(8, m.w(0x10));
+                    m.set(0xa, m.w(0x12));
+                }
+                self.particle_callback(i, f);
+                let side = self.particles.hit_side;
+                let (py, px) = {
+                    let m = &self.particles.list[i].m;
+                    (m.w(0xa), m.w(8))
+                };
+                let ps = &mut self.particles;
+                if side < 2 {
+                    ps.p.colour = 0x10;
+                    smoke(ps, f.rng, y, x);
+                    ps.p.colour = 0;
+                } else if side != 2 {
+                    if f.rng.random(4) == 0 {
+                        ps.p.callback = 0x18e6;
+                        ps.p.colour = 0x10;
+                        ps.spawn_seq(0x6a00, 1, 0xf2, py, px, 0);
+                        let m = &mut ps.last_mut().m;
+                        m.set(0x1c, 0x300);
+                        m.set(0x1e, 0x300);
+                        ps.p.colour = 0;
+                        ps.p.callback = 0;
+                    }
+                    ps.spawn_seq(0x5129, 4, 6, y, x, 1);
+                }
             }
             22 | 48 => {
                 // FUN_1040_295e / 4ed6: a drop of blood or a bone: slides down walls, splashes
