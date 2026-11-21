@@ -10,6 +10,7 @@ mod ambient;
 mod alien;
 mod tank;
 mod spikeball;
+mod meathook;
 mod bigali;
 mod archive;
 mod bg;

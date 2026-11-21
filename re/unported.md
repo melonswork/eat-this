@@ -20,7 +20,7 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 | 4 | ~~OBJECTS type 100~~ path platforms (FUN_1060_0166 kind 0, update FUN_1060_0819) | | CITY_I04 5, CITYHS 6, CITY_I01 5, GRANNY 2 | DONE (`PlatObj::path`, `platobj::update_path`, PATHPLAT1). Still warn if met: modes 0x4000 (bobbing), 0x680 (driven by the hero: 5123/5124/4e5a), 0x8000 (slowing at the ends); the lever (GRANNY's) is in but untested; kinds 2/3 (falling, sinking) unported |
 | 5 | ~~icons 61000/61001~~ falling weights (FUN_1070_fa6a, kind 0x13a6, VMT 0xbe8, FUN_1068_215e) | SpawnFromIconTiles | CITY02, CITYHS, CITY_I03 | DONE (`weight.rs`, WEIGHT1: drop, chain bits, crush = hero hit kind 2, planks = effect 50 with its nested negative-tile blasts; the hero now falls from any state < 1 but -1..-5). Not exercised: the press (61001: animation, standing on it, FUN_1040_677d), shooting a landed weight broken |
 | 6 | ~~OBJECTS 0x146e~~ the tank (VMT 0xdf8 shared with 0x1478, FUN_1070_b9d3) | EnemyFactory | CITY_I00, F_LAST | DONE (`tank.rs`, TANK1/TANK2: patrol, grenades, arm/claw/turret/hatch/hull destroyed, the wreck; hero state -3 = held by the claw in `Hero` (HELD), hit kinds 0 and 3). Not exercised: the claw grabbing the hero, the hero standing on it |
-| 7 | OBJECTS 0x1414 (VMT 0xd04) | EnemyFactory | BUTCHERY | calls FUN_1070_4b4e per 32 px |
+| 7 | ~~OBJECTS 0x1414~~ the meat hooks (VMT 0xd04, FUN_1070_4b9b) | EnemyFactory | BUTCHERY | DONE (`meathook.rs`, MEATHOOK1); FUN_1070_4b4e = Random(100) per hook at setup |
 | 8 | ~~OBJECTS 0x14a0~~ the falling sign (VMT 0xbd8, FUN_1068_1f3c) | EnemyFactory | GRANNY | DONE (`weight.rs` SLAB, SLAB1: chain cleared (5c10/5b33), falls on the hero = hit kind 2, lands, stood on with the original's mixed-up FUN_1070_00b6 arguments) |
 | 9 | OBJECTS 0x2715 | LevelInit | GRANNY | the background building collapse FUN_1088_a481 (lever 4ed4 starts it; draws Randoms for debris in particle group 2, sound loop 0x53): simulation, not ported |
 | 10 | ~~OBJECTS 0x14b4~~ the pumping door (VMT 0xd44, FUN_1070_a0bd -> FUN_10a8_11e9) | EnemyFactory | CITY_I04 | DONE (`Level::door_pump`, PUMPDOOR1). Weak check: no Random involved; the hero's path through it matches |
@@ -37,8 +37,7 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
 
 1. ~~OBJECTS 0x146e~~ the tank: DONE (`tank.rs`, TANK1, TANK2).
 2. ~~OBJECTS 0x14e6~~ the spiked ball: DONE (`spikeball.rs`, SPIKE1).
-3. OBJECTS 0x1414 (BUTCHERY, VMT 0xd04, update FUN_1070_4b9b, 221 lines; constructor calls FUN_1070_4b4e per
-   32 px: check for Randoms there, they change the setup RNG).
+3. ~~OBJECTS 0x1414~~ the meat hooks: DONE (`meathook.rs`, MEATHOOK1).
 4. OBJECTS 0x2715 (GRANNY): the background collapse FUN_1088_a481 (simulation with Randoms).
 5. Draw only: 0x2716 (FORPLANE, FUN_1090_178e's 534e/5350) for the renderer.
 6. From AGENTS.md, not seen on the episode maps' load: riding the smallbot (FUN_1070_a18e), levers needing a
@@ -56,6 +55,8 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
   +0x4b (priority 0x11f4, pitch 0x100 / 0x11e turning at volume 0xaa) while the hull lives, then 0x1e at 0x80;
   0x30 arm shot / claw cycle, 0x1d gun, 0x15/0x14 gun recoil, 0x51 hatch, 0x50 claw hits a wall, 0x1a + 0x16
   grab, 0x26 claw off, 0x4a arm off, 0x17 turret off, 0x4e wreck.
+- Meat hooks (FUN_1070_4b9b): wired in `meathook.rs`: 0x33 at speed 0x30 going up, 0x30 going down, the motor loop
+  0x2b on +0x26 (volume (speed*256/full)*2/3, pitch 0x100 - that/2, priority 0x11f4), 0x4b a piece shot apart.
 - Spiked ball (FUN_1070_9a66): wired in `spikeball.rs`: 0xf when it hurts the hero, 1 when shot (sounddiff SPIKE1).
 
 - Granny (FUN_1070_cb38): 0x9d when hit alive, pitch `0x100 - Random(0x20)` (FUN_10e8_03ae; the Random is

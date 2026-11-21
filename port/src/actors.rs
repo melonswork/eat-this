@@ -225,6 +225,7 @@ impl Level {
             crate::granny::KIND => self.granny(id, env),
             crate::tank::KIND => self.tank(id, env),
             crate::spikeball::KIND => self.spikeball(id, env),
+            crate::meathook::KIND => self.meathook(id, env),
             crate::carrier::KIND => self.carrier(id, env),
             crate::wallgun::KIND => self.wallgun(id, env),
             crate::weight::KIND => self.weight(id, env),

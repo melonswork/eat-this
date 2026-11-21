@@ -622,6 +622,34 @@ impl Level {
                 let (y, x) = (o.w(0x10), o.w(0xe));
                 self.add_actor(world, o, y, x);
             }
+            crate::meathook::KIND => {
+                let mut o = Obj::new(kind, 0xd04, 0x28);
+                o.set(10, r.byte2());
+                o.set(0x12, r.at(4));
+                o.set(0x16, r.at(6));
+                o.set(0x18, r.at(8) + 7);
+                o.set(0x1c, r.at(10));
+                o.set(0x1e, if r.count < 7 { 0 } else { r.at(0xc) });
+                o.set(0x26, -1);
+                let n = ((o.w(0x18) - o.w(0x16)) + 0x1f) / 0x20;
+                o.set(0x20, n);
+                for _ in 0..n.max(0) {
+                    let m = crate::meathook::meat(cx.rng);
+                    o.items.push((0x10, m, 0));
+                }
+                let (x, top, bottom) = (o.w(0x12), o.w(0x16), o.w(0x18));
+                o.set(2, x - 0x16f);
+                o.set(6, x + 0x160);
+                o.set(4, top - 0x9c);
+                o.set(8, bottom + 0x9c);
+                if std::env::var_os("ET_KINDS").is_some() {
+                    let c = o.uw(0x1e) as usize;
+                    let w = world.main().width as usize;
+                    let v = world.main().cells[c];
+                    eprintln!("MEATHOOK at x {x} {top}..{bottom} hooks {n} speed {} lever {c:#x} (tx {} ty {}) cell {v:#x} f0 {} f2 {}", o.w(0x1c), c % w, c / w, world.cell_function(v, 0), world.cell_function(v, 2) as i16);
+                }
+                self.add_actor(world, o, top, x);
+            }
             crate::spikeball::KIND => {
                 let mut o = actor(kind, 0xda0, 0x23);
                 o.set(10, r.byte2());

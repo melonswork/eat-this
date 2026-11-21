@@ -89,6 +89,7 @@ streams and EVERY CHECK, so the method is the original's own.
 | `TANK1` | F_LAST, start moved to (2060,735), two weapon-3 pick-ups | the tank 0x146e (FUN_1070_b9d3, `tank.rs`): patrols 2144..2511, turns, lobs grenades from its arm (FUN_1040_6187), knocks the hero back | exact |
 | `TANK2` | F_LAST, start (2050,735), six weapon-3 pick-ups | the tank shot to pieces: arm off (b7cd, effects 9 and 47 = FUN_1040_4d4c), claw out, turret off (b8d3), gun bursts (state -1), hull: the wreck (plates, fan, burning); also: a group-0 ScreenShake acts before the actors (trees) | exact |
 | `SPIKE1` | FOREST05, lever cell (138,91) set on (0x308), start on the branch (2318,1407) | the spiked ball 0x14e6 (FUN_1070_9a66, `spikeball.rs`): swings from the lever, hits the hero standing where it swings up (hit kind 3, bloody 0x3315, drips), two pistol shots push it. Not exercised: shakes pushing it (amp > 7) | exact |
+| `MEATHOOK1` | BUTCHERY, lever (158,48) set on (0xf58), start (2575,817) | the meat hooks 0x1414 (FUN_1070_4b9b, `meathook.rs`): speed ramps up, meat shot apart, the knocked-down hero carried up (gHeroDY set after FUN_1088_532c carries into the next HeroUpdate: `Hero::carry`); its draw's Random(2) under a saved seed is IGNOREd (1070:51af) | exact |
 
 ## Tools (non-obvious usage)
 
@@ -303,7 +304,7 @@ byte 0 of the MAIN-plane cell looked up first); the walker with a gunner (0x140a
 slopes (4e20 = `down_timer`, 4e24 = `sliding`, 4f03 = `released[DOWN]`, FUN_1088_29c8 = `slope_run`) and the
 knocked-down hero sliding too; `Env.hero_obj` lets objects hurt the hero on the spot (`Hero::hurt`),
 `Effects.hero_stand` = FUN_1070_00b6 (hero carried on a moving top, gHeroGround 0x16).
-Facts: gHeroDX set by objects after HeroUpdate is lost (4e06 resets it next frame); the 1168:1381 set test at
+Facts: gHeroDX/DY set by objects after HeroUpdate carry into the next one (GameFrameInGame runs FUN_1088_532c = DX 4e06, DY 0 right AFTER HeroUpdate; `Hero::carry`, used by the meat hooks and the tank; older objects may still drop them); the 1168:1381 set test at
 DS:160a is "-state in 1..5" (hero hanging/climbing ignores platforms); Pascal calls push left to right, so Ghidra's
 param_1 is the LAST source argument (3de2(sprite, steps, frames, y, x, animate)); a long divisor with CX=0, BX=8 is
 0x80000 (BX is the high word). Particle spawn globals that a caller forgets to reset stay set (FUN_1058_0301 leaves

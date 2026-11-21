@@ -92,6 +92,9 @@ pub struct Hero {
     ceiling: i32,
     head_blocked: i32, // 1170:4e68
     pub crushed: bool,
+    /// gHeroDX/DY that objects set after FUN_1088_532c (which runs right after HeroUpdate): the
+    /// next HeroUpdate starts from them (the meat hooks, the tank).
+    pub carry: (i32, i32),
     /// Sensitive-lever tiles touched this frame (HeroTouchTiles), as (ty, tx), for the level.
     pub touched: Vec<(i32, i32)>, // 1170:4e06: HeroPushOutOfWalls' push, becomes next frame's starting dx (FUN_1088_532c)
     released: [bool; 9],
@@ -308,6 +311,7 @@ impl Hero {
             ceiling: 0,
             head_blocked: 0,
             crushed: false,
+            carry: (0, 0),
             touched: Vec::new(),
             released: [true; 9],
             input_cache: [0; 9],
@@ -415,6 +419,11 @@ impl Hero {
     pub fn stand_on(&mut self, y: i32) {
         self.y = y;
         self.ground = 0x16;
+    }
+
+    /// gHeroGround set by an object (0x1414 carrying him: 0x16).
+    pub fn set_ground(&mut self, g: i32) {
+        self.ground = g;
     }
 
     pub fn ground(&self) -> i32 {
@@ -547,7 +556,8 @@ impl Hero {
         self.hit_mask = 0;
         let mut friction = true;
         let mut walking = false;
-        let (mut dx, mut dy) = (std::mem::take(&mut self.nudge), 0);
+        let (cx, cy) = std::mem::take(&mut self.carry);
+        let (mut dx, mut dy) = (std::mem::take(&mut self.nudge) + cx, cy);
         for (r, &v) in self.released.iter_mut().zip(&input) {
             if v < 1 {
                 *r = true;
@@ -1737,6 +1747,11 @@ impl Hero {
     pub fn grab(&mut self) {
         self.state = HELD;
         self.anim = 0;
+    }
+
+    /// gHeroDX = v from an object (after FUN_1088_532c gave it 4e06): the next frame starts at v.
+    pub fn set_dx(&mut self, v: i32) {
+        self.carry.0 = v - self.nudge;
     }
 
     /// gHeroCrouch = 1: the claw still holds him.

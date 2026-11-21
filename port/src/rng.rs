@@ -23,6 +23,11 @@ impl PascalRandom {
         }
     }
 
+    /// A generator for drawing code under a saved seed: no logging, no dump file.
+    pub fn plain(seed: u32) -> Self {
+        PascalRandom { seed, calls: 0, log: false, dump: None, frame: 0 }
+    }
+
     fn next(&mut self) -> u32 {
         self.calls += 1;
         self.seed = self.seed.wrapping_mul(0x0808_8405).wrapping_add(1);

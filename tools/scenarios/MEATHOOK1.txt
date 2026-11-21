@@ -1,0 +1,21 @@
+# The meat hooks (OBJECTS 0x1414, FUN_1070_4b9b): BUTCHERY's hook chain at x 2607 (y 528..806).
+# Its lever (158,48) is set on (tile 0xf58): the chain speeds up and runs; the hero shoots pieces
+# of meat apart (bits, flames), then steps under it.
+level MAPS/BUTCHERY.MAP
+start 2575 817
+cell 1 158 48 0xf58
+mouse 190 70
+150
+10 lmb
+20
+10 lmb
+20
+10 lmb
+20
+mouse 190 40
+10 lmb
+20
+10 lmb
+40
+12 right
+100

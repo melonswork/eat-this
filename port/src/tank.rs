@@ -128,16 +128,21 @@ impl Level {
         }
         let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
         let last = self.o(id).w(0x36);
-        // The hero standing on it (gHeroDX += +0x38 too, lost after HeroUpdate).
+        // The hero standing on it moves with it (gHeroDX += +0x38).
+        let step = self.o(id).w(0x38);
         if self.o(id).w(0x2e) < 1 {
-            self.stand_on(env, ly - 0x24, last - 0x24, x + 0x2d, x - 0xc);
+            if self.stand_on(env, ly - 0x24, last - 0x24, x + 0x2d, x - 0xc) {
+                env.hero_obj.carry.0 += step;
+            }
             let o = self.o(id);
             if o.w(0x40) < 0x58 {
                 o.set(0x40, o.w(0x40) + 1);
             }
         } else {
-            if !self.stand_on(env, ly - 0x44, last - 0x44, x + 0x19, x - 0x10) {
-                self.stand_on(env, ly - 0x27, last - 0x27, x + 0x31, x + 0x18);
+            if self.stand_on(env, ly - 0x44, last - 0x44, x + 0x19, x - 0x10)
+                || self.stand_on(env, ly - 0x27, last - 0x27, x + 0x31, x + 0x18)
+            {
+                env.hero_obj.carry.0 += step;
             }
             let turning = self.o(id).w(0x22) != 0;
             if turning {
@@ -342,6 +347,7 @@ impl Level {
                 let left = (lx - step) + if i == 3 { -0xc } else { 0 };
                 if h.x >= left && h.x <= lx && ranges(bottom + i, top + i, h.y, h.prev_y) {
                     env.fx.hero_stand = Some(ly - 0x2f + i);
+                    env.hero_obj.carry.0 += o.w(0x38);
                     break;
                 }
                 lx -= step;
@@ -383,15 +389,23 @@ impl Level {
             && ly2 < h.y - 5
             && self.o(id).w(0x40) != 0x1d
         {
-            // Held: gHeroDX/DY towards the claw (lost after HeroUpdate), gHeroCrouch = 1.
-            if env.hero_obj.state == crate::hero::HELD {
-                env.hero_obj.hold();
-            } else if env.hero_obj.hurt_kind(0x60, 0, env.rng) == 1 {
+            // Held: pulled towards the claw (gHeroDX/DY), gHeroCrouch = 1.
+            let mut held = env.hero_obj.state == crate::hero::HELD;
+            if !held && env.hero_obj.hurt_kind(0x60, 0, env.rng) == 1 {
                 let hero = &mut *env.hero_obj;
                 sound::play_at(0x1a, hero.y, hero.x);
                 sound::play_at(0x16, hero.y, hero.x);
                 hero.grab();
                 env.fx.shakes.push((0x18, 0xe));
+                held = true;
+            }
+            if held {
+                let step = self.o(id).w(0x38);
+                let hero = &mut *env.hero_obj;
+                let dx = (lx + step + 5) - h.x;
+                hero.set_dx(dx.signum() * dx.abs().min(4));
+                let dy = (ly2 + 0x25) - h.y;
+                hero.carry.1 = dy.signum() * dy.abs().min(2);
                 hero.hold();
             }
         }
