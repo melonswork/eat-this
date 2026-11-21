@@ -178,16 +178,20 @@ Effects are SOUNDS/*.WAV (ids = ETMAIN.SCR's `LoadWAV=` lines in order), played 
   (60 s of LEVEL1_2 with Cityviol), `work/audio/GRINDER.wav`.
 - Oracle: every `mise run trace` now writes `work/tracer/<DEMO>/sounds.tsv` (each SoundPlay/SoundSetInfo/loop stop
   with lvol/rvol/pitch and the caller). `python3 tools/sounddiff.py DEMO [--all]`: matched/missing/extra plays and
-  value mismatches; the missing list by caller is the to-do list. State: GRINDER 98/99 exact, LEVEL1_2 1276/1801,
-  LEVEL2_1 539/905, 0 extras. Done: grinder, platforms (sets at 1170:0ec4), doors, hero moves/landing/ledges,
-  weapons fire + switch, pick-ups and plain effect sounds (`effects::PLAIN_SOUNDS`), effects 75/82/84/87/30/83,
-  particle hits (0fcc, 0c4d, 45a3, 0a80, 556e, 1481/188c bounces, 0cf8 sparks), the drone, ambient emitters
-  (plain loops, 10000, birds 0x2711, rain/thunder 0x2712, 0x2713), the hero's death cry.
-- Left (biggest first in sounddiff): enemies in segment 1070 (1b00, 4051, 30b6, 7eb2, a3cf, 60ca, 90f1, 5911,
-  8cd7, 5ce1, 5b08, 02b3, af70, the voices FUN_1070_584e = pitch from obj+0x26), the hero's hurt cry (3c05 from
-  other callers), effects 06d4/075a (bullet hits, Random(0xc) gate), 2046/22c1 (napalm), 1050_14bd fire crawlers,
-  1060 lifts (152f/15a6), the HUD message blip (FUN_1088_0fa4, 87 when 16d8), vehicle (HeroUpdateVehicle),
-  START's background (FUN_1090_0292). The pitch direction (higher = faster) is assumed, see re/sound.md.
+  value mismatches (only fields the original's flags set; same-frame plays of one id pair by value); the missing
+  list by caller is the to-do list. State (2026-11-21): every oracle demo plays what the original plays but for 3
+  of 6501: GRINDER 99/99, LEVEL1_1 1183/1183, LEVEL1_2 1800/1801, LEVEL2_1 905/905, LEVEL2_2 1310/1311, LEVEL3_1
+  486/486, LEVEL3_2 236/237, all 14 scenario demos complete; 1 extra (CARRIER1's last frame, where the recording
+  stops). Every enemy, object, effect, the vehicle, lifts, hurt cries, the message blip, START's train and rain
+  are wired; a sound call sits where the original's is, under the same conditions, with the Random() the port
+  already drew (comments like "the sound's pitch" next to a bare `rng.random` mark one not wired yet: none left
+  in the demos' paths).
+- Left: the big alien's growl 0xa5 once in LEVEL1_2 (frame 11171) and LEVEL2_2, one blip 0x57 in LEVEL3_2; small
+  volume differences (1-5) on door sounds (60bb from FUN_10a8_0975: probably the listener of the frame they start
+  in) and WEIGHT1's 50cf. Not in any demo, so unchecked: the frozen/burnt aliens, the tank, other unported objects.
+  Sound helpers for objects: `sound::play_at`/`play_at_pitch`/`play_at_vol`, loops `audible` + `priority(0x11f4)`
+  + `keep(key::obj(id, handle_offset), id)`, `looping(key)` for code that tests a handle (the carrier),
+  `stop_loops` = 03d5 (LevelFirstFrame). The pitch direction (higher = faster) is assumed, see re/sound.md.
 
 ## Renderer (2026-11-20)
 

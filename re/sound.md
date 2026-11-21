@@ -89,6 +89,23 @@ SoundSetInfo (0575) and loop stop (10e0:0339) with the record's lvol/rvol/pitch,
 the caller chain. `python3 tools/sounddiff.py DEMO` runs the port with `ET_SOUND_TSV` and matches
 plays by id within +-1 frame, then compares volumes and pitch (only fields whose flag is set).
 
+## Notes from wiring the callers (2026-11-21)
+
+- Lifts (FUN_1060_15a6): the start sound s plays through the loop helper with 1aba = 0 (once), then
+  SoundPlay(s + 1) with flags 0x5000 (count 0, 5d8a = the first one's instance: queued after it, the loop);
+  16ef keeps s + 1 every moving frame, 152f plays s + 2 and stops the loop. Row word +4 of 1170:09ce is s.
+- Draw routines that play sounds: the cable lift 1060:2242 (sound 0x44 each tile row crossed) and START's
+  background 1090:0292 (the train, sound 0x13 every 0x46 frames over its box); the port plays them from the
+  simulation side (`platobj::lift_dust`, `storm::bridge_sound`).
+- Particles' spawn effect 091e (FUN_1050_3de2 calls 60bb when there's no delay) is a sound when >= 30000
+  (the plants' bubbles 0x7570/71, the big alien's sparks 0x7576).
+- FUN_1070_0105 (water splash, sound 0x6f) takes its volume: aliens 0xaa, big aliens 0x100, weights 0x180;
+  the hero's is `fall * 2 + 0x80` capped at 0x100.
+- The thunder (FUN_1088_11a3): FUN_10e8_037f(param_1, param_2) stores param_1 in rvol (5d90), param_2 in lvol.
+- START's rain loop (FUN_1090_04d7): volume 4eda * 0x100 / 0x3bf, priority 0x17d0, handle 4de0.
+- LevelFirstFrame calls FUN_10e0_03d5 (all loops stop) before the camera's 0c82 sets the listener: a teleport
+  restarts the loops.
+
 ## Port
 
 `port/src/sound.rs`: the DWS-like front end (thread-local; pure volume math; play/keep/stop
