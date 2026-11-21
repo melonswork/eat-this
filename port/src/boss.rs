@@ -96,6 +96,7 @@ impl Level {
         crate::particles::smoke(ps, env.rng, y - 0xf, x);
         ps.p.colour = 0;
         env.fx.shakes.push((0x1c, 0x10));
+        crate::sound::play_at(0x3d, y, x);
     }
 
     /// FUN_1070_2f6e: it falls apart and leaves a wreck.

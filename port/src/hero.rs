@@ -705,6 +705,7 @@ impl Hero {
                         self.sliding = 1;
                         self.facing = dirn;
                         self.down_timer = 0;
+                        sound::play_at(0x58, self.y, self.x);
                     }
                     if !held(DOWN) {
                         self.down_timer = 0;
@@ -913,6 +914,7 @@ impl Hero {
                             skip = true;
                         } else {
                             self.messages.push((-20, false)); // - UNLOCKED -
+                            sound::play_at(0x91, ly, (self.x & !15) + 7);
                             self.keys[key] = false;
                             self.cell_steps.push((((ly - 0x10) >> 4) * width + (self.x >> 4)) as u16);
                         }

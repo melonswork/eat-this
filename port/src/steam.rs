@@ -7,6 +7,13 @@ use crate::level::Level;
 impl Level {
     pub(crate) fn steam(&mut self, id: usize, env: &mut Env) {
         let (x, y, kind) = (self.o(id).w(0xe), self.o(id).w(0x10), self.o(id).w(10));
+        // Its hiss (handle +0x14), quieter than most.
+        crate::sound::set_volume(0xaa);
+        if crate::sound::audible(y, x) {
+            crate::sound::priority(0x11f4);
+            crate::sound::keep(crate::sound::key::obj(id, 0x14), if kind == 0 { 0x69 } else { 0xc });
+        }
+        crate::sound::set_volume(0x100);
         let (cx, cy) = env.camera;
         if !(x - 0x18 <= cx + 0x13f && cx <= x + 0x18 && y - 0x80 <= cy + 199 && cy <= y + 0x10) {
             return;
