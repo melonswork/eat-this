@@ -214,6 +214,43 @@ fn looks(p: &mut Painter, o: &Obj) {
 fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
     let (x, y) = (o.w(0xe), o.w(0x10));
     match o.kind {
+        // FUN_1070_0cce's draw: the passengers (mirrored when it flies left), the two jets while
+        // it flies, the body (lit by a hit). Not drawn: the hit glow (1b00, mode 0x28) and the
+        // flames of the wreck (FUN_1040_62ed).
+        crate::carrier::KIND => {
+            let (top, dir) = (o.w(0x5e), o.w(0x24));
+            for i in (0..o.w(0x2a).clamp(0, 7) as usize).rev() {
+                let b = 0x2c + 10 * i;
+                if o.w(b) >= 0 {
+                    p.hflip = dir < 0;
+                    p.at(o.w(b + 6), x + o.w(b + 2), top + o.w(b + 4));
+                    p.hflip = false;
+                }
+            }
+            let body = if o.w(0x20) == 1 {
+                0x5c05
+            } else {
+                p.at(0x5821, x - 0x10, top);
+                p.at(0x5821, x + 0x10, top);
+                0x5c00 + 3 - ((o.w(0x22) / 6) % 6 - 3).abs()
+            };
+            if o.w(0x28) > 0 {
+                p.mode = 0x24;
+                p.colour = p.flash;
+            }
+            p.at(body, x, top);
+            p.mode = 0;
+            p.colour = 0;
+        }
+        crate::wallgun::KIND => crate::wallgun::draw(p, o),
+        crate::weight::KIND => crate::weight::draw(p, o),
+        crate::weight::SLAB => crate::weight::draw_slab(p, o),
+        // FUN_1070_cb38: the granny, sprite +0x3a mirrored by her facing (1170:1b54).
+        crate::granny::KIND => {
+            p.hflip = o.w(0x20) < 0;
+            p.at(o.w(0x3a), x, y);
+            p.hflip = false;
+        }
         // Walker (FUN_1070_4051), walking gunner (FUN_1070_af70): recorded by their updates.
         0x140a => looks(p, o),
         crate::turret::KIND => {

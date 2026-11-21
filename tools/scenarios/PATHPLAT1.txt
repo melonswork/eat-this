@@ -1,0 +1,13 @@
+# Path platforms (OBJECTS type 100, kind 0, FUN_1060_0166 / FUN_1060_0819, mode 4 = loop): CITY_I01's
+# two platforms going round the rectangle (2608..2672, 688..1136); the start moved onto the second
+# one, which carries the hero left, up, right and down; he jumps on it, then steps off.
+level MAPS/CITY_I01.MAP
+start 2680 1135
+mouse 200 100
+300
+8 up
+200
+8 up
+400
+20 left
+150

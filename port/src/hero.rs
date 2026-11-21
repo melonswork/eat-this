@@ -1054,7 +1054,8 @@ impl Hero {
         }
 
         // Walked off an edge.
-        if self.ground == 0 && self.state < 1 && matches!(self.state, GROUND | CROUCH) {
+        // (Not while hanging or climbing: the 1170:160a set test is -state in 1..5.)
+        if self.ground == 0 && self.state < 1 && !(-5..=-1).contains(&self.state) {
             self.start_jump(1, FALL);
             if self.prev_ground == 5 {
                 // Off the end of a conveyor belt: thrown along its way.
@@ -1263,6 +1264,17 @@ impl Hero {
                     self.shakes.push((0xe, 4));
                 }
             }
+            // Falling through the water line of his sector: a splash (sound 0x6f, louder the
+            // longer the fall, pitch 0xd0 + Random(0x50); FUN_1040_6ac8).
+            let line = w.sectors[lv.sector.unwrap_or(0)].water[1];
+            if self.prev.1 - 4 < line && line <= self.y - 4 {
+                rng.random(0x50);
+                ps.p.callback = 0x1d33;
+                ps.p.colour = 0x34;
+                ps.spawn_seq(0x6d00, 2, 0x12, line - 1, self.x, 1);
+                ps.p.colour = 0;
+                ps.p.callback = 0;
+            }
             self.vy = self.vy.min(0x32);
         }
 
@@ -1354,6 +1366,8 @@ impl Hero {
                             let mut released = self.released[DOWN];
                             crate::platobj::update_lift(p, &mut side, w, rng, input[DOWN] > 0, &mut released, &mut self.shakes);
                             self.released[DOWN] = released;
+                        } else if p.kind == 0 {
+                            crate::platobj::update_path(p, &mut side, w);
                         } else {
                             crate::platobj::update(p, &mut side, ps.now);
                         }
@@ -1690,6 +1704,16 @@ impl Hero {
     /// 1 (hurt) or 2 (killed).
     pub fn hurt(&mut self, damage: i32, rng: &mut PascalRandom) -> i32 {
         self.hit(damage, 1, rng)
+    }
+
+    /// FUN_1088_3c32(damage) with 1170:162a = 2: crushed (a falling weight).
+    pub fn crushed(&mut self, damage: i32, rng: &mut PascalRandom) -> i32 {
+        self.hit(damage, 2, rng)
+    }
+
+    /// 1170:4e2a >= 1: invulnerable after a hit.
+    pub fn invulnerable(&self) -> bool {
+        self.hurt >= 1
     }
 
     /// FUN_1088_3c32(damage) with 1170:162a = `kind` (1 shot, 4 burnt): 0 invulnerable, 1 hurt,

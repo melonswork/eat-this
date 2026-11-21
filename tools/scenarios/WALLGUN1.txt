@@ -1,0 +1,228 @@
+# The gun turret (OBJECTS 0x13ec, FUN_1070_2550): FOREST02's by the trunk at (543,1295), the start
+# moved onto the bridge to its right. It turns to the hero and fires both barrels on its cycle (150);
+# then he shoots it to 0 hit points (smoke, gun pieces, spinning down) and on to below -0x80 (breaks).
+level MAPS/FOREST02.MAP
+start 650 1340
+mouse 60 90
+330
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+3 lmb
+5
+150

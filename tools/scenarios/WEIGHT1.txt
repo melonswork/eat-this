@@ -1,0 +1,34 @@
+# The falling weight (icon 61000, kind 0x13a6, FUN_1068_215e): CITY_I03's weight on its chain at
+# (2040,784), the start moved left of it. The hero walks under it: it shakes, drops (the chain breaks
+# into bits), crushes him (hero hit kind 2, 0xa0), breaks the planks, lands; then he shoots it.
+level MAPS/CITY_I03.MAP
+start 1960 881
+mouse 160 160
+20
+35 right
+200
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+3 lmb
+6
+100

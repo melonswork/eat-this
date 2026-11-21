@@ -222,6 +222,21 @@ impl Level {
         let kind = self.objects[id].as_ref().unwrap().kind;
         match kind {
             0x145a => self.smallbot(id, env),
+            crate::granny::KIND => self.granny(id, env),
+            crate::carrier::KIND => self.carrier(id, env),
+            crate::wallgun::KIND => self.wallgun(id, env),
+            crate::weight::KIND => self.weight(id, env),
+            crate::weight::SLAB => self.slab(id, env),
+            0x14b4 => {
+                // FUN_1070_a0bd: the door pumps until its lever is on, then this goes.
+                let o = self.o(id);
+                let (lever, y, x) = (o.w(0x14), o.w(0x10), o.w(0xe));
+                if Level::lever_state(env.world, lever as u16) < 1 {
+                    self.door_pump(env.world, y, x, env.frame, env.h.x);
+                } else {
+                    self.remove_current(id);
+                }
+            }
             0x143c => self.crate_box(id, env),
             0x13d8 => self.mine(id, env),
             0x13e2 => self.gunship(id, env),
@@ -756,7 +771,7 @@ impl Level {
     fn after_move(&mut self, id: usize, env: &mut Env) {
         let kind = self.objects[id].as_ref().unwrap().kind;
         match kind {
-            0x145a | 0x143c | 0x140a | crate::sentry::KIND | crate::decals::DROP | crate::decals::SHELL => {
+            0x145a | 0x143c | 0x140a | crate::granny::KIND | crate::sentry::KIND | crate::decals::DROP | crate::decals::SHELL => {
                 let o = self.o(id);
                 if o.w(0x1c) == 0 {
                     if o.w(0x1a) == 0 {
@@ -811,9 +826,10 @@ impl Level {
                 }
             }
             crate::turret::KIND => self.turret_after_move(id, env),
-            0x1428 => self.alien_after_move(id),
+            0x1428 => self.alien_after_move(id, env),
             crate::gunship::WRECK => self.wreck_after_move(id),
             0x148c => self.spring_after_move(id),
+            crate::carrier::KIND => self.carrier_after_move(id, env),
             0x1432 => self.bigali_after_move(id, env),
             k => eprintln!("warning: move hook of {k:#x} not ported"),
         }
@@ -831,7 +847,7 @@ pub(crate) fn slope_height(w: &World, x: i32, cell: u16) -> i32 {
 }
 
 /// FUN_1058_0002: an unbounded box (the object updates wherever the camera is).
-fn unbounded(o: &mut crate::objects::Obj) {
+pub(crate) fn unbounded(o: &mut crate::objects::Obj) {
     o.set(2, -0x7fff);
     o.set(4, -0x7fff);
     o.set(6, 0x7fff);

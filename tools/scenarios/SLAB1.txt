@@ -1,0 +1,14 @@
+# The falling sign (OBJECTS 0x14a0, FUN_1068_1f3c): GRANNY's shop sign at (1113,889), the start
+# moved left of it. The hero walks under it: its chain goes, it falls on him (hero hit kind 2,
+# 0x60), lands (dust); he jumps onto it and walks off.
+level MAPS/GRANNY.MAP
+start 1060 975
+mouse 250 100
+20
+45 right
+80
+10 up
+30 right
+100
+40 right
+100

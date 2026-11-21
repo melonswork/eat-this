@@ -48,6 +48,46 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
     plain_sound(id, y, x);
     match id {
         0 => {}
+        7 => {
+            // FUN_1040_0897: an explosion rising.
+            lv.particles.spawn_seq(0x6400, 2, 0x24, y, x, 1);
+            lv.particles.line(2, 0x5a0);
+        }
+        50 => {
+            // FUN_1040_50cf: a plank bridge (tile function 60300) collapses, left of x and from x
+            // to the right, plank by plank (FUN_1040_4fd9). Sounds 0x26, 0x1c at half volume.
+            fx.shakes.push((0x18, 0xc));
+            let ps = &mut lv.particles;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            ps.p.callback = 0x17f4;
+            let mut px = x;
+            loop {
+                px -= 0x10;
+                if world.tile_function_at(y, px) != 60300 {
+                    break;
+                }
+                plank_breaks(lv, world, y, px, rng, fx);
+            }
+            let mut px = x;
+            loop {
+                plank_breaks(lv, world, y, px, rng, fx);
+                px += 0x10;
+                if world.tile_function_at(y, px) != 60300 {
+                    break;
+                }
+            }
+            let ps = &mut lv.particles;
+            ps.p.delay = 0;
+            ps.p.draw = 0;
+            ps.p.callback = 0;
+            ps.p.hits = 0;
+            ps.p.on_death = 0;
+        }
+        23 => {
+            // FUN_1040_2af4: a flash.
+            lv.particles.spawn_seq(0x6900, 2, 0x19, y, x, 1);
+        }
         34 => explosion(lv, world, y, x, rng, fx),
         69 => {
             // FUN_1040_5c06: a big wall collapses: the tiles above step on, dust and rubble fly.
@@ -557,6 +597,40 @@ fn rubble(lv: &mut Level, sprite: i32, y: i32, x: i32, rng: &mut PascalRandom) {
     }
     ps.p.on_death = 0;
     ps.p.hits = 0;
+}
+
+/// FUN_1040_4fd9 (nested in 50cf): one plank steps on (FUN_1050_5a07) and two splinters fly.
+fn plank_breaks(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+    if std::env::var_os("ET_PLANK").is_some() { let c = world.cell_at(crate::world::MAIN_PLANE, y, x).unwrap_or(0); eprintln!("PLANK y {y} x {x} tile {c:#x} f2 {} f1 {:#x}", world.cell_function(c, 2) as i16, world.cell_function(c, 1)); }
+    let w = world.main().width;
+    let cell = ((y >> 4) * w + (x as u16 >> 4) as i32) as u16;
+    let t = world.main().cells[cell as usize];
+    let next = (t as i32 + world.cell_function(t, 2) as i16 as i32) as u16;
+    if (next as i16) < 0 {
+        // FUN_1088_1364 with a negative tile: the blast runs right here (nested), not queued.
+        if world.cell_function(t, 1) & 0x80 != 0 {
+            let strength = -(next as i16 as i32) * 0x10;
+            explode_tile(lv, world, strength, 0xffff, (cell as i32 / w) << 4, (cell as i32 % w) << 4, rng, fx);
+        }
+    } else {
+        lv.set_cell(world, next, cell, fx);
+    }
+    let ps = &mut lv.particles;
+    ps.p.delay = rng.random(4);
+    ps.p.draw = rng.random(2);
+    let step = rng.random(3) + 2;
+    ps.spawn(0x7552, y - 8, x); // FUN_1050_4106: its own frame step
+    ps.last_mut().m.set(0x26, step);
+    let side = rng.random(2);
+    let a = (side * 0x28 + 0x46) * 0x10 - rng.random(0x41);
+    let s = rng.random(0x10) + 0x30;
+    ps.throw(9, s, a);
+    let step = rng.random(3) + 2;
+    ps.spawn(0x7552, y + 2, x);
+    ps.last_mut().m.set(0x26, step);
+    let a = ((side ^ 1) * 0x28 + 0x46) * 0x10 - rng.random(0x41);
+    let s = rng.random(0x10) + 0x30;
+    ps.throw(9, s, a);
 }
 
 /// FUN_1050_5a33(strength, mask, y, x): blow up the tile at (x, y) if its function 3 matches

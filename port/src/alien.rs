@@ -1086,7 +1086,7 @@ impl Level {
     }
 
     /// FUN_1070_586f (VMT +0x10 after the physics): falling and landing.
-    pub fn alien_after_move(&mut self, id: usize) {
+    pub fn alien_after_move(&mut self, id: usize, env: &mut Env) {
         let o = self.o(id);
         if o.w(0x1c) == 0 {
             if o.w(0x1a) == 0 {
@@ -1102,7 +1102,8 @@ impl Level {
             if o.w(0x28) != -200 {
                 o.set(0x28, 10);
             }
-            // FUN_1070_0105: a splash entering water (no water in the levels ported so far).
+            let (y, prev, x) = (o.w(0x10), o.w(0x40), o.w(0xe));
+            self.splash(env, y, prev, x);
         } else if o.w(0x1a) != 0 {
             if o.w(0x28) == 10 {
                 o.set(0x28, -500);
@@ -1146,8 +1147,26 @@ fn pingpong(t: i32, n: i32, k: i32) -> i32 {
     (k - 1) - v.abs()
 }
 
+impl Level {
+    /// FUN_1070_0105(volume, y, previous y, x): something falling through the water line of the
+    /// hero's sector (1170:4656 +0x16) splashes (sound 0x6f, pitch 0xd0 + Random(0x50)).
+    pub(crate) fn splash(&mut self, env: &mut Env, y: i32, prev: i32, x: i32) {
+        let line = env.world.sectors[self.sector.unwrap_or(0)].water[1];
+        if prev - 4 < line && line <= y - 4 {
+            env.rng.random(0x50);
+            // FUN_1040_6ac8: the splash, drawn clipped at the line (callback 1050:1d33).
+            let ps = &mut self.particles;
+            ps.p.callback = 0x1d33;
+            ps.p.colour = 0x34;
+            ps.spawn_seq(0x6d00, 2, 0x12, line - 1, x, 1);
+            ps.p.colour = 0;
+            ps.p.callback = 0;
+        }
+    }
+}
+
 /// FUN_1040_66d4: landing dust.
-fn dust(ps: &mut crate::particles::Particles, y: i32, x: i32) {
+pub(crate) fn dust(ps: &mut crate::particles::Particles, y: i32, x: i32) {
     ps.p.colour = 0x10;
     ps.spawn_seq(0x6d00, 2, 0x13, y, x, 1);
     ps.p.colour = 0;

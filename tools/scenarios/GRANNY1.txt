@@ -1,0 +1,26 @@
+# The granny (OBJECTS 0x1482, FUN_1070_cb38): GRANNY's first grannies right of the start. Walk up,
+# shoot one with the pistol (knocked over: the hat flies, she bleeds, lies, gets up hit flashes),
+# pick up weapon 3 (copied next to him) and blow one up (red gibs, smoke, splat).
+level MAPS/GRANNY.MAP
+# the weapon-3 pick-up under the barrel at (263,487), copied to where he stops
+cell 2 19 30 0xd06
+mouse 300 110
+20
+60 right
+10 up right
+20 right
+20
+5 lmb
+60
+5 lmb
+40
+5 lmb
+120
+# the copied weapon-3 pick-up, then rockets at the grannies
+12 right
+20
+mouse 310 110
+5 rmb
+60
+5 rmb
+150

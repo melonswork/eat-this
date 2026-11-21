@@ -1650,6 +1650,7 @@ impl Level {
                     m.set(0x24, m.w(0x24) + 1);
                 }
             }
+            0x1d33 => {} // FUN_1050_1d33: a splash, drawn clipped at the water line
             other => eprintln!("warning: particle procedure 1050:{other:04x} not ported"),
         }
     }
@@ -1979,6 +1980,30 @@ impl Level {
                     m.set(0x1e, 0x200);
                     ps.p.colour = 0;
                     ps.p.callback = 0;
+                }
+            }
+            65 => {
+                // FUN_1040_105d: a heavy piece bounces (effect 16); landing slowly it thuds
+                // (dust, sound 0x4b at pitch 0xf6 + Random(0x14)); hitting a ceiling it sheds
+                // two bits.
+                let v = self.bounce_off(f);
+                let (hi, lo) = (v >> 16, v as u32 & 0xffff);
+                let side = self.particles.hit_side;
+                let ps = &mut self.particles;
+                if hi >= 0 && (hi < 2 || (hi < 3 && lo < 0xaaab)) && side != 2 {
+                    ps.spawn_seq(0x6f00, 2, 0x18, y, x, 1);
+                    let r = f.rng.random(0x100);
+                    let m = &mut ps.last_mut().m; // FUN_1050_4a29(r + 0x240, r + 0x200)
+                    m.set(0x1c, r + 0x200);
+                    m.set(0x1e, r + 0x240);
+                    m.set(0x42, 0x2148);
+                    f.rng.random(0x14);
+                    f.fx.shakes.push((0x12, 5));
+                } else if side == 3 {
+                    ps.spawn_seq(0x1918, 3, 3, y, x, 1);
+                    ps.throw(0xe, 0x30, 0x3c0);
+                    ps.spawn_seq(0x1918, 4, 3, y, x, 1);
+                    ps.throw(0xe, 0x20, 0x780);
                 }
             }
             15 => {
