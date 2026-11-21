@@ -77,14 +77,17 @@ impl Level {
             if !self.line_of_sight(env, target, h.x, eye, x) {
                 let o = self.o(id);
                 if o.b(0x45) == 0 {
-                    o.set_b(0x45, 1); // a growl
+                    crate::alien::voice(o, 0xa5, o.w(0x10) - 0x18, o.w(0xe)); // a growl
+                    o.set_b(0x45, 1);
                 }
                 if o.w(0x40) != 0 {
                     o.set(0x40, 1);
                 }
             } else {
                 if h.hit_mask & 0x200 != 0 && env.rng.random(3) != 0 {
-                    env.rng.random(2); // which growl
+                    let g = env.rng.random(2);
+                    let o = self.o(id);
+                    crate::alien::voice(o, (g + 0xa9) as usize, o.w(0x10) - 0x18, o.w(0xe));
                 }
                 let o = self.o(id);
                 o.set(0x40, 2);
@@ -309,8 +312,9 @@ impl Level {
                         let by = (y - 0x20) - env.rng.random(8);
                         let which = env.rng.random(3);
                         self.blood_splat(env.world, 0x541e + which, by, x);
-                        env.rng.random(3); // the death cry
+                        let c = env.rng.random(3);
                         let o = self.o(id);
+                        crate::alien::voice(o, (c + 0x66) as usize, o.w(0x10), o.w(0xe));
                         o.set(0x28, -300);
                         o.set(0x2e, 0);
                         self.big_bleed(id, env, y - 0x14, x);
@@ -323,7 +327,9 @@ impl Level {
                     o.set(0x2a, 3);
                     if self.particles.hit_mask != 0x48 {
                         if self.o(id).b(0x44) != 0 && env.rng.random(4) == 0 {
-                            env.rng.random(0x40); // a ricochet off the armour
+                            let p = env.rng.random(0x40); // a ricochet off the armour
+                            let o = self.o(id);
+                            crate::sound::play_at_pitch(0x7c, 0x100 - p, o.w(0x10), o.w(0xe));
                         }
                     }
                     let o = self.o(id);
@@ -338,6 +344,7 @@ impl Level {
                             // FUN_1070_7bfe: the shield goes up.
                             o.set(0x28, -200);
                             o.set(0x3c, 0x69);
+                            crate::sound::play_at(0x75, o.w(0x10), o.w(0xe));
                         }
                     }
                 }
@@ -409,14 +416,19 @@ impl Level {
             return;
         }
         if look.dist < 0x70 || env.rng.random(0x20) == 0 {
-            env.rng.random(3); // a roar sometimes
+            let roar = env.rng.random(3) == 0; // a roar sometimes
             let o = self.o(id);
+            if roar {
+                crate::alien::voice(o, 0xa7, o.w(0x10) - 0x18, o.w(0xe));
+            }
             o.set(0x28, -0x96);
             o.set(0x30, 0);
             o.set(0x3a, if o.b(0x44) == 0 { 0x8c } else { 0xd2 });
         } else if look.angle < 0x3c0 || look.angle > 0x12c0 {
             if env.rng.random(4) == 0 {
-                env.rng.random(2);
+                let g = env.rng.random(2);
+                let o = self.o(id);
+                crate::alien::voice(o, (g + 0xa9) as usize, o.w(0x10) - 0x18, o.w(0xe));
             }
             let o = self.o(id);
             o.set(0x28, -0x8c);
@@ -519,6 +531,7 @@ impl Level {
         shell(ps, side * (r + 0xa0) + 0x5a0, y - 9, x - side * 0xd);
         ps.p.group = 1;
         ps.p.draw = 0;
+        crate::sound::play_at(0x74, y, x);
         env.fx.shakes.push((5, 4));
         let o = self.o(id);
         o.set(0x3a, o.w(0x3a) + 1);
@@ -552,6 +565,7 @@ impl Level {
         ps.p.colour = 0;
         ps.spawn_seq(0x1909, 2, 3, y, x + dir, 1);
         ps.p.draw = 0;
+        crate::sound::play_at(0x7a, y, x);
         env.fx.shakes.push((8, 6));
         env.noise = 2;
         let o = self.o(id);
@@ -594,6 +608,7 @@ impl Level {
                 o.set(0x2e, o.w(0x2e) + 1);
                 if o.w(0x2e) == 0x31 {
                     env.fx.shakes.push((0x18, 0xc));
+                    crate::sound::play_at(0x76, o.w(0x10), o.w(0xe));
                     if self.o(id).w(0x12) == 0 && env.rng.random(2) == 0 {
                         self.o(id).set(0x12, 0xd10);
                     }
@@ -615,7 +630,9 @@ impl Level {
             }
             if self.o(id).w(0x32) > 0 {
                 if self.o(id).w(0x32) == 0xaf && env.rng.random(8) != 0 {
-                    env.rng.random(4); // its last words
+                    let w = (env.rng.random(4) + 0xa7).max(0xa8); // its last words
+                    let o = self.o(id);
+                    crate::alien::voice(o, w as usize, o.w(0x10), o.w(0xe));
                 }
                 let o = self.o(id);
                 o.set(0x32, o.w(0x32) - 1);
@@ -626,6 +643,13 @@ impl Level {
                     return true;
                 }
                 o.set(0x34, (o.w(0x32) < 0x9b) as i32 + 0x5b34);
+                if o.w(0x32) == 0x9b {
+                    crate::sound::play_at(0x78, o.w(0x10), o.w(0xe));
+                }
+                let t = 0x69 - o.w(0x32);
+                if t > 0 && t % 0xc == 0xb {
+                    crate::sound::play_at(0x77, o.w(0x10), o.w(0xe));
+                }
                 o.set(2, -0x7fff);
                 o.set(4, -0x7fff);
                 o.set(6, 0x7fff);
@@ -635,6 +659,7 @@ impl Level {
         let (x, y) = self.bxy(id);
         let sprite = self.o(id).w(0x34);
         if self.stomp(sprite, y, x, mirror, env) > 1 {
+            crate::sound::play_at(0xf, y, x);
             let o = self.o(id);
             o.set(0x10, o.w(0x10) - 3);
             env.fx.shakes.push((5, 2));
@@ -697,6 +722,8 @@ impl Level {
             ps.p.colour = 0x10;
             ps.spawn_seq(0x6500, 2, 0x14, oy - 6, x, 1);
             ps.p.colour = 0;
+            crate::sound::play_at(0x47, oy, x);
+            crate::sound::play_at(0x3d, oy, x);
             env.fx.shakes.push((0x2a, 0x10));
         } else {
             let ps = &mut self.particles;
@@ -737,6 +764,7 @@ impl Level {
                 ps.p.group = 1;
             }
             ps.p.delay = 0;
+            crate::sound::play_at(0x4a, oy, x);
             eprintln!("warning: FUN_1050_5c7d's sideways shake from a big alien not applied");
         }
     }
@@ -779,6 +807,7 @@ impl Level {
                 }
                 if fall > 0x1f {
                     let (x, y) = (o.w(0xe), o.w(0x10));
+                    crate::sound::play_at(4, y, x);
                     // FUN_1040_66d4: dust.
                     let ps = &mut self.particles;
                     ps.p.colour = 0x10;

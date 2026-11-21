@@ -781,6 +781,7 @@ impl Game {
         let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
         self.camera
             .first_frame(&self.world, (self.hero.x, self.hero.y), grinder);
+        sound::listener(self.camera.x + 0xa0, self.camera.y + 100); // the end of FUN_1088_0c82
         let hero_at = (self.hero.x, self.hero.y);
         self.level.doors_near_hero(&mut self.world, hero_at, true);
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };

@@ -62,6 +62,8 @@ impl Level {
         let half = self.o(id).w(0x3e);
         if self.actor_physics(id, env, height, half, 3) > 0 {
             if self.o(id).w(0x36) > 0 {
+                let (x, y) = self.xy(id);
+                voice(self.o(id), 0x67, y, x);
                 env.fx.kills += 1;
             }
             self.drop_bonus(id, env.world);
@@ -151,6 +153,7 @@ impl Level {
                     if f < 0 {
                         f = 0;
                     } else if o.w(0x2e) == 0x28 {
+                        crate::sound::play_at(0x6b, o.w(0x10), o.w(0xe));
                         o.set(0x38, 0);
                     }
                 } else {
@@ -251,8 +254,9 @@ impl Level {
                             self.blown_apart(id, y - 0x1e, env);
                             return;
                         }
-                        let _voice = env.rng.random(3);
+                        let v = env.rng.random(3);
                         let o = self.o(id);
+                        voice(o, (v + 0x66) as usize, o.w(0x10), o.w(0xe));
                         o.set(0x28, -200);
                         o.set(0x2e, 0);
                         o.set(0x2c, 0);
@@ -411,6 +415,7 @@ impl Level {
         let o = self.o(id);
         o.set(0x28, -0x21c);
         o.set(0x2e, 0);
+        crate::sound::play_at_vol(0x82, 0x80, o.w(0x10), o.w(0xe));
         true
     }
 
@@ -424,7 +429,14 @@ impl Level {
     /// FUN_1070_5eb7: heard something: on guard.
     fn alert(&mut self, id: usize, env: &mut Env) {
         if self.o(id).w(0x3c) == 0 {
-            let _shout = env.rng.random(2) == 0; // FUN_1070_001a + a sound
+            if env.rng.random(2) == 0 {
+                // FUN_1070_001a(0x20, ..): on screen give or take 0x20 pixels.
+                let o = self.o(id);
+                let (sx, sy) = (o.w(0xe) - env.camera.0, o.w(0x10) - 0x14 - env.camera.1);
+                if (-0x20..=0x15f).contains(&sx) && (-0x20..=0xe7).contains(&sy) {
+                    voice(o, 0xae, o.w(0x10) - 0x14, o.w(0xe));
+                }
+            }
         }
         let o = self.o(id);
         o.set(0x28, -500);
@@ -506,7 +518,8 @@ impl Level {
         if o.w(0x2e) < 1 {
             o.set(0x34, (o.w(0x2c) / 5) % 0x10 + 0x57d4);
             if o.w(0x2c) % 0x28 == 0 {
-                env.rng.random(0x20); // footstep pitch
+                let p = env.rng.random(0x20);
+                crate::sound::play_at_pitch(0x83, 0x100 - p, o.w(0x10), o.w(0xe));
             }
             o.set(0x2c, o.w(0x2c) + 1);
         } else {
@@ -580,6 +593,9 @@ impl Level {
         o.set(0x30, o.w(0x30) + 1);
         let mut t = o.w(0x30);
         let (aim_at, fire_at, again_at, back) = if crouched { (8, 0xc, 0x19, 8) } else { (5, 9, 0x13, 5) };
+        if t == aim_at {
+            crate::sound::play_at(0x6e, o.w(0x10), o.w(0xe));
+        }
         if t > aim_at {
             t -= 0x1e;
             if t == fire_at {
@@ -653,6 +669,7 @@ impl Level {
         ps.p.hits = 0;
         ps.p.group = 1;
         ps.p.draw = 0;
+        crate::sound::play_at(0x61, y, x);
         env.fx.shakes.push((6, 4));
         let o = self.o(id);
         o.set(0x38, o.w(0x38) + 1);
@@ -867,6 +884,10 @@ impl Level {
                     self.blown_apart(id, y - 8, env);
                     return true;
                 }
+                let o = self.o(id);
+                if o.w(0x46) == -1 {
+                    voice(o, 0x66, o.w(0x10), o.w(0xe));
+                }
                 self.o(id).set(0x46, 0xff);
             }
         }
@@ -877,6 +898,7 @@ impl Level {
     fn thud(&mut self, id: usize, env: &mut Env) {
         env.fx.shakes.push((0xc, 6));
         let (x, y) = self.xy(id);
+        crate::sound::play_at_vol(0x25, 0x80, y, x);
         dust(&mut self.particles, y, x);
         let ps = &mut self.particles;
         let m = &mut ps.last_mut().m;
@@ -909,6 +931,8 @@ impl Level {
         } else {
             let top = top - 4;
             if h.state != 10 && h.vy >= 0 && h.fall > 0x16 && h.prev_y < top && top <= h.y && h.up {
+                crate::sound::play_at(0xf, h.y, h.x);
+                crate::sound::play_at(0x27, h.y, h.x);
                 env.fx.hero_bounce = true;
                 env.fx.shakes.push((0xc, 4));
                 1
@@ -959,6 +983,8 @@ impl Level {
     }
 
     pub(crate) fn gibs_rng(&mut self, y: i32, x: i32, base: i32, red: bool, rng: &mut crate::rng::PascalRandom) {
+        crate::sound::play_at(0x21, y, x);
+        crate::sound::play_at(0x26, y, x);
         let (flesh, bones, nbones, blood) = if red { (0x5307, 0x530f, 5, 0x5300) } else { (0x5407, 0x540f, 3, 0x5400) };
         let ps = &mut self.particles;
         // Each step throws one piece left and one right, both spreading further each step:
@@ -1124,6 +1150,11 @@ pub const CB_ALIEN_SHOT: u16 = 0x2d2;
 const GIB_SPEED: i32 = 0x20;
 
 /// FUN_1070_5ca6: where to aim at the hero: his chest, within his height.
+/// FUN_1070_584e(obj, id, y, x): an alien's voice, pitched by its +0x26.
+pub(crate) fn voice(o: &crate::objects::Obj, id: usize, y: i32, x: i32) {
+    crate::sound::play_at_pitch(id, o.w(0x26), y, x);
+}
+
 fn aim_y(h: &crate::actors::HeroView, eye_y: i32) -> i32 {
     let t = h.y - 4;
     if eye_y <= t {
