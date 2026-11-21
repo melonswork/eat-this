@@ -289,12 +289,10 @@ Done 2026-11-20 (second pass): weapons 6 and 9 (WEAPON6/WEAPON9), the next level
 hit kinds 2/3 in `Hero::hit` (kind 2 tested by WEIGHT1; their callers FUN_1068_1f3c, FUN_1068_215e (kind 2), FUN_1070_9a66,
 FUN_1070_b9d3 (kind 3, b9d3 also kind 0) are objects not ported yet; port one with a scenario to test them).
 
-Still unported (warnings in the port run): the hero riding a smallbot (FUN_1070_a18e), objects of VMT 0xc84
-(kind 0x14be, icon 61600, FUN_1070_0cce), kinds 0x14d2/0x14f0 icons, OBJECTS types 100 (FUN_1060_0166, CITY_I04,
-CITYHS), 0x14b4, 0x13ec, 0x1414, 0x1482, 0x2716, 0x272e (decor), icon 61000/61001 (FUN_1070_fa6a), bonus 0xd10
-(6b03), levers needing a key, pick-up effects 3/74, particle spawn effects 30064/30065/30070, particle procedure
-1050:19f8, a platform's shake/dust (flags 8), frozen/burnt deaths, barrels >= 0xb, hero on the big alien's shield
-(00b6 is now `Level::stand_on`, wire it there), wall chunks 60308/60304 (45db). Census: run every demo in
-work/cd and work/demos and `grep warning` (the P*.DMO probes in work/demos have no trace yet).
+Still unported (warnings in the port run): see `re/unported.md` (census of the three episodes' maps and the
+priority list: the tank 0x146e of CITY_I00/F_LAST, the spiked ball 0x14e6, 0x1414, GRANNY's 0x2715). Ported on
+2026-11-21 (branch claude/gameplay-objects-9a00ca): granny 0x1482, carrier 0x14be, gun turret 0x13ec, path
+platforms (type 100), falling weights (icons 61000/61001) and sign 0x14a0, pumping door 0x14b4, water splashes,
+effects 7/23/50/65; `ET_KINDS=1` lists every object the factory makes.
 Next: nothing is left in the recorded demos; write scenarios (tools/scenarios) for the unported features. The game is not complete: see the unported items below (grep the
 port run for `warning:`), and the SDL front end/menus/sound. and run the daily loop on it.

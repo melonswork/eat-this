@@ -24,7 +24,7 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 | 8 | ~~OBJECTS 0x14a0~~ the falling sign (VMT 0xbd8, FUN_1068_1f3c) | EnemyFactory | GRANNY | DONE (`weight.rs` SLAB, SLAB1: chain cleared (5c10/5b33), falls on the hero = hit kind 2, lands, stood on with the original's mixed-up FUN_1070_00b6 arguments) |
 | 9 | OBJECTS 0x2715 | LevelInit | GRANNY | the background building collapse FUN_1088_a481 (lever 4ed4 starts it; draws Randoms for debris in particle group 2, sound loop 0x53): simulation, not ported |
 | 10 | ~~OBJECTS 0x14b4~~ the pumping door (VMT 0xd44, FUN_1070_a0bd -> FUN_10a8_11e9) | EnemyFactory | CITY_I04 | DONE (`Level::door_pump`, PUMPDOOR1). Weak check: no Random involved; the hero's path through it matches |
-| 11 | OBJECTS 0x14e6 (VMT 0xda0) | EnemyFactory | FOREST05 | |
+| 11 | OBJECTS 0x14e6 (VMT 0xda0) | EnemyFactory | FOREST05 | a spiked ball on a chain (FUN_1070_9a66, nested 9a16): swings once its lever (+0x1c) is on or it is shot; the quake (45ba/45bc/45c0) pushes it (Random(0x18), Random(2)); hits the hero with kind 3 (0xc0, sound 0xf), drips blood (callback at 1170:23b7). Seven long divisions: disassemble before porting |
 | 12 | OBJECTS 0x2716 | LevelInit | FORPLANE | draw only: 1170:534e/5350 for the background proc FUN_1090_178e (renderer's) |
 | — | OBJECTS 0x272e (decor layer, VMT 0xaf8, draw procs 1088:a25d/a371/...) | LevelInit | many | drawn by main.rs; no update method: warning silenced |
 
@@ -32,6 +32,23 @@ Also from AGENTS.md (not counted per map yet): riding the smallbot (FUN_1070_a18
 pick-up effects 3/74, particle spawn effects 30064/30065/30070, mover 1050:19f8, platform shake/dust (flags 8),
 frozen/burnt deaths, barrels >= 0xb, the hero on the big alien's shield, wall chunks 60308/60304 (45db),
 bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, b9d3).
+
+## Left (2026-11-21), in priority order
+
+1. OBJECTS 0x146e (CITY_I00, F_LAST: the last level): a big tank, VMT 0xdf8 (shared with the 0x1478
+   triggers), update FUN_1070_b9d3 (540 lines) with nested 1070:b5e6, b6db, b7cd, b8d3, b8f9, b936, b993,
+   b9b0; hero hit kind 3 caller. Constructor (EnemyFactory, FUN_1068_111e + 0d84) above.
+2. OBJECTS 0x14e6 (FOREST05): the swinging spiked ball, see row 11.
+3. OBJECTS 0x1414 (BUTCHERY, VMT 0xd04, update FUN_1070_4b9b, 221 lines; constructor calls FUN_1070_4b4e per
+   32 px: check for Randoms there, they change the setup RNG).
+4. OBJECTS 0x2715 (GRANNY): the background collapse FUN_1088_a481 (simulation with Randoms).
+5. Draw only: 0x2716 (FORPLANE, FUN_1090_178e's 534e/5350) for the renderer.
+6. From AGENTS.md, not seen on the episode maps' load: riding the smallbot (FUN_1070_a18e), levers needing a
+   key, pick-up effects 3/74, particle spawn effects 30064/30065/30070, mover 1050:19f8, platform shake/dust
+   (flags 8), frozen/burnt deaths (FUN_1070_564d / 544e: aliens, big aliens, the granny), barrels >= 0xb, the
+   hero on the big alien's shield, wall chunks 60308/60304 (45db), bonus 0xd10, path-platform modes
+   0x4000/0x680/0x8000 and platform kinds 2/3, the press (icon 61001) and the carrier's mid-air blast are
+   ported but not exercised by a scenario.
 
 ## Sounds the new objects play (for the sound session)
 
