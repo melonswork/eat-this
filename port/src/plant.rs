@@ -82,9 +82,11 @@ impl Level {
         ps.p.delay = 0;
         ps.p.group = 1;
         env.fx.shakes.push((0x30, 0x12));
-        for _ in 0..2 {
-            env.rng.random(0x31);
-            env.rng.random(0x38);
+        for id in [0x9e, 0] {
+            let p = env.rng.random(0x31);
+            let v = env.rng.random(0x38);
+            crate::sound::pitch(0x100 - p);
+            crate::sound::play_at_vol(id, v + 200, ty, tx);
         }
         // FUN_1040_613b
         self.particles.spawn_seq(0x7000, 3, 0x18, ty, tx, 1);
