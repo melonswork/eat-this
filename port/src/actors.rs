@@ -200,6 +200,9 @@ impl Level {
                             power = 0x46;
                             release = true;
                         }
+                        if power >= 0x2d || h.state > 0 {
+                            crate::sound::play_at_vol(0x20, power * 2 + 0x4c, y, x);
+                        }
                         let kind = if power < 0x2d {
                             0
                         } else if power < 0x46 {
@@ -251,7 +254,16 @@ impl Level {
                 let (e, y, x) = (o.w(0x14) as u16, o.w(0x10), o.w(0xe));
                 crate::effects::effect(self, env.world, e, y, x, env.rng, env.fx);
             }
-            0x14aa | 0x1450 => {} // FUN_1070_a06a / FUN_1070_9f35: draw a sprite or play a sound
+            0x14aa => {} // FUN_1070_a06a: draws a sprite
+            0x1450 => {
+                // FUN_1070_9f35: a flame humming (handle +0x1c) unless its lever (+0x1e) is at 0.
+                let o = self.o(id);
+                let lever = o.uw(0x1e);
+                if (lever == 0 || Level::lever_state(env.world, lever) != 0) && crate::sound::audible(o.w(0x10), o.w(0xe)) {
+                    crate::sound::priority(0x11f4);
+                    crate::sound::keep(crate::sound::key::obj(id, 0x1c), 0x1e);
+                }
+            }
             0x148c => self.springboard(id, env),
             0x140a => self.walker(id, env),
             0x13f6 => self.boss(id, env),
