@@ -320,6 +320,9 @@ impl Level {
                 self.mine_explode(id, y, x, env);
                 return;
             }
+            if o.w(0x22) % 0x10 == 1 {
+                crate::sound::play_at(0x3c, y, x);
+            }
         }
         if self.actor_physics(id, env, 3, 6, 5) > 0 {
             let o = self.o(id);
@@ -357,6 +360,7 @@ impl Level {
         crate::alien::smoke_sprite(ps, y, x);
         ps.p.delay = 0;
         ps.spawn_seq(0x6500, 2, 0x14, y - 6, x, 1);
+        crate::sound::play_at(0x3b, y, x);
         env.fx.shakes.push((0x2a, 0x10));
         self.remove_current(id);
     }
@@ -370,7 +374,13 @@ impl Level {
             }
             let (x, y) = (o.w(0xe), o.w(0x10));
             if o.w(10) == 0 {
-                // (FUN_10e0_0073 and friends keep its humming sound going.)
+                // Its hum (handle +0x26).
+                crate::sound::set_volume(0x80);
+                if crate::sound::audible(y, x) {
+                    crate::sound::priority(0x11f4);
+                    crate::sound::keep(crate::sound::key::obj(id, 0x26), 0x1e);
+                }
+                crate::sound::set_volume(0x100);
                 o.set(2, x - 0xb0);
                 o.set(6, x + 0xb0);
                 o.set(4, y - 0x4e);
@@ -408,12 +418,16 @@ impl Level {
         if damage > 0 {
             let damage = if damage == 4 && t == 0 { 1 } else { damage };
             let push = self.particles.hit_direction();
+            let mask = self.particles.hit_mask;
             let o = self.o(id);
             o.set(0xe, o.w(0xe) + push);
             o.set(0x20, o.w(0x20) - damage);
             if o.w(0x20) < 1 {
                 self.crate_destroy(id, env);
                 return;
+            }
+            if mask != 0x48 && o.w(0x22) < 1 {
+                crate::sound::play_at(1, o.w(0x10), o.w(0xe));
             }
             o.set(0x22, 3);
             env.fx.shakes.push((0xc, 5));
@@ -466,6 +480,7 @@ impl Level {
             ps.p.group = 1;
             // FUN_1040_637a: smoke sprites (no Random()).
             env.fx.shakes.push((0x18, 0xe));
+            crate::sound::play_at(0x4a, y, x);
         } else {
             // An explosive barrel.
             if t >= 0xb {
@@ -514,7 +529,8 @@ impl Level {
             ps.p.hits = 0;
             ps.p.group = 1;
             env.fx.shakes.push((0x2a, 0x12));
-            env.rng.random(0x14); // the sound's pitch
+            let p = env.rng.random(0x14);
+            crate::sound::play_at_pitch(0x4a, 0x100 - p, y, x);
             self.explode_area(env.world, 0x60, 4, y + 0xe, x + 0x2e, y - 0x2e, x - 0x2e, env.rng, env.fx);
             let ps = &mut self.particles;
             ps.p.delay = 0x10;
