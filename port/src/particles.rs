@@ -1495,6 +1495,15 @@ impl Level {
                     }
                 }
             }
+            0x19f8 => {
+                // FUN_1050_19f8: a long fire on the floor goes out without floor under it (it
+                // ages only when the game runs late, 4f0c > 10).
+                if f.world.solidity_at(m.w(0xa) + 1, m.w(8)) & 0x211 == 0 {
+                    m.set(0x24, m.w(0x22));
+                } else if FRAME_SLACK {
+                    m.set(0x24, m.w(0x24) + 1);
+                }
+            }
             0x1b90 => {
                 // FUN_1050_1b90: a flame goes out without floor under it.
                 if f.world.solidity_at(m.w(0xa) + 1, m.w(8)) & 0x211 == 0 {

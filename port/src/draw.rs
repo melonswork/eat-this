@@ -109,9 +109,26 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
                     p.flame(m.w(0x1e) + g, m.w(0x1c) + g * 2 / 3, age as u32, x, y)
                 }
                 0x19f8 => {
-                    // A column of smoke over it.
-                    p.scaled_at(0x100, 0x400, (age / 4) % 0xd + 0x6b00, x, y);
-                    p.flame(0x300, 0x200, age as u32, x, y);
+                    // FUN_1050_19f8: smoke scaled up as it starts and dies down, and flames while young.
+                    let (t, life) = (m.w(0x24), m.w(0x22));
+                    let sq = |k: i32| ((k as i64 * k as i64) >> 5) as i32;
+                    let k = if t - life + 0x240 > 0 {
+                        sq(t - life + 0x240)
+                    } else if 0x80 - t > 0 {
+                        sq(0x80 - t)
+                    } else {
+                        0
+                    };
+                    p.scaled_at(k / 3 + 0x100, (k / 2 + 0x400).min(0x500), (t / 4) % 0xd + 0x6b00, x, y);
+                    let j = t - life + 0x400;
+                    if j < 0x198 {
+                        if j < 1 {
+                            p.flame(0x300, 0x200, t as u32, x, y);
+                        } else {
+                            let k2 = ((j as i64 * j as i64) >> 6) as i32;
+                            p.flame(k2 + 0x300, (k2 << 1) / 3 + 0x200, t as u32, x, y);
+                        }
+                    }
                 }
                 _ => p.flame(0xa00, 0x755, age as u32, x, y),
             }
