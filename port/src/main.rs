@@ -580,6 +580,7 @@ impl Game {
             eprintln!("DOORS frame {} hero {:?}", self.frame + 1, hero_at);
         }
         self.level.cam = (self.camera.x, self.camera.y);
+        storm::bridge_sound(&self.world, self.level.sector.unwrap_or(0), self.level.cam, self.level.particles.now);
         self.level.doors_near_hero(&mut self.world, hero_at, false);
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, false, &mut cx);
@@ -1803,6 +1804,8 @@ fn load_world(data: &Path, map_path: &Path) -> Result<World, Box<dyn Error>> {
     sprites::set_level(groups, raw);
     sprites::set_clothes(script_lines(map_path).iter().any(|(k, v)| k.eq_ignore_ascii_case("HeroClothes") && !v.is_empty()));
     messages::set_level(map_path);
+    let bg = script_lines(map_path).iter().find(|(k, _)| k.eq_ignore_ascii_case("BackgroundProc")).and_then(|(_, v)| v.trim().parse().ok());
+    storm::set_background_proc(bg.unwrap_or(0));
     Ok(World::load(map_path, &data.join("TILES"))?)
 }
 

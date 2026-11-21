@@ -119,3 +119,30 @@ impl Level {
         self.water = water as i16 as i32;
     }
 }
+
+thread_local! {
+    /// The level script's `BackgroundProc=` (1170:189e's index), for the sounds of START's backdrop.
+    static BG_PROC: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+pub fn set_background_proc(n: u32) {
+    BG_PROC.with(|c| c.set(n));
+}
+
+/// FUN_1090_0292's sound (procs 1 and 16): every 0x46 frames the train on the bridge rumbles
+/// over its length (sound 0x13, box from its first car), seen at half the camera's speed.
+pub fn bridge_sound(world: &crate::world::World, sector: usize, cam: (i32, i32), now: u32) {
+    if !matches!(BG_PROC.with(|c| c.get()), 1 | 16) || now % 0x46 != 0 {
+        return;
+    }
+    let by = world.sectors.get(sector).map_or(-1, |s| s.water[4]);
+    if by < 0 {
+        return;
+    }
+    let span = world.main().width * 16 + 0x750;
+    let x = (cam.0 >> 1) + ((now as i64 * 3) % span as i64) as i32 - 0x2be;
+    let y = (cam.1 >> 1) + by;
+    if crate::sound::audible_box((x, y - 0x20, x + 0x1d4, y)) {
+        crate::sound::play(0x13);
+    }
+}
