@@ -1,7 +1,7 @@
 # ![Eat This](https://capsule-render.vercel.app/api?type=blur&height=300&color=0:7a1f0e,100:2b2b2b&text=EAT%20THIS&textBg=false&fontColor=faf8f8&fontSize=72&desc=a%20faithful%20Rust%20port%20of%20the%201998%20Win16%20shooter&descSize=16&descAlignY=65)
 
 [![mise](https://mise-versions.jdx.dev/badge.svg)](https://mise.jdx.dev)
-![Rust](https://img.shields.io/badge/rust-1.94-b7410e?logo=rust)
+![Rust](https://img.shields.io/badge/rust-1.100-b7410e?logo=rust)
 ![SDL2](https://img.shields.io/badge/SDL2-bundled-1d4f91)
 ![oracle demos](https://img.shields.io/badge/oracle%20demos-28%2F28%20exact-2e7d32)
 

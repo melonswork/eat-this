@@ -4,7 +4,7 @@ java = "temurin-21"
 "7zip" = "latest"
 python = "3.13"
 uv = "latest"
-rust = "1.94"
+rust = "1.100"
 cmake = "latest"
 
 [tasks.extract]
