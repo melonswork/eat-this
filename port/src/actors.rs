@@ -576,7 +576,8 @@ impl Level {
         ps.spawn(0x5215, y, x);
         ps.critter(7, 0x40, angle);
         ps.p = crate::particles::Params::default();
-        rng.random(0x40); // the squeak's pitch
+        let p = rng.random(0x40); // the squeak
+        crate::sound::play_at_pitch(0xa3, 0x120 - p, y, x);
     }
 
     pub(crate) fn o(&mut self, id: usize) -> &mut crate::objects::Obj {

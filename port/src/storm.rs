@@ -60,10 +60,13 @@ impl Level {
     fn thunder(&mut self, rng: &mut PascalRandom, kind: i32) {
         self.storm.kind = kind;
         self.storm.flash = if kind == 0 { 0xf } else { 0x24 };
-        rng.random(0x96); // the pitch
-        rng.random(100);
-        rng.random(100);
-        rng.random(2); // which sound
+        let p = rng.random(0x96);
+        let l = 0x100 - rng.random(100);
+        let r = 0x100 - rng.random(100);
+        let which = rng.random(2);
+        crate::sound::pitch(p + 0xce);
+        crate::sound::volumes(l, r);
+        crate::sound::play(which as usize + 0xd);
     }
 
     /// Script commands 0x0d (thunder) and 0x16 (start the storm).

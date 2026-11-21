@@ -123,7 +123,7 @@ impl Level {
                 self.o(id).set(0x16, 3);
                 let k = self.o(id).w(10);
                 if stage(k).0 == 0 || hp > 0x60 {
-                    // (a sound)
+                    crate::sound::play_at(1, top, tip_x);
                 } else {
                     self.o(id).set(10, k + 1);
                     let ps = &mut self.particles;
@@ -146,7 +146,8 @@ impl Level {
                     ps.p.hits = 0;
                     ps.p.group = 1;
                     ps.p.delay = 0;
-                    env.rng.random(0x15); // the sound's pitch
+                    let p = env.rng.random(0x15);
+                    crate::sound::play_at_pitch(0x51, p + 0xf6, top, tip_x);
                 }
                 let k = self.o(id).w(10);
                 if hp < 1 && stage(k).1 > 0x70 {
@@ -169,7 +170,8 @@ impl Level {
                         l = self.o(id).w(0x1a);
                     }
                     self.o(id).set(0x1a, l);
-                    env.rng.random(0x40); // the sound's pitch
+                    let p = env.rng.random(0x40);
+                    crate::sound::play_at_pitch(0x7c, 0x100 - p, y, x);
                 }
                 self.o(id).set(0x14, 0);
             }

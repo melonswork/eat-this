@@ -119,7 +119,9 @@ impl Level {
         let h = env.h;
         let landed = h.state >= 1 && h.vy >= 0 && y > h.prev_y && h.y >= y && x + 5 >= h.x && h.x >= x - 5;
         if landed {
-            env.rng.random(0x40); // the sound's pitch
+            let p = env.rng.random(0x40);
+            crate::sound::pitch(0x100 - p);
+            crate::sound::play_at_vol(0x21, 0x80, y, x);
             self.particles.spawn_seq((sprite & 0xff00) + 0x19, 4, 5, y, x, 1);
             self.remove_current(id);
         }

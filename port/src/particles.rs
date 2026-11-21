@@ -1973,7 +1973,8 @@ impl Level {
                 if hi >= 0 && (hi < 2 || (hi < 3 && lo < 0xaaab)) && self.particles.hit_side != 2 {
                     let ps = &mut self.particles;
                     ps.spawn_seq(0x6800, 2, 0xf, y, x, 1);
-                    f.rng.random(0x14); // the sound's pitch
+                    let p = f.rng.random(0x14);
+                    sound::play_at_pitch(0x4b, p + 0xf6, y, x);
                     f.fx.shakes.push((0x12, 5));
                     ps.p.callback = 0x18e6;
                     ps.p.colour = 0x10;
@@ -2553,7 +2554,8 @@ impl Level {
         m.set(0x1c, r + 500);
         m.set(0x1e, r + 400);
         m.set(0x42, 0x2148);
-        f.rng.random(0x14); // the sound's pitch
+        let p = f.rng.random(0x14);
+        sound::play_at_pitch(100, 0xd8 - p, y, x);
         f.fx.shakes.push((0x20, 0xe));
         ps.p.colour = 0;
         self.explode_area(f.world, 0xc0, 4, y + 6, x + 0xe, y - 0x1e, x - 0xe, f.rng, f.fx);
@@ -2627,7 +2629,8 @@ impl Level {
         ps.p.hits = 0;
         ps.p.group = 1;
         ps.p.delay = 0;
-        rng.random(0x1f); // the sound's pitch
+        let p = rng.random(0x1f);
+        sound::play_at_pitch(0x51, p + 0xf1, y + 1, x + 0x10);
         fx.shakes.push((0xc, 5));
         if rng.random(3) != 0 {
             ps.p.delay = rng.random(0x28) + 0x28;

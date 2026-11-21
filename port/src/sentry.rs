@@ -59,7 +59,8 @@ impl Level {
         self.particles.p.aim_level2 = 0x100;
         if d > 0 {
             if self.particles.hit_mask & 0x48 == 0 && env.rng.random(2) == 0 {
-                env.rng.random(0x40); // the ricochet's pitch
+                let p = env.rng.random(0x40); // a ricochet
+                crate::sound::play_at_pitch(0x7c, 0x100 - p, y - 0x20, x);
             }
             self.o(id).set(0x24, 6);
         }
@@ -77,6 +78,8 @@ impl Level {
         m.set(0x1e, r + 600);
         m.set(0x42, 0x2148);
         ps.p.colour = 0;
+        crate::sound::play_at(0x47, y, x);
+        crate::sound::play_at(0x75, y, x);
         ps.p.group = 0;
         let n = env.rng.random(4) + 4;
         crate::walker::plates(ps, env.rng, 0xc0, n, y, x);
