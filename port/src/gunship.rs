@@ -47,6 +47,7 @@ impl Level {
                 } else {
                     sprite = self.ship_aim_and_fire(id, env);
                 }
+                ship_loop(id, self.o(id), 0x2e);
             }
             1 => {
                 self.ship_fly(id, now);
@@ -56,7 +57,8 @@ impl Level {
                         let (x, y) = (o.w(0x16), o.w(0x18));
                         let r = env.rng.random(4);
                         self.particles.spawn_seq(0x1928, 3, 4, (y - 0x12) - r, x, 1);
-                        env.rng.random(0x14); // the sound's pitch
+                        let p = env.rng.random(0x14);
+                        crate::sound::play_at_pitch(0x46, p + 0x100, y, x);
                     }
                     let o = self.o(id);
                     o.set(0x36, o.w(0x36) + 1);
@@ -68,6 +70,7 @@ impl Level {
                 let o = self.o(id);
                 o.set(0x26, (now / 2) % 0x15 + 0x4d02);
                 sprite = 0x4e09;
+                ship_loop(id, self.o(id), 0x2e);
             }
             2 => {
                 let o = self.o(id);
@@ -100,6 +103,7 @@ impl Level {
                     self.ship_crash(id, env);
                     return;
                 }
+                ship_loop(id, self.o(id), 0x2c);
             }
             _ => sprite = 0x7fff,
         }
@@ -159,6 +163,7 @@ impl Level {
             ps.spawn_seq(0x6800, 2, 0xf, y - 0x1a, (vx * 0x2a) / 0x10 + x, 1);
             ps.p.delay = 0;
             env.fx.shakes.push((0x10, 8));
+            crate::sound::play_at(0x49, y, x);
         }
         let o = self.o(id);
         if o.w(0x38) < 0x71 {
@@ -235,6 +240,9 @@ impl Level {
         if (!sees || off.abs() > 0x20) && o.w(0x40) == 1 {
             o.set(0x40, 0);
         }
+        if o.w(0x40) == -0x50 {
+            crate::sound::play_at(0x84, y, x);
+        }
         if o.w(0x40) > 0 && o.w(0x40) % 7 == 1 {
             let a = o.w(0x3c);
             let mx = x + (0x13 * trig::cos(a)) / 0x4000;
@@ -258,6 +266,7 @@ impl Level {
             ps.spawn_seq(0x190a, 2, 2, my, mx, 1);
             let sa = env.rng.random(0x181) + 0x4e0;
             crate::bigali::shell_of(ps, 0x1924, 0x40, sa, y - 0x1b, x);
+            crate::sound::play_at(0x80, my, mx);
             env.fx.shakes.push((4, 3));
             let o = self.o(id);
             if o.w(0x40) > 0xe {
@@ -296,10 +305,12 @@ impl Level {
         crate::particles::smoke(ps, env.rng, y - 0x16, x);
         ps.p.colour = 0;
         env.fx.shakes.push((0x18, 0xc));
+        crate::sound::play_at(0x3d, y, x);
     }
 
     /// FUN_1070_17f7: it starts falling (straight down if it was climbing or sinking).
     fn ship_falls(&mut self, id: usize, env: &mut Env) {
+        crate::sound::stop(crate::sound::key::obj(id, 0x30));
         let o = self.o(id);
         o.set(0x32, 2);
         let (x, y) = (o.w(0x16), o.w(0x18));
@@ -310,6 +321,7 @@ impl Level {
         }
         ps.p.delay = 0;
         env.fx.shakes.push((0x18, 0xc));
+        crate::sound::play_at(0x48, y, x);
         // FUN_1040_6156: a flash.
         ps.p.colour = 0x28;
         ps.p.group = 0;
@@ -373,6 +385,8 @@ impl Level {
         self.explode_area(env.world, 0x60, 4, y + 0x16, x + 0x16, y - 0x16, x - 0x16, env.rng, env.fx);
         self.particles.blast(2, 0x60, 5, 0x10, 0x16, -0x1c, -0x16, y + 6, x);
         env.fx.shakes.push((0x2a, 0x10));
+        crate::sound::play_at(0x4a, y, x);
+        crate::sound::play_at(0x3d, y, x);
         let mut w = Obj::new(WRECK, 0xca8, 0x20);
         w.set(0xc, 1);
         w.set(0xe, x);
@@ -471,6 +485,14 @@ impl Level {
             }
             self.o(id).set(0x1a, 0);
         }
+    }
+}
+
+/// The rotor's loop (handle +0x30) while it is in earshot.
+fn ship_loop(id: usize, o: &Obj, snd: usize) {
+    if crate::sound::audible(o.w(0x18), o.w(0x16)) {
+        crate::sound::priority(0x11f4);
+        crate::sound::keep(crate::sound::key::obj(id, 0x30), snd);
     }
 }
 

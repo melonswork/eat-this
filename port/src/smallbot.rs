@@ -64,7 +64,8 @@ impl Level {
                         && o.w(0x10) - 0x30 < h.y
                         && h.y - h.height < o.w(0x10)
                     {
-                        o.set_b(0x34, 1); // the alarm (sound 0x4f)
+                        crate::sound::play_at(0x4f, o.w(0x10), o.w(0xe)); // the alarm
+                        o.set_b(0x34, 1);
                     }
                 }
                 let o = self.o(id);
@@ -86,6 +87,9 @@ impl Level {
                 o.set(0x2a, o.w(0x2a) + 1);
                 let t = o.w(0x2a);
                 if t < 0 {
+                    if t == -0x18 {
+                        crate::sound::play_at(0x14, o.w(0x10), o.w(0xe));
+                    }
                     if t > -0x18 {
                         o.set(0x32, t / 6 + 0x5830);
                     }
@@ -93,6 +97,7 @@ impl Level {
                     let k = t - 10;
                     if k >= 0 && t < 0x4b && k % 8 == 0 {
                         let (x, y) = (o.w(0xe), o.w(0x10));
+                        crate::sound::play_at(0x90, y, x);
                         let spread = (k / 8) * 0x98;
                         let ps = &mut self.particles;
                         ps.p.group = 0;
@@ -115,6 +120,9 @@ impl Level {
                         ps.p.colour = 0;
                     }
                     let o = self.o(id);
+                    if t == 0x5a {
+                        crate::sound::play_at(0x15, o.w(0x10), o.w(0xe));
+                    }
                     if t > 0x5a {
                         o.set(0x32, 0x5830 - (t - 0x5a) / 6);
                     }
@@ -146,6 +154,7 @@ impl Level {
                     let o = self.o(id);
                     o.set(0x10, o.w(0x10) - 3);
                     env.fx.shakes.push((0xc, 4));
+                    crate::sound::play_at(1, o.w(0x10), o.w(0xe));
                 }
                 if damage > 0 {
                     let push = self.particles.hit_direction();
@@ -174,6 +183,9 @@ impl Level {
                     o.set(0xe, o.w(0xe) + ((o.w(0x2a) / 0x200) & 1) * 2 - 1);
                 }
                 let i = o.w(0x2a) % 0x100;
+                if i < 0x40 && i % 0x10 == 0 {
+                    crate::sound::play_at(0x46, o.w(0x10), o.w(0xe));
+                }
                 if i == 0x3f {
                     let (x, y) = (o.w(0xe), o.w(0x10));
                     let ps = &mut self.particles;
@@ -229,6 +241,7 @@ impl Level {
                     particles::smoke(ps, env.rng, y - 0xc, x);
                     ps.p.colour = 0;
                     ps.p.group = 1;
+                    crate::sound::play_at(0x51, y, x);
                 }
                 env.fx.shakes.push((0xc, 5));
                 let o = self.o(id);
@@ -273,6 +286,7 @@ impl Level {
                 ps.p.on_death = 0;
                 ps.p.group = 1;
                 env.fx.shakes.push((0x1e, 0xc));
+                crate::sound::play_at(0x26, y, x);
             } else {
                 env.fx.shakes.push((0xc, 6));
             }
