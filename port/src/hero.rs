@@ -1268,7 +1268,9 @@ impl Hero {
             // longer the fall, pitch 0xd0 + Random(0x50); FUN_1040_6ac8).
             let line = w.sectors[lv.sector.unwrap_or(0)].water[1];
             if self.prev.1 - 4 < line && line <= self.y - 4 {
-                rng.random(0x50);
+                let p = rng.random(0x50);
+                sound::pitch(p + 0xd0);
+                sound::play_at_vol(0x6f, (self.fall * 2 + 0x80).min(0x100), line, self.x);
                 ps.p.callback = 0x1d33;
                 ps.p.colour = 0x34;
                 ps.spawn_seq(0x6d00, 2, 0x12, line - 1, self.x, 1);

@@ -320,6 +320,11 @@ pub fn keep(key: u64, id: usize) {
     });
 }
 
+/// Does `key`'s loop play (its handle is not -1)?
+pub fn looping(key: u64) -> bool {
+    with(|s| s.loops.iter().any(|l| l.key == key))
+}
+
 /// FUN_10e0_0339: stop the loop of `key` now.
 pub fn stop(key: u64) {
     with(|s| {

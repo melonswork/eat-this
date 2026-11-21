@@ -72,7 +72,7 @@ impl Level {
                 o.set(0x12, y);
                 o.set(0x16, 0);
             }
-            self.splash(env, y, prev, x); // at volume 0x180
+            self.splash(env, 0x180, y, prev, x);
             if env.world.solidity_at(y, x) & 0x201 != 0 {
                 let y = (y & !0xf) - 1;
                 {

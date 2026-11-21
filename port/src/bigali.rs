@@ -236,7 +236,7 @@ impl Level {
                 o.set(0x34, 0x5b5e);
                 o.set(0xe, o.w(0xe) + o.w(0x2e));
                 let (y, prev, x) = (o.w(0x10), o.w(0x42), o.w(0xe));
-                self.splash(env, y, prev, x);
+                self.splash(env, 0x100, y, prev, x);
             }
             -0x136 => {
                 let o = self.o(id);
@@ -791,7 +791,7 @@ impl Level {
             o.set(6, 0x7fff);
             o.set(8, 0x7fff);
             let (y, prev, x) = (o.w(0x10), o.w(0x42), o.w(0xe));
-            self.splash(env, y, prev, x);
+            self.splash(env, 0x100, y, prev, x);
         } else if o.w(0x1a) != 0 {
             if o.w(0x28) == -0x82 {
                 let fall = o.w(0x10) - o.w(0x18);

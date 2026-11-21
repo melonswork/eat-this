@@ -36,7 +36,8 @@ impl Level {
             {
                 let o = self.o(id);
                 if o.w(0x24) == 0xff {
-                    o.set(0x24, if h.x - o.w(0xe) < 0 { -1 } else { 1 }); // sound 0x85 ahead of it
+                    o.set(0x24, if h.x - o.w(0xe) < 0 { -1 } else { 1 });
+                    crate::sound::play_at(0x85, o.w(0x10), o.w(0x24) * 0x60 + o.w(0xe));
                 }
                 o.set(0x22, o.w(0x22) + 1);
                 let c = o.w(0x22);
@@ -88,7 +89,10 @@ impl Level {
                     ps.p.delay = 0;
                 }
             } else {
-                // (its engine loop, sound 0x29 at pitch 0x11f4)
+                if crate::sound::audible(y, x) {
+                    crate::sound::priority(0x11f4);
+                    crate::sound::keep(crate::sound::key::obj(id, 0x60), 0x29);
+                }
                 let d = match sprites::hit_rect(sprite, y, x, false) {
                     Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x11fb),
                     None => 0,
@@ -106,7 +110,10 @@ impl Level {
             let o = self.o(id);
             if x_moved != o.w(0xe) || o.w(0x1c) == 5 {
                 o.set(0x26, 0);
-                env.fx.shakes.push((0x20, 10)); // sound 1 while its loop plays
+                env.fx.shakes.push((0x20, 10));
+                if crate::sound::looping(crate::sound::key::obj(id, 0x60)) {
+                    crate::sound::play_at(1, o.w(0x10), o.w(0xe));
+                }
                 self.carrier_release(id, env);
             }
             crate::actors::unbounded(self.o(id));
@@ -126,6 +133,13 @@ impl Level {
             }
             if self.o(id).w(0x1c) == 5 {
                 self.slide_on_slope(id);
+            }
+            // Under water it bubbles (handle +0x60).
+            let water = env.world.sectors[self.sector.unwrap_or(0)].water[1];
+            let o = self.o(id);
+            if o.w(0x5e) < water && crate::sound::audible(o.w(0x10) - 0x10, o.w(0xe)) {
+                crate::sound::priority(0x11f4);
+                crate::sound::keep(crate::sound::key::obj(id, 0x60), 0x1e);
             }
         }
     }
@@ -149,6 +163,7 @@ impl Level {
     /// FUN_1070_0c6d (nested): it stops flying: everyone gets off and it falls.
     fn carrier_release(&mut self, id: usize, env: &mut Env) {
         self.o(id).set(0x60, -1); // its sound loop stops
+        crate::sound::stop(crate::sound::key::obj(id, 0x60));
         for i in (0..self.o(id).w(0x2a)).rev() {
             self.carrier_drop(id, i, env);
         }
@@ -161,7 +176,9 @@ impl Level {
         crate::effects::effect(self, env.world, 7, y - 0x10, x, env.rng, env.fx);
         let r = env.rng.random(4);
         crate::walker::plates(&mut self.particles, env.rng, 400, r + 10, y - 8, x);
-        env.fx.shakes.push((0x2a, 0x10)); // sounds 0x4a, 0x18
+        env.fx.shakes.push((0x2a, 0x10));
+        crate::sound::play_at(0x4a, y, x);
+        crate::sound::play_at(0x18, y, x);
         self.remove_current(id);
     }
 
@@ -206,6 +223,8 @@ impl Level {
         crate::walker::plates(&mut self.particles, env.rng, 400, r + 10, y - 0xe, x);
         env.fx.shakes.push((0x2a, 0x10));
         self.explode_area(env.world, 0x60, 4, y + 0x16, x + 0x26, y - 0x16, x - 0x26, env.rng, env.fx);
-        // sounds 0x4a, 0x4e, 0x26
+        for s in [0x4a, 0x4e, 0x26] {
+            crate::sound::play_at(s, y, x);
+        }
     }
 }

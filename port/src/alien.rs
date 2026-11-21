@@ -1129,7 +1129,7 @@ impl Level {
                 o.set(0x28, 10);
             }
             let (y, prev, x) = (o.w(0x10), o.w(0x40), o.w(0xe));
-            self.splash(env, y, prev, x);
+            self.splash(env, 0xaa, y, prev, x);
         } else if o.w(0x1a) != 0 {
             if o.w(0x28) == 10 {
                 o.set(0x28, -500);
@@ -1181,10 +1181,12 @@ fn pingpong(t: i32, n: i32, k: i32) -> i32 {
 impl Level {
     /// FUN_1070_0105(volume, y, previous y, x): something falling through the water line of the
     /// hero's sector (1170:4656 +0x16) splashes (sound 0x6f, pitch 0xd0 + Random(0x50)).
-    pub(crate) fn splash(&mut self, env: &mut Env, y: i32, prev: i32, x: i32) {
+    pub(crate) fn splash(&mut self, env: &mut Env, vol: i32, y: i32, prev: i32, x: i32) {
         let line = env.world.sectors[self.sector.unwrap_or(0)].water[1];
         if prev - 4 < line && line <= y - 4 {
-            env.rng.random(0x50);
+            let p = env.rng.random(0x50);
+            crate::sound::pitch(p + 0xd0);
+            crate::sound::play_at_vol(0x6f, vol, line, x);
             // FUN_1040_6ac8: the splash, drawn clipped at the line (callback 1050:1d33).
             let ps = &mut self.particles;
             ps.p.callback = 0x1d33;
