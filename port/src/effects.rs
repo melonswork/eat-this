@@ -53,6 +53,10 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             lv.particles.spawn_seq(0x6400, 2, 0x24, y, x, 1);
             lv.particles.line(2, 0x5a0);
         }
+        9 => {
+            // FUN_1040_08e2: a small explosion.
+            lv.particles.spawn_seq(0x6500, 2, 0x14, y, x, 1);
+        }
         50 => {
             // FUN_1040_50cf: a plank bridge (tile function 60300) collapses, left of x and from x
             // to the right, plank by plank (FUN_1040_4fd9). Sounds 0x26, 0x1c at half volume.

@@ -2006,6 +2006,43 @@ impl Level {
                     ps.throw(0xe, 0x20, 0x780);
                 }
             }
+            47 => {
+                // FUN_1040_4d4c: the tank's grenade launcher lands and breaks up: plates, bits,
+                // a smoke sprite and a fire flash (effect 23). Leaves 0932 = 0x8000 set.
+                let g = self.particles.list[self.particles.current].m.w(0);
+                let ps = &mut self.particles;
+                ps.p.group = g;
+                ps.p.hits = 0x8000;
+                ps.p.callback = 0x17f4;
+                for i in 0..4 {
+                    ps.p.on_death = if f.rng.random(4) == 0 { 0x1d } else { 0x11 };
+                    let px = x - 0xf + i * 10;
+                    let py = (y - 4) - f.rng.random(0x18);
+                    let s = f.rng.random(4);
+                    ps.spawn(0x592b, py, px);
+                    ps.last_mut().m.set(0x26, s + 2);
+                    let a = (i * -0x1e0 + 0x8c0) - f.rng.random(0xa0);
+                    let sp = f.rng.random(0x11);
+                    ps.throw(9, sp + 0x40, a);
+                }
+                ps.p.callback = 0;
+                ps.p.on_death = 0x10;
+                for i in 0..5 {
+                    let px = x - 0x10 + i * 8;
+                    let py = (y - 4) - f.rng.random(0x18);
+                    let s = f.rng.random(3);
+                    ps.spawn(s + 0x5928, py, px);
+                    let a = (i * -0xa0 + 0x730) - f.rng.random(0xa0);
+                    let sp = f.rng.random(0x11);
+                    ps.throw(9, sp + 0x50, a);
+                }
+                ps.p.on_death = 0;
+                ps.p.hits = 0x8000;
+                ps.p.group = 1;
+                crate::alien::smoke_sprite(ps, y, x);
+                effects::effect(self, f.world, 23, y - 0x10, x, f.rng, f.fx);
+                f.fx.shakes.push((0x20, 0xc));
+            }
             15 => {
                 // FUN_1040_0a80: a metallic ping and sparks.
                 let p = f.rng.random(0x1e);

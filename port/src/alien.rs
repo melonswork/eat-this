@@ -659,7 +659,7 @@ impl Level {
     }
 
     /// FUN_1040_6187(speed, angle, y, x): a grenade.
-    fn grenade(&mut self, speed: i32, angle: i32, y: i32, x: i32) {
+    pub(crate) fn grenade(&mut self, speed: i32, angle: i32, y: i32, x: i32) {
         let ps = &mut self.particles;
         ps.p.group = 0;
         ps.p.hits = 0x8000;
@@ -1142,7 +1142,7 @@ fn isqrt_round(dy: i32, dx: i32) -> i32 {
 }
 
 /// FUN_10f0_1317(t, 1, n, k): ping-pong over 0..k-1 every n frames.
-fn pingpong(t: i32, n: i32, k: i32) -> i32 {
+pub(crate) fn pingpong(t: i32, n: i32, k: i32) -> i32 {
     let v = (t / n) % (k * 2 - 2) - k + 1;
     (k - 1) - v.abs()
 }

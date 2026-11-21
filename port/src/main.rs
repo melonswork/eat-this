@@ -8,6 +8,7 @@
 mod actors;
 mod ambient;
 mod alien;
+mod tank;
 mod bigali;
 mod archive;
 mod bg;
@@ -602,6 +603,9 @@ impl Game {
         // Script command 0x0b: HeroDamage(id), a message.
         self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
         for &(a, b) in &fx.shakes {
+            if std::env::var_os("ET_SHAKE").is_some() {
+                eprintln!("SHAKE {} ({a:#x}, {b})", self.frame);
+            }
             self.camera.shake(a, b);
         }
         // FUN_1088_4b64: the message box, FUN_1088_2501 (the status bar). Only the HUD reads them.
@@ -684,6 +688,14 @@ impl Game {
             hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
         };
         self.level.update_particles(0, &mut pf);
+        // ScreenShake acts at once: the shakes made so far this frame (group 0's grenades) are
+        // in place before the actors test 1170:45bc - 1 == 45ba.
+        for (a, b) in std::mem::take(&mut fx.shakes) {
+            if std::env::var_os("ET_SHAKE").is_some() {
+                eprintln!("SHAKE {} ({a:#x}, {b}) before the actors", self.frame);
+            }
+            self.camera.shake(a, b);
+        }
         let mut env = actors::Env {
             world: &mut self.world,
             rng: &mut self.rng,

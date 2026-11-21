@@ -246,6 +246,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
         crate::weight::KIND => crate::weight::draw(p, o),
         crate::weight::SLAB => crate::weight::draw_slab(p, o),
         // FUN_1070_cb38: the granny, sprite +0x3a mirrored by her facing (1170:1b54).
+        crate::tank::KIND => crate::tank::draw(p, o),
         crate::granny::KIND => {
             p.hflip = o.w(0x20) < 0;
             p.at(o.w(0x3a), x, y);

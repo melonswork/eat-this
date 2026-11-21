@@ -622,6 +622,34 @@ impl Level {
                 let (y, x) = (o.w(0x10), o.w(0xe));
                 self.add_actor(world, o, y, x);
             }
+            crate::tank::KIND => {
+                // FUN_1068_111e + FUN_1068_0d84.
+                let mut o = actor(kind, 0xdf8, 0x4d);
+                o.set(0xc, 1);
+                o.set(10, r.byte2());
+                o.set(0xe, r.at(4));
+                o.set(0x10, r.at(6));
+                o.set(0x14, r.at(8));
+                o.set(0x16, r.at(10));
+                for (off, v) in [
+                    (0x24, 0), (0x26, 0), (0x28, 0), (0x2a, 0x7fff), (0x2c, 0), (0x2e, 0x800), (0x30, 0x800),
+                    (0x32, 0x800), (0x34, 0x10), (0x20, -1), (0x22, 0), (0x38, 0), (0x3a, 0), (0x3c, 0),
+                    (0x3e, -0x1e), (0x40, -0x7fff), (0x42, 1), (0x44, 0), (0x46, 0), (0x48, 0), (0x4b, -1),
+                ] {
+                    o.set(off, v);
+                }
+                o.set(0x36, o.w(0x10));
+                o.set_b(0x4a, 0);
+                o.set(2, o.w(0x14) - 0x80);
+                o.set(4, o.w(0x10) - 0x60);
+                o.set(6, o.w(0x16) + 0x80);
+                o.set(8, o.w(0x10) + 0x10);
+                if std::env::var_os("ET_TANK").is_some() {
+                    eprintln!("TANK at ({}, {}) range {}..{}", o.w(0xe), o.w(0x10), o.w(0x14), o.w(0x16));
+                }
+                let (y, x) = (o.w(0x10), o.w(0xe));
+                self.add_actor(world, o, y, x);
+            }
             0x1478 => {
                 let mut o = actor(kind, 0xdf8, 0x4d);
                 for (k, off) in [2, 4, 6, 8, 10, 0xc, 0xe].into_iter().enumerate() {

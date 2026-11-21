@@ -1,0 +1,34 @@
+# The tank (OBJECTS 0x146e, FUN_1070_b9d3): F_LAST's tank patrolling the field at x 2144..2511.
+# Start right of the crate with two weapon-3 pick-ups copied in front of him, then rockets and the pistol.
+level MAPS/F_LAST.MAP
+start 2060 735
+cell 2 130 45 0xd06
+cell 2 131 45 0xd06
+mouse 300 120
+20
+12 right
+40
+5 rmb
+40
+5 rmb
+40
+5 rmb
+40
+5 rmb
+40
+5 rmb
+40
+5 rmb
+40
+5 rmb
+40
+5 rmb
+40
+5 rmb
+40
+5 rmb
+40
+200 lmb
+100
+200 lmb
+100

@@ -19,7 +19,7 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 | 3 | ~~OBJECTS 0x13ec~~ the gun turret (VMT 0xcbc, FUN_1070_2550) | EnemyFactory | CITYRAIN, FOREST02, FOREST05, CITY02, CITY_I01 | DONE (`wallgun.rs`, WALLGUN1: firing cycle, killed, broken apart; effect 65 = FUN_1040_105d). Not exercised: aiming at a visible hero (FOREST02's sits in the trunk), the lever (CITY02/CITY_I01) |
 | 4 | ~~OBJECTS type 100~~ path platforms (FUN_1060_0166 kind 0, update FUN_1060_0819) | | CITY_I04 5, CITYHS 6, CITY_I01 5, GRANNY 2 | DONE (`PlatObj::path`, `platobj::update_path`, PATHPLAT1). Still warn if met: modes 0x4000 (bobbing), 0x680 (driven by the hero: 5123/5124/4e5a), 0x8000 (slowing at the ends); the lever (GRANNY's) is in but untested; kinds 2/3 (falling, sinking) unported |
 | 5 | ~~icons 61000/61001~~ falling weights (FUN_1070_fa6a, kind 0x13a6, VMT 0xbe8, FUN_1068_215e) | SpawnFromIconTiles | CITY02, CITYHS, CITY_I03 | DONE (`weight.rs`, WEIGHT1: drop, chain bits, crush = hero hit kind 2, planks = effect 50 with its nested negative-tile blasts; the hero now falls from any state < 1 but -1..-5). Not exercised: the press (61001: animation, standing on it, FUN_1040_677d), shooting a landed weight broken |
-| 6 | OBJECTS 0x146e (VMT 0xdf8 shared with 0x1478, FUN_1068_0d84) | EnemyFactory | CITY_I00, F_LAST | enemy (4eb2) |
+| 6 | ~~OBJECTS 0x146e~~ the tank (VMT 0xdf8 shared with 0x1478, FUN_1070_b9d3) | EnemyFactory | CITY_I00, F_LAST | DONE (`tank.rs`, TANK1/TANK2: patrol, grenades, arm/claw/turret/hatch/hull destroyed, the wreck; hero state -3 = held by the claw in `Hero` (HELD), hit kinds 0 and 3). Not exercised: the claw grabbing the hero, the hero standing on it |
 | 7 | OBJECTS 0x1414 (VMT 0xd04) | EnemyFactory | BUTCHERY | calls FUN_1070_4b4e per 32 px |
 | 8 | ~~OBJECTS 0x14a0~~ the falling sign (VMT 0xbd8, FUN_1068_1f3c) | EnemyFactory | GRANNY | DONE (`weight.rs` SLAB, SLAB1: chain cleared (5c10/5b33), falls on the hero = hit kind 2, lands, stood on with the original's mixed-up FUN_1070_00b6 arguments) |
 | 9 | OBJECTS 0x2715 | LevelInit | GRANNY | the background building collapse FUN_1088_a481 (lever 4ed4 starts it; draws Randoms for debris in particle group 2, sound loop 0x53): simulation, not ported |
@@ -35,9 +35,7 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
 
 ## Left (2026-11-21), in priority order
 
-1. OBJECTS 0x146e (CITY_I00, F_LAST: the last level): a big tank, VMT 0xdf8 (shared with the 0x1478
-   triggers), update FUN_1070_b9d3 (540 lines) with nested 1070:b5e6, b6db, b7cd, b8d3, b8f9, b936, b993,
-   b9b0; hero hit kind 3 caller. Constructor (EnemyFactory, FUN_1068_111e + 0d84) above.
+1. ~~OBJECTS 0x146e~~ the tank: DONE (`tank.rs`, TANK1, TANK2).
 2. OBJECTS 0x14e6 (FOREST05): the swinging spiked ball, see row 11.
 3. OBJECTS 0x1414 (BUTCHERY, VMT 0xd04, update FUN_1070_4b9b, 221 lines; constructor calls FUN_1070_4b4e per
    32 px: check for Randoms there, they change the setup RNG).
@@ -53,6 +51,11 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
 ## Sounds the new objects play (for the sound session)
 
 (filled in as each object is ported)
+
+- Tank (FUN_1070_b9d3): wired in `tank.rs` (sounddiff TANK1/TANK2: all its plays matched): engine loop 0x36 on
+  +0x4b (priority 0x11f4, pitch 0x100 / 0x11e turning at volume 0xaa) while the hull lives, then 0x1e at 0x80;
+  0x30 arm shot / claw cycle, 0x1d gun, 0x15/0x14 gun recoil, 0x51 hatch, 0x50 claw hits a wall, 0x1a + 0x16
+  grab, 0x26 claw off, 0x4a arm off, 0x17 turret off, 0x4e wreck.
 
 - Granny (FUN_1070_cb38): 0x9d when hit alive, pitch `0x100 - Random(0x20)` (FUN_10e8_03ae; the Random is
   already drawn in `granny.rs`); 0x25 at half volume (1ab8 = 0x80) when she lands (state -5, counter 0x18);
