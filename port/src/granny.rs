@@ -96,7 +96,8 @@ impl Level {
                     o.set(0x28, -6);
                 }
                 if o.w(0x2e) == 0x18 {
-                    env.fx.shakes.push((8, 4)); // sound 0x25 at half volume
+                    env.fx.shakes.push((8, 4));
+                    crate::sound::play_at_vol(0x25, 0x80, o.w(0x10), o.w(0xe));
                 }
                 if o.w(0x34) != 0x7fff {
                     let (t, f) = (o.w(0x2e), o.w(0x20));
@@ -141,7 +142,9 @@ impl Level {
         }
         if self.o(id).w(0x28) > -5 {
             env.fx.kills += 1;
-            env.rng.random(0x20); // the pitch of her cry (sound 0x9d)
+            let p = env.rng.random(0x20); // her cry
+            let o = self.o(id);
+            crate::sound::play_at_pitch(0x9d, 0x100 - p, o.w(0x10), o.w(0xe));
         }
         let mask = self.particles.hit_mask;
         if (mask & 0x14 == 0 || d < 0x31) && self.o(id).w(0x30) > -0x51 {

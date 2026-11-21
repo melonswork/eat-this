@@ -2127,10 +2127,11 @@ impl Hero {
 
     /// SelectWeapon (1088:71ef). (4e32 = -14 starts the weapon display, 4e4a keeps the aim.)
     pub fn select_weapon(&mut self, w: i32) {
-        // A click from the weapon's place on the HUD (FUN_1088_0688 ~ its slot), at the listener.
+        // A click from the weapon's place on the HUD (FUN_1088_0688: its slot), at the listener.
         if w != self.weapon {
+            self.weapon = w;
             sound::discard(0x88);
-            sound::play_at_listener(0x88, -200 + (w * 400) / 9);
+            sound::play_at_listener(0x88, -200 + (self.weapon_slot() as i32 * 400) / 9);
             self.hud_slide = -14;
         }
         self.weapon = w;
