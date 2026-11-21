@@ -86,6 +86,13 @@ streams and EVERY CHECK, so the method is the original's own.
 | `WEIGHT1` | CITY_I03, start moved to (1960,881) | the falling weight (icon 61000, kind 0x13a6, FUN_1068_215e, `weight.rs`): drops on the hero (hit kind 2, knocked flat), breaks the plank bridge (effect 50, nested FUN_1088_1364 negative-tile blasts), he falls through (any state < 1 but -1..-5 falls) | exact |
 | `PUMPDOOR1` | CITY_I04, start moved to (380,863) | the pumping door 0x14b4 (FUN_1070_a0bd, `Level::door_pump` = FUN_10a8_11e9); no Random involved, only the hero's walk through it checks it | exact |
 | `SLAB1` | GRANNY, start moved to (1060,975) | the falling sign 0x14a0 (FUN_1068_1f3c, `Level::slab`): walks under it, it drops and knocks him flat (hit kind 2), he climbs on it | exact |
+| `TANK1` | F_LAST, start moved to (2060,735), two weapon-3 pick-ups | the tank 0x146e (FUN_1070_b9d3, `tank.rs`): patrols 2144..2511, turns, lobs grenades from its arm (FUN_1040_6187), knocks the hero back | exact |
+| `TANK2` | F_LAST, start (2050,735), six weapon-3 pick-ups | the tank shot to pieces: arm off (b7cd, effects 9 and 47 = FUN_1040_4d4c), claw out, turret off (b8d3), gun bursts (state -1), hull: the wreck (plates, fan, burning); also: a group-0 ScreenShake acts before the actors (trees) | exact |
+| `SPIKE1` | FOREST05, lever cell (138,91) set on (0x308), start on the branch (2318,1407) | the spiked ball 0x14e6 (FUN_1070_9a66, `spikeball.rs`): swings from the lever, hits the hero standing where it swings up (hit kind 3, bloody 0x3315, drips), two pistol shots push it. Not exercised: shakes pushing it (amp > 7) | exact |
+| `MEATHOOK1` | BUTCHERY, lever (158,48) set on (0xf58), start (2575,817) | the meat hooks 0x1414 (FUN_1070_4b9b, `meathook.rs`): speed ramps up, meat shot apart, the knocked-down hero carried up (gHeroDY set after FUN_1088_532c carries into the next HeroUpdate: `Hero::carry`); its draw's Random(2) under a saved seed is IGNOREd (1070:51af) | exact |
+| `COLLAPSE1` | GRANNY, lever (146,30) set on (0xfd8) | the collapsing building 0x2715 (FUN_1088_a481 from background proc 15, `collapse.rs`): 0x42a frames of shakes and debris (particle group 2, mover FUN_1050_3d06 = `MOVE_BG_THROW`, callback 0x232e), the rumble loop; the tilted building (extra map plane 4 rotated, FUN_10f0_545b) is not drawn | exact |
+| `FREEZE1` | GRANNY, weapon-1 and weapon-5 pick-ups at (18,30), (19,30) | weapon 5's rockets (hit mask 0x400) freeze grannies (FUN_1070_564d, `deaths.rs`) into statues (state -0xd2, FUN_1068_0f32: wobble, tint row 2) that the pistol shatters (shards land as effect 48) | exact |
+| `BURN1` | GRANNY, weapon-1 pick-up at (19,30) | the flamethrower (mask 8) burns grannies (FUN_1070_544e: ash 0x5132, burning bits 0x5130 landing as effect 59 = FUN_1040_5ec6, smoke); the same deaths are wired for aliens and big aliens | exact |
 
 ## Tools (non-obvious usage)
 
@@ -238,8 +245,8 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   tint table over rows darkened by PalMixLight 0x20/0x24; markup ^| ^Cxx ^O ^Bxx. Pixel-exact on CITY01.
 - HeroClothes= in a script: the hero is PPHEROA/A2/A3 and slot 3 PPDOORA (`sprites::set_clothes`).
 - Still different: FUN_1088_2187 is the automap (1a94, toggled by a typed cheat), not drawn; the
-  little movie screen on START's skyline (4d9c, slot 0x7d MOVIE); FORPLANE's object at 534e
-  (FUN_10d0_01e4); the HUD message blip's sound; platform objects of unported kinds sit at their start;
+  little movie screen on START's skyline (4d9c, slot 0x7d MOVIE); GRANNY's tilting building (collapse.rs
+  simulates it, FUN_10f0_545b draws it); the HUD message blip's sound; platform objects of unported kinds sit at their start;
   some kills totals are off by one (forest: other EnemyFactory counting); a few actor frames (FORPLANE's
   pumpkin turret, WEAPON9's mines' lights) and the flamethrower's burning ground in START differ.
   Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`,
@@ -304,7 +311,7 @@ byte 0 of the MAIN-plane cell looked up first); the walker with a gunner (0x140a
 slopes (4e20 = `down_timer`, 4e24 = `sliding`, 4f03 = `released[DOWN]`, FUN_1088_29c8 = `slope_run`) and the
 knocked-down hero sliding too; `Env.hero_obj` lets objects hurt the hero on the spot (`Hero::hurt`),
 `Effects.hero_stand` = FUN_1070_00b6 (hero carried on a moving top, gHeroGround 0x16).
-Facts: gHeroDX set by objects after HeroUpdate is lost (4e06 resets it next frame); the 1168:1381 set test at
+Facts: gHeroDX/DY set by objects after HeroUpdate carry into the next one (GameFrameInGame runs FUN_1088_532c = DX 4e06, DY 0 right AFTER HeroUpdate; `Hero::carry`, used by the meat hooks and the tank; older objects may still drop them); the 1168:1381 set test at
 DS:160a is "-state in 1..5" (hero hanging/climbing ignores platforms); Pascal calls push left to right, so Ghidra's
 param_1 is the LAST source argument (3de2(sprite, steps, frames, y, x, animate)); a long divisor with CX=0, BX=8 is
 0x80000 (BX is the high word). Particle spawn globals that a caller forgets to reset stay set (FUN_1058_0301 leaves
@@ -325,6 +332,9 @@ Done 2026-11-20 (second pass): weapons 6 and 9 (WEAPON6/WEAPON9), the next level
 hit kinds 2/3 in `Hero::hit` (kind 2 tested by WEIGHT1; their callers FUN_1068_1f3c, FUN_1068_215e (kind 2), FUN_1070_9a66,
 FUN_1070_b9d3 (kind 3, b9d3 also kind 0) are objects not ported yet; port one with a scenario to test them).
 
+Ported on 2026-11-21 (branch claude/objects-rest-c3eb40): the tank 0x146e, the spiked ball 0x14e6, the meat
+hooks 0x1414, GRANNY's collapse 0x2715, FORPLANE's quad 0x2716, burnt/frozen deaths and the frozen statue,
+platform shake/dust, wall chunks, shot levers (scenarios TANK1/2, SPIKE1, MEATHOOK1, COLLAPSE1, BURN1, FREEZE1).
 Still unported (warnings in the port run): see `re/unported.md` (census of the three episodes' maps and the
 priority list: the tank 0x146e of CITY_I00/F_LAST, the spiked ball 0x14e6, 0x1414, GRANNY's 0x2715). Ported on
 2026-11-21 (branch claude/gameplay-objects-9a00ca): granny 0x1482, carrier 0x14be, gun turret 0x13ec, path

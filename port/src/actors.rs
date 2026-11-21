@@ -226,6 +226,9 @@ impl Level {
         match kind {
             0x145a => self.smallbot(id, env),
             crate::granny::KIND => self.granny(id, env),
+            crate::tank::KIND => self.tank(id, env),
+            crate::spikeball::KIND => self.spikeball(id, env),
+            crate::meathook::KIND => self.meathook(id, env),
             crate::carrier::KIND => self.carrier(id, env),
             crate::wallgun::KIND => self.wallgun(id, env),
             crate::weight::KIND => self.weight(id, env),
@@ -800,7 +803,7 @@ impl Level {
     fn after_move(&mut self, id: usize, env: &mut Env) {
         let kind = self.objects[id].as_ref().unwrap().kind;
         match kind {
-            0x145a | 0x143c | 0x140a | crate::granny::KIND | crate::sentry::KIND | crate::decals::DROP | crate::decals::SHELL => {
+            0x145a | 0x143c | 0x140a | crate::granny::KIND | crate::tank::KIND | crate::sentry::KIND | crate::decals::DROP | crate::decals::SHELL => {
                 let o = self.o(id);
                 if o.w(0x1c) == 0 {
                     if o.w(0x1a) == 0 {

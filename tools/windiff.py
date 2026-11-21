@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 # Call sites inside drawing code that saves and restores RandSeed (no effect on the game).
-IGNORE = {"1070:8c72", "1070:34db", "1070:091f", "1068:3112"}  # draw-time Randoms under a saved seed: the big alien's shield (FUN_1070_7eb2), the hovering machine (30b6), the electric fence/bot (06f6)
+IGNORE = {"1070:8c72", "1070:34db", "1070:091f", "1068:3112", "1070:51af"}  # draw-time Randoms under a saved seed: the big alien's shield (FUN_1070_7eb2), the hovering machine (30b6), the electric fence/bot (06f6), the meat hooks (4b9b)
 
 
 def main():

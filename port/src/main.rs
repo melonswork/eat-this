@@ -8,6 +8,11 @@
 mod actors;
 mod ambient;
 mod alien;
+mod tank;
+mod spikeball;
+mod meathook;
+mod collapse;
+mod deaths;
 mod bigali;
 mod archive;
 mod bg;
@@ -366,8 +371,12 @@ impl Game {
         self.level.now = self.frame;
         let mut fx = Effects::default();
         self.level.cam = (self.camera.x, self.camera.y);
-        if let Some(o) = self.level.update_platforms(&mut self.world, self.camera.y) {
+        let mut shakes = Vec::new();
+        if let Some(o) = self.level.update_platforms(&mut self.world, self.camera.y, &mut self.rng, &mut shakes) {
             self.camera.offset.1 = o;
+        }
+        for (a, b) in shakes {
+            self.camera.shake(a, b);
         }
         for cell in std::mem::take(&mut self.level.pasted) {
             self.level.run_scripts(&mut self.world, cell, &mut fx);
@@ -582,6 +591,28 @@ impl Game {
         self.level.cam = (self.camera.x, self.camera.y);
         storm::bridge_sound(&self.world, self.level.sector.unwrap_or(0), self.level.cam, self.level.particles.now);
         self.level.doors_near_hero(&mut self.world, hero_at, false);
+        // The level's background proc (*4c32): GRANNY's collapse (FUN_1088_a481) and its debris
+        // (FUN_1050_4ca5(2)).
+        if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
+            let cam = (self.camera.x, self.camera.y);
+            for (a, b) in self.level.collapse_frame(&self.world, &mut self.rng, cam) {
+                self.camera.shake(a, b);
+            }
+            if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
+                let mut fx2 = Effects::default();
+                let mut pf = particles::Frame {
+                    world: &mut self.world,
+                    rng: &mut self.rng,
+                    fx: &mut fx2,
+                    camera: cam,
+                    hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
+                };
+                self.level.update_particles(2, &mut pf);
+                for (a, b) in std::mem::take(&mut fx2.shakes) {
+                    self.camera.shake(a, b);
+                }
+            }
+        }
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, false, &mut cx);
         self.hero.hide_in_exit();
@@ -603,6 +634,9 @@ impl Game {
         // Script command 0x0b: HeroDamage(id), a message.
         self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
         for &(a, b) in &fx.shakes {
+            if std::env::var_os("ET_SHAKE").is_some() {
+                eprintln!("SHAKE {} ({a:#x}, {b})", self.frame);
+            }
             self.camera.shake(a, b);
         }
         // FUN_1088_4b64: the message box, FUN_1088_2501 (the status bar). Only the HUD reads them.
@@ -685,6 +719,14 @@ impl Game {
             hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
         };
         self.level.update_particles(0, &mut pf);
+        // ScreenShake acts at once: the shakes made so far this frame (group 0's grenades) are
+        // in place before the actors test 1170:45bc - 1 == 45ba.
+        for (a, b) in std::mem::take(&mut fx.shakes) {
+            if std::env::var_os("ET_SHAKE").is_some() {
+                eprintln!("SHAKE {} ({a:#x}, {b}) before the actors", self.frame);
+            }
+            self.camera.shake(a, b);
+        }
         let mut env = actors::Env {
             world: &mut self.world,
             rng: &mut self.rng,
@@ -884,6 +926,8 @@ struct Graphics {
     /// 1170:512a: the level colour nearest to RGB (0x10, 0x14, 0x19) (FUN_10f0_6039): the rain
     /// is PalMix[512a][pixel].
     rain_colour: u8,
+    /// 1170:1b14: the level colour nearest to black.
+    black: u8,
 }
 
 impl Graphics {
@@ -1009,6 +1053,11 @@ impl Graphics {
             show_hud: true,
             hud_level: 2,
             storm_palette,
+            // 1170:1b14: the level colour nearest to black (FUN_10f0_6039(0, 0, 0)).
+            black: (0..256).min_by_key(|&i| {
+                let c = colors6[i];
+                (((c[0] as i64).pow(2) + (c[1] as i64).pow(2)).pow(2) + (c[2] as i64).pow(4), i)
+            }).unwrap_or(0) as u8,
             rain_colour: {
                 // FUN_10f0_6039(b, g, r): the smallest (dr^2 + dg^2)^2 + db^4, the first one.
                 let d = |c: [u8; 3]| -> i64 {
@@ -1040,6 +1089,20 @@ impl Graphics {
         let frame = g.frame.saturating_sub(1);
         let st = &g.level.storm;
         self.background.draw(fb, (cam_x, cam_y), frame, st.sky_flash > 0 && st.kind == 1);
+        if self.background.proc_ == 5 {
+            if let Some((qx, qy)) = g.level.quad {
+                // FUN_1090_178e: OBJECTS 0x2716's quad (FUN_10d0_01e4, colour 1b14) under the
+                // skyline's decor: from (qx, qy) 0xa0 wide, down to its 8/9-parallax far edge.
+                let x0 = qx - cam_x;
+                if x0 < 0x280 && -0x140 < x0 {
+                    let y0 = qy - cam_y;
+                    let fx = (qx << 3) / 9 - (cam_x << 3) / 9;
+                    let fy = (qy << 3) / 9 - (cam_y << 3) / 9;
+                    let pts = [(x0, y0), (x0 + 0xa0, y0), (fx - 0x20, fy + 99), (fx - 0x50, fy + 0x5b)];
+                    render::fill_polygon(fb, &pts, self.black);
+                }
+            }
+        }
         if self.bg_only {
             return;
         }

@@ -50,6 +50,8 @@ pub const MOVE_ROCKET: u16 = 0x3c4f;
 pub const MOVE_AGE: u16 = 0x2ac9;
 /// FUN_1050_36a9: a running critter (FUN_1050_4622).
 pub const MOVE_CRITTER: u16 = 0x36a9;
+/// FUN_1050_3d06: a throw in the half-speed background layer (no walls; gone below 0x1c8 + camY / 2).
+pub const MOVE_BG_THROW: u16 = 0x3d06;
 
 /// Per-frame procedures (segment 1050 offsets).
 pub const CB_BULLET: u16 = 0x126;
@@ -219,7 +221,8 @@ impl Particles {
         self.last = self.list.len() - 1;
         self.last_pending = false;
         if p.on_spawn != 0 {
-            spawn_effect(p.on_spawn, y, x);
+            let m = &self.list[self.last].m;
+            spawn_effect(p.on_spawn, m.w(0xa), m.w(8));
         }
         self.last
     }
@@ -285,6 +288,25 @@ impl Particles {
         v.set(0xc, bounce);
         p.m.set(0x4e, 0x7fff);
         p.m.set(0x3c, p.m.w(0x3c) | 0x200);
+    }
+
+    /// FUN_1050_4999(gravity, speed, angle): a throw in the background layer (GRANNY's collapse).
+    pub fn bg_throw(&mut self, gravity: i32, speed: i32, angle: i32) {
+        let bounce = self.p.bounce;
+        let p = self.last_mut();
+        p.m.set(0x4a, MOVE_BG_THROW as i32);
+        p.m.set(0x4c, 0xe);
+        let v = &mut p.v;
+        v.set_l(0, trig::cos(angle) * speed);
+        v.set_l(4, trig::sin(angle) * speed);
+        v.set(8, 0);
+        v.set(0xa, gravity);
+        v.set(0xc, bounce);
+    }
+
+    /// FUN_1050_2a6c(group): every particle of the group goes.
+    pub fn remove_group(&mut self, group: i32) {
+        self.list.retain(|p| p.m.w(0) != group);
     }
 
     /// FUN_1040_621f(speed, angle, y, x): the hero's grenade (effect 21 when it hits or its
@@ -963,6 +985,19 @@ impl Level {
                     m.set(0x24, m.w(0x24) + 1);
                 }
             }
+            MOVE_BG_THROW => {
+                let t = v.w(8);
+                m.set(8, m.w(4) + v.l(0).wrapping_mul(t) / 0x40000);
+                let fall = ((t * t) as i16 as i32) / v.w(0xa);
+                m.set(0xa, fall + (m.w(6) - v.l(4).wrapping_mul(t) / 0x40000));
+                v.set(8, t + 1);
+                if (m.w(0xa) - ((cam.1 as u16) >> 1) as i32) < 0x1c8 {
+                    m.set(0x24, m.w(0x24) + 1);
+                } else {
+                    m.set(0x24, m.w(0x22));
+                    m.set(0x3e, -10);
+                }
+            }
             MOVE_THROW => {
                 let t = v.w(8);
                 m.set(8, m.w(4) + v.l(0).wrapping_mul(t) / 0x40000);
@@ -1160,7 +1195,23 @@ impl Level {
         if hits as i16 != -0x8000 {
             let func = w.tile_function_at(y, x);
             if (6000..=0x1779).contains(&func) {
-                eprintln!("warning: a shot lever (FUN_1088_14a3) not ported");
+                // FUN_1088_14a3: a shot lever steps to its next state, after the last back to
+                // its first (FUN_1088_1364 sets the cell: its scripts run).
+                let wd = f.world.main().width;
+                let idx = ((y >> 4) * wd + (x >> 4)) as u16;
+                let v = f.world.main().cells[idx as usize];
+                let fn0 = |t: u16| f.world.cell_function(t, 0);
+                let mut t = v;
+                if func != 0x1779 && fn0(v.wrapping_add(1)) == func + 1 {
+                    t = v.wrapping_add(1);
+                } else {
+                    let mut g = func;
+                    while g > 6000 && fn0(t.wrapping_sub(1)) == g - 1 {
+                        g -= 1;
+                        t = t.wrapping_sub(1);
+                    }
+                }
+                self.set_cell(f.world, t, idx, f.fx);
             } else if func == crate::doors::DOOR {
                 self.door_hit(f.world, strength, y, x, 0, f.fx);
             }
@@ -1406,7 +1457,7 @@ impl Level {
                 let m = &mut self.particles.list[i].m;
                 m.set(0x16, if t < 5 { ((m.uw(0x24) >> 3) & 3) as i32 + 0x1900 } else { 0x1904 });
             }
-            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a => {} // drawing only
+            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a | 0x232e | 0x2459 | 0x2497 | 0x236b => {} // drawing only
             0x2299 => {
                 // FUN_1050_2299: a burning bit trails smoke.
                 if m.w(0x24) % 4 == 3 {
@@ -1463,6 +1514,15 @@ impl Level {
                         self.explode_area(f.world, 0xc0, 4, y + 0x10, x + 0x12, y - 0x60, x - 0x12, f.rng, f.fx);
                         self.particles.blast(2, 0x60, 0xd, 0x20, 0x22, -0x60, -0x22, y, x);
                     }
+                }
+            }
+            0x19f8 => {
+                // FUN_1050_19f8: a long fire on the floor goes out without floor under it (it
+                // ages only when the game runs late, 4f0c > 10).
+                if f.world.solidity_at(m.w(0xa) + 1, m.w(8)) & 0x211 == 0 {
+                    m.set(0x24, m.w(0x22));
+                } else if FRAME_SLACK {
+                    m.set(0x24, m.w(0x24) + 1);
                 }
             }
             0x1b90 => {
@@ -1934,6 +1994,40 @@ impl Level {
                 }
                 self.sparks(0x1918, y, x);
             }
+            59 => {
+                // FUN_1040_5ec6: a burning bit lands: smoke against a wall, on the floor a flame
+                // (one in four also a lingering smoke sprite).
+                let i = self.particles.current;
+                {
+                    let m = &mut self.particles.list[i].m;
+                    m.set(8, m.w(0x10));
+                    m.set(0xa, m.w(0x12));
+                }
+                self.particle_callback(i, f);
+                let side = self.particles.hit_side;
+                let (py, px) = {
+                    let m = &self.particles.list[i].m;
+                    (m.w(0xa), m.w(8))
+                };
+                let ps = &mut self.particles;
+                if side < 2 {
+                    ps.p.colour = 0x10;
+                    smoke(ps, f.rng, y, x);
+                    ps.p.colour = 0;
+                } else if side != 2 {
+                    if f.rng.random(4) == 0 {
+                        ps.p.callback = 0x18e6;
+                        ps.p.colour = 0x10;
+                        ps.spawn_seq(0x6a00, 1, 0xf2, py, px, 0);
+                        let m = &mut ps.last_mut().m;
+                        m.set(0x1c, 0x300);
+                        m.set(0x1e, 0x300);
+                        ps.p.colour = 0;
+                        ps.p.callback = 0;
+                    }
+                    ps.spawn_seq(0x5129, 4, 6, y, x, 1);
+                }
+            }
             22 | 48 => {
                 // FUN_1040_295e / 4ed6: a drop of blood or a bone: slides down walls, splashes
                 // on the floor (bones may stay: lying objects aren't kept here).
@@ -2017,6 +2111,43 @@ impl Level {
                     ps.spawn_seq(0x1918, 4, 3, y, x, 1);
                     ps.throw(0xe, 0x20, 0x780);
                 }
+            }
+            47 => {
+                // FUN_1040_4d4c: the tank's grenade launcher lands and breaks up: plates, bits,
+                // a smoke sprite and a fire flash (effect 23). Leaves 0932 = 0x8000 set.
+                let g = self.particles.list[self.particles.current].m.w(0);
+                let ps = &mut self.particles;
+                ps.p.group = g;
+                ps.p.hits = 0x8000;
+                ps.p.callback = 0x17f4;
+                for i in 0..4 {
+                    ps.p.on_death = if f.rng.random(4) == 0 { 0x1d } else { 0x11 };
+                    let px = x - 0xf + i * 10;
+                    let py = (y - 4) - f.rng.random(0x18);
+                    let s = f.rng.random(4);
+                    ps.spawn(0x592b, py, px);
+                    ps.last_mut().m.set(0x26, s + 2);
+                    let a = (i * -0x1e0 + 0x8c0) - f.rng.random(0xa0);
+                    let sp = f.rng.random(0x11);
+                    ps.throw(9, sp + 0x40, a);
+                }
+                ps.p.callback = 0;
+                ps.p.on_death = 0x10;
+                for i in 0..5 {
+                    let px = x - 0x10 + i * 8;
+                    let py = (y - 4) - f.rng.random(0x18);
+                    let s = f.rng.random(3);
+                    ps.spawn(s + 0x5928, py, px);
+                    let a = (i * -0xa0 + 0x730) - f.rng.random(0xa0);
+                    let sp = f.rng.random(0x11);
+                    ps.throw(9, sp + 0x50, a);
+                }
+                ps.p.on_death = 0;
+                ps.p.hits = 0x8000;
+                ps.p.group = 1;
+                crate::alien::smoke_sprite(ps, y, x);
+                effects::effect(self, f.world, 23, y - 0x10, x, f.rng, f.fx);
+                f.fx.shakes.push((0x20, 0xc));
             }
             15 => {
                 // FUN_1040_0a80: a metallic ping and sparks.
@@ -2812,6 +2943,17 @@ pub fn fan(
     ps.p.hits = 0;
 }
 
+/// FUN_1040_60bb(091e, y, x) when a particle joins the array (FUN_1050_3f77, or FUN_10a0_023f for
+/// a delayed one): 30000 + n plays sound n there; the procedures (< 30000) aren't used this way.
+fn spawn_effect(id: i32, y: i32, x: i32) {
+    let id = id as u16 as i32;
+    if id >= 30000 {
+        sound::play_at((id - 30000) as usize, y, x);
+    } else {
+        eprintln!("warning: particle spawn effect {id} not ported");
+    }
+}
+
 /// FUN_1050_00a7: the frame to draw. Animations (negative sprites) aren't ported.
 fn sprite_frame(m: &mut Obj) {
     let mut s = m.w(0x14);
@@ -2940,12 +3082,3 @@ fn smoke4_at(ps: &mut Particles, y: i32, x: i32) {
     puff_at(ps, y - 1, x);
 }
 
-/// A particle's spawn effect (091e, FUN_1040_60bb when it appears): only plain sounds
-/// (30000 + id) are used this way.
-fn spawn_effect(id: i32, y: i32, x: i32) {
-    if (30000..0x8000).contains(&id) {
-        crate::sound::play_at(id as usize - 30000, y, x);
-    } else {
-        eprintln!("warning: particle spawn effect {id} not ported");
-    }
-}

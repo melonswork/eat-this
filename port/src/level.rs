@@ -153,6 +153,10 @@ pub struct Level {
     pub hero_x: i32,
     /// gCameraX/Y as the scripts and decals see them.
     pub cam: (i32, i32),
+    /// OBJECTS 0x2716 (FORPLANE): the quad background proc 5 fills (1170:534e / 5350).
+    pub quad: Option<(i32, i32)>,
+    /// GRANNY's collapsing building (OBJECTS 0x2715).
+    pub collapse: Option<crate::collapse::Collapse>,
     /// The platform objects (records 100..103).
     pub plat_objs: Vec<crate::platobj::PlatObj>,
     /// The ambient sound emitters' next times (1170:4ec0, 4ebc, 4ec4).
@@ -221,6 +225,8 @@ impl Level {
             hero_x: 0,
             cam: (0, 0),
             plat_objs: Vec::new(),
+            collapse: None,
+            quad: None,
             amb: [509, 329, 0], // HeroReset's Random(0x230) calls ran before DemoLoad zeroed the seed: the same in every demo
             walk_index: 0,
             walking: (0, 0),
@@ -755,7 +761,8 @@ impl Level {
     }
 
     /// FUN_1078_0aef: move the platforms of the hero's sector one step along their paths.
-    pub fn update_platforms(&mut self, world: &mut World, cam_y: i32) -> Option<i32> {
+    /// Screen shakes go to `shakes` (they act at once: the caller applies them).
+    pub fn update_platforms(&mut self, world: &mut World, cam_y: i32, rng: &mut crate::rng::PascalRandom, shakes: &mut Vec<(i32, i32)>) -> Option<i32> {
         let mut cam_offset = None;
         for i in 0..self.platforms.len() {
             let Some(p) = self.platforms[i].as_mut() else {
@@ -798,9 +805,9 @@ impl Level {
             }
             p.x = p.x16 >> 4;
             p.y = p.y16 >> 4;
-            if p.flags & 0x18 != 0 {
-                eprintln!("warning: a platform's shake/dust (flags {:#x}) not ported", p.flags);
-            }
+            let (flags, set) = (p.flags, p.sound);
+            let last = p.points.last().copied().unwrap_or((0, 0, 0));
+            let (pw, ph) = (p.width, p.height);
             let (sector, rect) = (p.sector, (p.x, p.y, p.x + p.width - 1, p.y + p.height - 1));
             let mut done = false;
             if arrived {
@@ -808,7 +815,28 @@ impl Level {
                 done = p.point == p.points.len();
             }
             self.platform_sound(i, 3);
+            // Flags 8: it shakes the screen every 6 frames (its sound set's amount); 0x10: dust
+            // falls from under its last point every 8 frames.
+            if flags & 8 != 0 && self.now % 6 == 0 {
+                let amp = PLATFORM_SOUNDS.get(set as usize).map_or(4, |r| r[4]);
+                shakes.push((0x10, amp));
+            }
+            if flags & 0x10 != 0 && self.now % 8 == 0 {
+                let dy = last.1 + ph - 1;
+                let dx = last.0 + rng.random(pw as u16);
+                let ps = &mut self.particles;
+                ps.p.colour = 0x10;
+                ps.spawn_seq(0x6d00, 2, 0x13, dy, dx, 1); // FUN_1040_66d4
+                ps.p.colour = 0;
+                let m = &mut ps.last_mut().m; // FUN_1050_4a29(0x200, 0x100)
+                m.set(0x1c, 0x100);
+                m.set(0x1e, 0x200);
+                m.set(0x42, 0x2148);
+            }
             self.wake_actors(sector, rect);
+            if done && flags & 4 != 0 {
+                shakes.push((0x1e, 10));
+            }
             if arrived {
                 self.platform_sound(i, if done { 2 } else { 1 });
             }

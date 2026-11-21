@@ -1,0 +1,166 @@
+# The tank (OBJECTS 0x146e, FUN_1070_b9d3) shot to pieces: F_LAST's tank, six weapon-3 pick-ups
+# copied in front of the hero (60 homing rockets) plus the pistol: the grenade launcher comes off,
+# the claw comes out (grabs the hero: state -3), then the claw, hatch, turret and hull.
+level MAPS/F_LAST.MAP
+start 2050 735
+cell 2 128 45 0xd06
+cell 2 129 45 0xd06
+cell 2 130 45 0xd06
+cell 2 131 45 0xd06
+cell 2 132 45 0xd06
+cell 2 133 45 0xd06
+mouse 300 120
+10
+45 right
+5 left
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+100

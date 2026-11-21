@@ -622,6 +622,89 @@ impl Level {
                 let (y, x) = (o.w(0x10), o.w(0xe));
                 self.add_actor(world, o, y, x);
             }
+            crate::meathook::KIND => {
+                let mut o = Obj::new(kind, 0xd04, 0x28);
+                o.set(10, r.byte2());
+                o.set(0x12, r.at(4));
+                o.set(0x16, r.at(6));
+                o.set(0x18, r.at(8) + 7);
+                o.set(0x1c, r.at(10));
+                o.set(0x1e, if r.count < 7 { 0 } else { r.at(0xc) });
+                o.set(0x26, -1);
+                let n = ((o.w(0x18) - o.w(0x16)) + 0x1f) / 0x20;
+                o.set(0x20, n);
+                for _ in 0..n.max(0) {
+                    let m = crate::meathook::meat(cx.rng);
+                    o.items.push((0x10, m, 0));
+                }
+                let (x, top, bottom) = (o.w(0x12), o.w(0x16), o.w(0x18));
+                o.set(2, x - 0x16f);
+                o.set(6, x + 0x160);
+                o.set(4, top - 0x9c);
+                o.set(8, bottom + 0x9c);
+                if std::env::var_os("ET_KINDS").is_some() {
+                    let c = o.uw(0x1e) as usize;
+                    let w = world.main().width as usize;
+                    let v = world.main().cells[c];
+                    eprintln!("MEATHOOK at x {x} {top}..{bottom} hooks {n} speed {} lever {c:#x} (tx {} ty {}) cell {v:#x} f0 {} f2 {}", o.w(0x1c), c % w, c / w, world.cell_function(v, 0), world.cell_function(v, 2) as i16);
+                }
+                self.add_actor(world, o, top, x);
+            }
+            crate::spikeball::KIND => {
+                let mut o = actor(kind, 0xda0, 0x23);
+                o.set(10, r.byte2());
+                o.set(0xe, r.at(4));
+                o.set(0x10, r.at(6));
+                let s = r.at(8);
+                o.set(0x14, if s < 1 { 0x30 } else { 0x10 });
+                o.set(0x1a, s.abs());
+                o.set(0x16, r.at(10));
+                o.set(0x18, (o.w(0x16) + 1) * 0xd);
+                o.set(0x1c, r.at(0xc));
+                o.set(0x1e, 0x3314);
+                o.set_b(0x20, 0);
+                o.set(0x21, 0);
+                let (x, y, len) = (o.w(0xe), o.w(0x10), o.w(0x18));
+                o.set(2, (x - len) - 0x18);
+                o.set(4, y - 0x10);
+                o.set(6, x + len + 0x18);
+                o.set(8, y + len + 0x30);
+                if std::env::var_os("ET_KINDS").is_some() {
+                    let c = o.uw(0x1c) as i32;
+                    let w = world.main().width;
+                    let v = world.main().cells[c as usize];
+                    eprintln!("SPIKEBALL at ({x}, {y}) links {} lever {:#x} (tx {} ty {}) cell {v:#x} f1 {} f2 {} swing {}", o.w(0x16), c, c % w, c / w, world.cell_function(v, 1), world.cell_function(v, 2) as i16, o.w(0x1a));
+                }
+                self.add_actor(world, o, y, x);
+            }
+            crate::tank::KIND => {
+                // FUN_1068_111e + FUN_1068_0d84.
+                let mut o = actor(kind, 0xdf8, 0x4d);
+                o.set(0xc, 1);
+                o.set(10, r.byte2());
+                o.set(0xe, r.at(4));
+                o.set(0x10, r.at(6));
+                o.set(0x14, r.at(8));
+                o.set(0x16, r.at(10));
+                for (off, v) in [
+                    (0x24, 0), (0x26, 0), (0x28, 0), (0x2a, 0x7fff), (0x2c, 0), (0x2e, 0x800), (0x30, 0x800),
+                    (0x32, 0x800), (0x34, 0x10), (0x20, -1), (0x22, 0), (0x38, 0), (0x3a, 0), (0x3c, 0),
+                    (0x3e, -0x1e), (0x40, -0x7fff), (0x42, 1), (0x44, 0), (0x46, 0), (0x48, 0), (0x4b, -1),
+                ] {
+                    o.set(off, v);
+                }
+                o.set(0x36, o.w(0x10));
+                o.set_b(0x4a, 0);
+                o.set(2, o.w(0x14) - 0x80);
+                o.set(4, o.w(0x10) - 0x60);
+                o.set(6, o.w(0x16) + 0x80);
+                o.set(8, o.w(0x10) + 0x10);
+                if std::env::var_os("ET_TANK").is_some() {
+                    eprintln!("TANK at ({}, {}) range {}..{}", o.w(0xe), o.w(0x10), o.w(0x14), o.w(0x16));
+                }
+                let (y, x) = (o.w(0x10), o.w(0xe));
+                self.add_actor(world, o, y, x);
+            }
             0x1478 => {
                 let mut o = actor(kind, 0xdf8, 0x4d);
                 for (k, off) in [2, 4, 6, 8, 10, 0xc, 0xe].into_iter().enumerate() {
@@ -739,6 +822,23 @@ impl Level {
                     world.sectors[s].water[4] = ((g(3) - 100) >> 1) + 100;
                 }
                 0x271a => self.vehicle = true,
+                0x2716 => {
+                    let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
+                    self.quad = Some((g(2), g(3)));
+                    if std::env::var_os("ET_KINDS").is_some() {
+                        eprintln!("QUAD at ({}, {})", g(2), g(3));
+                    }
+                }
+                crate::collapse::KIND => {
+                    let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
+                    let sector = world.sector_at(g(3), g(2));
+                    self.collapse = Some(crate::collapse::Collapse { x: g(2) / 2, y: g(3) / 2 - 0x90, t: 0, next: 0, lever: g(4) as u16, sector });
+                    if std::env::var_os("ET_KINDS").is_some() {
+                        let (c, w) = (g(4) as usize, world.main().width as usize);
+                        let v = world.main().cells[c];
+                        eprintln!("COLLAPSE at ({}, {}) lever {:#x} (tx {} ty {}) cell {v:#x} f0 {}", g(2), g(3), g(4), c % w, c / w, world.cell_function(v, 0));
+                    }
+                }
                 // 0x272e: decor layers (LevelInit, VMT 0xaf8: draw procs only), drawn by main.rs.
                 0x44c | 0x44d | 0x2724 | 0x272e => {}
                 k => eprintln!("warning: OBJECTS type {k:#x} not ported"),

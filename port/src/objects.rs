@@ -28,6 +28,8 @@ pub struct Obj {
     /// What the update method drew this frame (the original draws at the end of the update
     /// from values it computed on the way). Only the draw pass reads it.
     pub looks: Vec<Look>,
+    /// A heap array the object owns (0x1414's hooks: hit points, sprite, the draw's flash colour).
+    pub items: Vec<(i32, i32, i32)>,
 }
 
 /// One sprite an object's update drew: world position, mode (1ae0), colour (1ae3; `FLASH` is
@@ -40,6 +42,8 @@ pub struct Look {
     pub mode: i32,
     pub colour: i32,
     pub hflip: bool,
+    /// 1ae6: drawn upside down.
+    pub vflip: bool,
     /// 0 PalMix, 1 the tint table (4c26), 2 PalMixLight.
     pub mix: u8,
 }
@@ -75,6 +79,7 @@ impl Obj {
             kind,
             mem: vec![0; size.max(2)],
             looks: Vec::new(),
+            items: Vec::new(),
         };
         o.set(0, vmt as i32);
         o

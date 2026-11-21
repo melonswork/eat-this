@@ -28,6 +28,8 @@ pub const LEDGE: i32 = -4;
 /// Pulling a lever (HeroUseObject).
 pub const USE: i32 = -30;
 pub const LADDER: i32 = -5;
+/// Held by the tank's claw (FUN_1070_b9d3).
+pub const HELD: i32 = -3;
 /// Hanging from a ceiling pipe (60800) and climbing up out of a pipe (60600).
 pub const PIPE_HANG: i32 = -1;
 pub const PIPE_CLIMB: i32 = -2;
@@ -90,6 +92,9 @@ pub struct Hero {
     ceiling: i32,
     head_blocked: i32, // 1170:4e68
     pub crushed: bool,
+    /// gHeroDX/DY that objects set after FUN_1088_532c (which runs right after HeroUpdate): the
+    /// next HeroUpdate starts from them (the meat hooks, the tank).
+    pub carry: (i32, i32),
     /// Sensitive-lever tiles touched this frame (HeroTouchTiles), as (ty, tx), for the level.
     pub touched: Vec<(i32, i32)>, // 1170:4e06: HeroPushOutOfWalls' push, becomes next frame's starting dx (FUN_1088_532c)
     released: [bool; 9],
@@ -306,6 +311,7 @@ impl Hero {
             ceiling: 0,
             head_blocked: 0,
             crushed: false,
+            carry: (0, 0),
             touched: Vec::new(),
             released: [true; 9],
             input_cache: [0; 9],
@@ -413,6 +419,11 @@ impl Hero {
     pub fn stand_on(&mut self, y: i32) {
         self.y = y;
         self.ground = 0x16;
+    }
+
+    /// gHeroGround set by an object (0x1414 carrying him: 0x16).
+    pub fn set_ground(&mut self, g: i32) {
+        self.ground = g;
     }
 
     pub fn ground(&self) -> i32 {
@@ -545,7 +556,8 @@ impl Hero {
         self.hit_mask = 0;
         let mut friction = true;
         let mut walking = false;
-        let (mut dx, mut dy) = (std::mem::take(&mut self.nudge), 0);
+        let (cx, cy) = std::mem::take(&mut self.carry);
+        let (mut dx, mut dy) = (std::mem::take(&mut self.nudge) + cx, cy);
         for (r, &v) in self.released.iter_mut().zip(&input) {
             if v < 1 {
                 *r = true;
@@ -1294,6 +1306,20 @@ impl Hero {
         }
         self.collide_flags = collide_flags;
 
+        if self.state == HELD {
+            // Held by the tank's claw (FUN_1070_b9d3 sets gHeroCrouch = 1 every frame it holds him).
+            let t = (ps.now as i32 / 8) % 6;
+            self.frame = (if t < 4 { t } else { 6 - t }) + 0x23e;
+            self.half_width = 8;
+            bleed(ps, rng, self.anim, self.y - 0x1e, self.x);
+            self.anim += 1;
+            if self.crouch == 0 {
+                self.start_jump(-0x14, KNOCKED_BACK);
+                self.anim = 0x400;
+            }
+            self.crouch = 0;
+        }
+
         if self.vx != 0 && friction {
             let s = self.vx.signum();
             let step = self.vx.abs() / 8 * s;
@@ -1731,6 +1757,28 @@ impl Hero {
         self.hit(damage, 2, rng)
     }
 
+    /// FUN_1088_3c32(damage) with 1170:162a = `kind` from an object (0: no reaction, 3: thrown
+    /// back with a sideways shake).
+    pub fn hurt_kind(&mut self, damage: i32, kind: i32, rng: &mut PascalRandom) -> i32 {
+        self.hit(damage, kind, rng)
+    }
+
+    /// The tank's claw grabs him (FUN_1070_b9d3): state -3, held while `hold` runs each frame.
+    pub fn grab(&mut self) {
+        self.state = HELD;
+        self.anim = 0;
+    }
+
+    /// gHeroDX = v from an object (after FUN_1088_532c gave it 4e06): the next frame starts at v.
+    pub fn set_dx(&mut self, v: i32) {
+        self.carry.0 = v - self.nudge;
+    }
+
+    /// gHeroCrouch = 1: the claw still holds him.
+    pub fn hold(&mut self) {
+        self.crouch = 1;
+    }
+
     /// 1170:4e2a >= 1: invulnerable after a hit.
     pub fn invulnerable(&self) -> bool {
         self.hurt >= 1
@@ -1790,6 +1838,7 @@ impl Hero {
                 self.throw_back();
                 self.side_shakes.push((0x32, 0x12));
             }
+            0 => {}
             k => eprintln!("warning: hero hit kind {k} not ported"),
         }
         self.hurt_blink = self.hurt;

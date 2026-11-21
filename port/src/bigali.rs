@@ -246,7 +246,13 @@ impl Level {
                 o.set(0x34, 0x5200);
             }
             -0x140 => {
-                eprintln!("warning: a frozen big alien (FUN_1068_0f32) not ported");
+                // Frozen: a statue until shot (FUN_1068_0f32), then it shatters.
+                if self.frozen_statue(id, env, 0x5d00) {
+                    let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
+                    crate::deaths::frozen(&mut self.particles, env.rng, y - 0x14, x);
+                    env.fx.shakes.push((0x20, 0xe));
+                    self.remove_current(id);
+                }
                 return;
             }
             -300 => {
@@ -283,9 +289,7 @@ impl Level {
                     self.o(id).set(0x3c, 0x69);
                 }
                 // FUN_1070_00b6: the hero may stand on the shield.
-                if x - 0x20 <= h.x && h.x <= x + 0x20 && (h.y.min(h.prev_y)..=h.y.max(h.prev_y)).contains(&(y - 0x3a)) {
-                    eprintln!("warning: the hero standing on a big alien's shield not ported");
-                }
+                self.stand_on(env, y - 0x3a, y - 0x3a, x + 0x20, x - 0x20);
                 damage = match sprites::hit_rect(sprite, y, x, mirror) {
                     Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x1000),
                     None => 0,
@@ -686,7 +690,8 @@ impl Level {
                     let y = self.o(id).w(0x10);
                     self.bigali_explode(id, y - 8, env);
                 } else {
-                    eprintln!("warning: a frozen big alien (FUN_1070_564d) not ported");
+                    let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
+                    crate::deaths::frozen(&mut self.particles, env.rng, y - 0x14, x);
                 }
                 let o = self.o(id);
                 if o.w(0x2e) > 0x34 || o.w(0x1c) != 1 || env.rng.random(3) == 0 {
