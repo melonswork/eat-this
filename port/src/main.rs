@@ -371,8 +371,12 @@ impl Game {
         self.level.now = self.frame;
         let mut fx = Effects::default();
         self.level.cam = (self.camera.x, self.camera.y);
-        if let Some(o) = self.level.update_platforms(&mut self.world, self.camera.y) {
+        let mut shakes = Vec::new();
+        if let Some(o) = self.level.update_platforms(&mut self.world, self.camera.y, &mut self.rng, &mut shakes) {
             self.camera.offset.1 = o;
+        }
+        for (a, b) in shakes {
+            self.camera.shake(a, b);
         }
         for cell in std::mem::take(&mut self.level.pasted) {
             self.level.run_scripts(&mut self.world, cell, &mut fx);
