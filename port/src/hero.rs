@@ -1644,6 +1644,7 @@ impl Hero {
         let y = (self.y - 0xd) - (10 * crate::trig::sin(aim)) / 0x4000;
         let a2 = (aim + 0x1680 - 0x20 + rng.random(0x41)) % 0x1680;
         ps.torpedo(y, x, a2);
+        sound::play_at(0x52, y, x);
         self.veh_fired = true;
         self.released[RIGHT_SHOOT] = false;
         self.veh.vx -= (crate::trig::cos(aim) * 0x40) / 0x4000;
