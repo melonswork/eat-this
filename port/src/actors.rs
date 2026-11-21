@@ -834,6 +834,8 @@ impl Level {
                         self.particles.spawn_seq(0x6900, 2, 0x19, y - 9, x - 2, 1); // effect 23
                         self.explode_area(env.world, 0x60, 4, y + 0xe, x + 0xe, y - 0xe, x - 0xe, env.rng, env.fx);
                         env.fx.shakes.push((0x2a, 0x10));
+                        crate::sound::play_at(0x4a, y, x);
+                        crate::sound::play_at(0x3d, y, x);
                         let o = self.o(id);
                         o.set(0x22, 0x5027);
                         o.set(0x20, 0x100);

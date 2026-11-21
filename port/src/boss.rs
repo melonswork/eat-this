@@ -111,6 +111,7 @@ impl Level {
         }
         ps.p.delay = 0;
         env.fx.shakes.push((0x18, 0xc));
+        crate::sound::play_at(0x48, y, x);
         // FUN_1040_6156.
         ps.p.colour = 0x28;
         ps.p.group = 0;
@@ -149,8 +150,10 @@ impl Level {
             self.boss_move(id);
             self.o(id).set(0x26, (now / 8) % 0x18 + 0x5000);
             sprite = (now / 2) % 0xc + 0x5018;
+            rotor_loop(id, self.o(id));
         } else {
             self.boss_move(id);
+            rotor_loop(id, self.o(id));
             let (x, y) = (self.o(id).w(0x16), self.o(id).w(0x18));
             let o = self.o(id);
             if o.w(0x38) < 0x142 && o.w(0x34) > 0 && o.w(0x34) % 0x20 == 0 {
@@ -182,7 +185,8 @@ impl Level {
         }
         if h.x - h.half_width <= x && x < h.x + h.half_width && h.y > top && h.y <= floor && env.hero_obj.health > 0 {
             if self.o(id).w(0x3c) < 0x30 {
-                env.rng.random(0x20); // the sound's pitch
+                let p = env.rng.random(0x20);
+                crate::sound::play_at_pitch(0x6c, 0x100 - p, y, x);
                 env.hero_obj.hurt(0x80, env.rng);
                 self.o(id).set(0x3c, 0x48);
             }
@@ -215,6 +219,7 @@ impl Level {
             puff(ps, y - 6, (vx * 0x3a) / 0x10 + x);
             ps.p.delay = 0;
             env.fx.shakes.push((0x10, 8));
+            crate::sound::play_at(0x49, y, x);
         }
         self.o(id).set(0x34, 0x230);
     }
@@ -250,6 +255,7 @@ impl Level {
         ps.spawn_seq(0x6400, 2, 0x24, y - 0xc - 6, x, 1); // effect 7 (at y - 0xc)
         ps.line(2, 0x5a0);
         env.fx.shakes.push((0x24, 0xe));
+        crate::sound::play_at(0x4a, y, x);
         self.remove_current(id);
     }
 
@@ -286,6 +292,7 @@ impl Level {
                     self.particles.hit_mask = 0x48;
                     self.o(id).set(0x10, y - 3);
                     env.fx.shakes.push((0xc, 4));
+                    crate::sound::play_at(1, y - 3, x);
                 }
                 self.particles.p.aim_level = 0x100;
                 self.particles.p.aim_level2 = 0x100;
@@ -310,7 +317,9 @@ impl Level {
                         self.o(id).set(0x10, y - 8);
                     }
                     if self.particles.hit_mask != 0x48 && self.o(id).w(0x24) < 1 {
-                        env.rng.random(0x20); // the sound's pitch
+                        let p = env.rng.random(0x20);
+                        let o = self.o(id);
+                        crate::sound::play_at_pitch(0x4b, 0x100 - p, o.w(0x10), o.w(0xe));
                         env.fx.shakes.push((0xc, 4));
                     }
                     self.o(id).set(0x24, 3);
@@ -330,6 +339,14 @@ impl Level {
             ps.spawn_seq(0x6801, 5, 0xe, y - 0x15, x - 5 + r, 1);
             ps.p.group = 1;
         }
+    }
+}
+
+/// Its rotor's loop (handle +0x30) while in earshot.
+fn rotor_loop(id: usize, o: &Obj) {
+    if crate::sound::audible(o.w(0x18), o.w(0x16)) {
+        crate::sound::priority(0x11f4);
+        crate::sound::keep(crate::sound::key::obj(id, 0x30), 0x2d);
     }
 }
 
