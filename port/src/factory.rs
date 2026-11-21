@@ -822,6 +822,13 @@ impl Level {
                     world.sectors[s].water[4] = ((g(3) - 100) >> 1) + 100;
                 }
                 0x271a => self.vehicle = true,
+                0x2716 => {
+                    let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
+                    self.quad = Some((g(2), g(3)));
+                    if std::env::var_os("ET_KINDS").is_some() {
+                        eprintln!("QUAD at ({}, {})", g(2), g(3));
+                    }
+                }
                 crate::collapse::KIND => {
                     let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
                     let sector = world.sector_at(g(3), g(2));

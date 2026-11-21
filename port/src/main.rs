@@ -918,6 +918,8 @@ struct Graphics {
     /// 1170:512a: the level colour nearest to RGB (0x10, 0x14, 0x19) (FUN_10f0_6039): the rain
     /// is PalMix[512a][pixel].
     rain_colour: u8,
+    /// 1170:1b14: the level colour nearest to black.
+    black: u8,
 }
 
 impl Graphics {
@@ -1043,6 +1045,11 @@ impl Graphics {
             show_hud: true,
             hud_level: 2,
             storm_palette,
+            // 1170:1b14: the level colour nearest to black (FUN_10f0_6039(0, 0, 0)).
+            black: (0..256).min_by_key(|&i| {
+                let c = colors6[i];
+                (((c[0] as i64).pow(2) + (c[1] as i64).pow(2)).pow(2) + (c[2] as i64).pow(4), i)
+            }).unwrap_or(0) as u8,
             rain_colour: {
                 // FUN_10f0_6039(b, g, r): the smallest (dr^2 + dg^2)^2 + db^4, the first one.
                 let d = |c: [u8; 3]| -> i64 {
@@ -1074,6 +1081,20 @@ impl Graphics {
         let frame = g.frame.saturating_sub(1);
         let st = &g.level.storm;
         self.background.draw(fb, (cam_x, cam_y), frame, st.sky_flash > 0 && st.kind == 1);
+        if self.background.proc_ == 5 {
+            if let Some((qx, qy)) = g.level.quad {
+                // FUN_1090_178e: OBJECTS 0x2716's quad (FUN_10d0_01e4, colour 1b14) under the
+                // skyline's decor: from (qx, qy) 0xa0 wide, down to its 8/9-parallax far edge.
+                let x0 = qx - cam_x;
+                if x0 < 0x280 && -0x140 < x0 {
+                    let y0 = qy - cam_y;
+                    let fx = (qx << 3) / 9 - (cam_x << 3) / 9;
+                    let fy = (qy << 3) / 9 - (cam_y << 3) / 9;
+                    let pts = [(x0, y0), (x0 + 0xa0, y0), (fx - 0x20, fy + 99), (fx - 0x50, fy + 0x5b)];
+                    render::fill_polygon(fb, &pts, self.black);
+                }
+            }
+        }
         if self.bg_only {
             return;
         }

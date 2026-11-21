@@ -239,8 +239,8 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   tint table over rows darkened by PalMixLight 0x20/0x24; markup ^| ^Cxx ^O ^Bxx. Pixel-exact on CITY01.
 - HeroClothes= in a script: the hero is PPHEROA/A2/A3 and slot 3 PPDOORA (`sprites::set_clothes`).
 - Still different: FUN_1088_2187 is the automap (1a94, toggled by a typed cheat), not drawn; the
-  little movie screen on START's skyline (4d9c, slot 0x7d MOVIE); FORPLANE's object at 534e
-  (FUN_10d0_01e4); the HUD message blip's sound; platform objects of unported kinds sit at their start;
+  little movie screen on START's skyline (4d9c, slot 0x7d MOVIE); GRANNY's tilting building (collapse.rs
+  simulates it, FUN_10f0_545b draws it); the HUD message blip's sound; platform objects of unported kinds sit at their start;
   some kills totals are off by one (forest: other EnemyFactory counting); a few actor frames (FORPLANE's
   pumpkin turret, WEAPON9's mines' lights) and the flamethrower's burning ground in START differ.
   Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`,

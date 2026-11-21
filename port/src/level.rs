@@ -153,6 +153,8 @@ pub struct Level {
     pub hero_x: i32,
     /// gCameraX/Y as the scripts and decals see them.
     pub cam: (i32, i32),
+    /// OBJECTS 0x2716 (FORPLANE): the quad background proc 5 fills (1170:534e / 5350).
+    pub quad: Option<(i32, i32)>,
     /// GRANNY's collapsing building (OBJECTS 0x2715).
     pub collapse: Option<crate::collapse::Collapse>,
     /// The platform objects (records 100..103).
@@ -224,6 +226,7 @@ impl Level {
             cam: (0, 0),
             plat_objs: Vec::new(),
             collapse: None,
+            quad: None,
             amb: [509, 329, 0], // HeroReset's Random(0x230) calls ran before DemoLoad zeroed the seed: the same in every demo
             walk_index: 0,
             walking: (0, 0),

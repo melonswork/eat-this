@@ -317,3 +317,28 @@ impl<'a> Painter<'a> {
         }
     }
 }
+
+/// FUN_10d0_01e4 (plain fill): a polygon filled with colour `c`, clipped to the screen; each
+/// scanline from the leftmost to the rightmost edge crossing at the row's centre.
+pub fn fill_polygon(fb: &mut [u8], pts: &[(i32, i32)], c: u8) {
+    let (top, bottom) = pts.iter().fold((i32::MAX, i32::MIN), |(t, b), p| (t.min(p.1), b.max(p.1)));
+    for y in top.max(0)..bottom.min(H) {
+        let fy = y as f64 + 0.5;
+        let mut xs: Vec<f64> = Vec::new();
+        for i in 0..pts.len() {
+            let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+            let (ya, yb) = (a.1 as f64, b.1 as f64);
+            if (ya <= fy && fy < yb) || (yb <= fy && fy < ya) {
+                xs.push(a.0 as f64 + (fy - ya) * (b.0 - a.0) as f64 / (yb - ya));
+            }
+        }
+        if xs.len() < 2 {
+            continue;
+        }
+        let l = xs.iter().cloned().fold(f64::MAX, f64::min).round() as i32;
+        let r = xs.iter().cloned().fold(f64::MIN, f64::max).round() as i32 - 1;
+        for x in l.max(0)..=r.min(W - 1) {
+            fb[(y * W + x) as usize] = c;
+        }
+    }
+}
