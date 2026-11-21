@@ -286,9 +286,7 @@ impl Level {
                     self.o(id).set(0x3c, 0x69);
                 }
                 // FUN_1070_00b6: the hero may stand on the shield.
-                if x - 0x20 <= h.x && h.x <= x + 0x20 && (h.y.min(h.prev_y)..=h.y.max(h.prev_y)).contains(&(y - 0x3a)) {
-                    eprintln!("warning: the hero standing on a big alien's shield not ported");
-                }
+                self.stand_on(env, y - 0x3a, y - 0x3a, x + 0x20, x - 0x20);
                 damage = match sprites::hit_rect(sprite, y, x, mirror) {
                     Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x1000),
                     None => 0,

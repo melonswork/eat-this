@@ -30,7 +30,7 @@ VMT method table (DS:VMT, see `mem_1170_0900.bin`): +0xc = update, +0x10 = hit.
 
 Also from AGENTS.md (not counted per map yet): riding the smallbot (FUN_1070_a18e), levers needing a key,
 pick-up effects 3/74, ~~particle spawn effects 30064/30065/30070~~ (sounds, done), ~~callback 1050:19f8~~ (the long fire FUN_1040_63c9: done), platform shake/dust (flags 8),
-frozen/burnt deaths, barrels >= 0xb, the hero on the big alien's shield, wall chunks 60308/60304 (45db),
+frozen/burnt deaths, barrels >= 0xb (in), ~~the hero on the big alien's shield~~ (FUN_1070_00b6, untested), wall chunks 60308/60304 (45db),
 bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, b9d3).
 
 ## Left (2026-11-21), in priority order
@@ -42,8 +42,8 @@ bonus 0xd10, callers of hero hit kinds 2/3 (FUN_1068_1f3c, 215e, FUN_1070_9a66, 
 5. ~~0x2716~~ (FORPLANE's quad): DONE.
 6. From AGENTS.md, not seen on the episode maps' load: riding the smallbot (FUN_1070_a18e), levers needing a
    key, pick-up effects 3/74, particle spawn effects 30064/30065/30070, ~~callback 1050:19f8~~ (the long fire FUN_1040_63c9: done), ~~platform shake/dust
-   (flags 8)~~ (ported, untested: no demo has one), ~~frozen/burnt deaths~~ (DONE: `deaths.rs`, FREEZE1/BURN1; aliens and big aliens wired, untested), barrels >= 0xb, the
-   hero on the big alien's shield, ~~wall chunks 60308/60304 (45db), bonus 0xd10~~ (ported, untested), path-platform modes
+   (flags 8)~~ (ported, untested: no demo has one), ~~frozen/burnt deaths~~ (DONE: `deaths.rs`, FREEZE1/BURN1; aliens and big aliens wired, untested), barrels >= 0xb (in), the
+   ~~hero on the big alien's shield~~ (done, untested), ~~wall chunks 60308/60304 (45db), bonus 0xd10~~ (ported, untested), path-platform modes
    0x4000/0x680/0x8000 and platform kinds 2/3, the press (icon 61001) and the carrier's mid-air blast are
    ported but not exercised by a scenario.
 
