@@ -1425,6 +1425,9 @@ impl Level {
                 // FUN_1050_14bd: two fires crawl along the floor either way, every 6 frames.
                 if m.w(0x24) % 6 == 1 {
                     f.fx.shakes.push((0x2a, 10));
+                    if m.w(0x24) % 0xc == 1 {
+                        sound::play_at_vol(0x47, ((0x2a - m.w(0x24)) * 0x180) / 0x2a, m.w(0xa), m.w(8));
+                    }
                     for k in 0..2usize {
                         let (mut x, mut y, mut d) = {
                             let v = &self.particles.list[i].v;
@@ -2150,7 +2153,7 @@ impl Level {
                     v.set_l(4, if side == 2 || vy >= 0x20000 { vy } else { 0 });
                     // The clonk on a floor: only a hard enough landing (or a ceiling).
                     if side == 2 || vy >= 0x20000 {
-                        sound::play_at(0x6d, m.w(0x12), m.w(0x10));
+                        sound::play_at(0x44, m.w(0x12), m.w(0x10));
                     }
                 }
                 m.set(0x3e, 0);
@@ -2174,6 +2177,7 @@ impl Level {
         if m.w(0x22) == 0x1e0 {
             m.set(0x34, 0x8000);
             m.set(0x22, 0x1e8);
+            sound::play_at(0x3c, m.w(0xa), m.w(8));
             self.particles.keep_dying = false;
             return;
         }
@@ -2185,6 +2189,7 @@ impl Level {
         m.set(0x1c, r * 6 / 5);
         m.set(0x1e, r);
         m.set(0x42, 0x2148);
+        sound::play_at(0x47, y, x);
         f.fx.shakes.push((0x26, 0xe));
         self.explode_area(f.world, 0xc0, 4, y + 0xe, x + 0x2e, y - 0x3e, x - 0x2e, f.rng, f.fx);
         let ps = &mut self.particles;
