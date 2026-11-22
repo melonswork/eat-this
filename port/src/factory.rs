@@ -969,6 +969,7 @@ impl Level {
             61000..=61099 => {
                 // FUN_1070_fa6a: the weight's record, placed by its type's offset (1170:0c38).
                 let t = (f - 61000) as i32;
+                if std::env::var_os("ET_SCAN").is_some() { println!("WEIGHT type {t} at ({x}, {y})"); }
                 let off = crate::world::ds_word(0xc38 + t as usize * 0x12);
                 let (dx, dy) = ((off & 0xff) as i8 as i32, (off >> 8) as i8 as i32);
                 let w = [0, t as i16, (x + dx) as i16, (y + dy) as i16];

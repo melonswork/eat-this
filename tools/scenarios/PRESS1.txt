@@ -1,0 +1,12 @@
+# The press (icon 61001, weight type 1, FUN_1068_215e): CITY_I03's press at (2903,894), the start
+# moved left of it in its room. The hero walks under it: it drops (0x19), lands (0x1c, thirteen bits
+# FUN_1040_677d), pumps (0x1f each cycle); he jumps onto it and walks off the other side.
+level MAPS/CITY_I03.MAP
+start 2850 897
+mouse 200 100
+20
+25 right
+150
+8 up right
+30 right
+150
