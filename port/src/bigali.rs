@@ -307,7 +307,8 @@ impl Level {
                 o.set(0x3c, 0);
                 if o.w(0x36) < 1 {
                     if particles::FRAME_SLACK && env.rng.random(2) == 0 {
-                        eprintln!("warning: FUN_1088_11a3 (a taunt) not ported");
+                        // FUN_1088_11a3(0): a lightning flash and thunder (4f0c > 10 only).
+                        self.thunder(env.rng, 0);
                     }
                     env.fx.kills += 1;
                     self.o(id).set(0x36, 0);
@@ -770,7 +771,7 @@ impl Level {
             }
             ps.p.delay = 0;
             crate::sound::play_at(0x4a, oy, x);
-            eprintln!("warning: FUN_1050_5c7d's sideways shake from a big alien not applied");
+            env.fx.side_shakes.push((0x2c, 0x12));
         }
     }
 

@@ -285,6 +285,9 @@ impl Game {
             crate::effects::explode_tile(&mut g.level, &mut g.world, 0x60, 0x104, y, x, &mut g.rng, &mut fx);
         }
         g.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
+        for &(a, b) in &fx.side_shakes {
+            g.camera.shake_sideways(a, b);
+        }
         for &(a, b) in &fx.shakes {
             g.camera.shake(a, b);
         }
@@ -390,6 +393,9 @@ impl Game {
             self.level.release_tile_events(&mut self.world, &mut fx, self.hero.x);
             self.flush_spawns(&mut fx);
             self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
+            for &(a, b) in &fx.side_shakes {
+                self.camera.shake_sideways(a, b);
+            }
             for &(a, b) in &fx.shakes {
                 self.camera.shake(a, b);
             }
@@ -639,6 +645,9 @@ impl Game {
         }
         // Script command 0x0b: HeroDamage(id), a message.
         self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
+        for &(a, b) in &fx.side_shakes {
+            self.camera.shake_sideways(a, b);
+        }
         for &(a, b) in &fx.shakes {
             if std::env::var_os("ET_SHAKE").is_some() {
                 eprintln!("SHAKE {} ({a:#x}, {b})", self.frame);
@@ -727,6 +736,9 @@ impl Game {
         self.level.update_particles(0, &mut pf);
         // ScreenShake acts at once: the shakes made so far this frame (group 0's grenades) are
         // in place before the actors test 1170:45bc - 1 == 45ba.
+        for (a, b) in std::mem::take(&mut fx.side_shakes) {
+            self.camera.shake_sideways(a, b);
+        }
         for (a, b) in std::mem::take(&mut fx.shakes) {
             if std::env::var_os("ET_SHAKE").is_some() {
                 eprintln!("SHAKE {} ({a:#x}, {b}) before the actors", self.frame);
@@ -847,6 +859,9 @@ impl Game {
         }
         // Script command 0x0b: HeroDamage(id), a message.
         self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
+        for &(a, b) in &fx.side_shakes {
+            self.camera.shake_sideways(a, b);
+        }
         for &(a, b) in &fx.shakes {
             self.camera.shake(a, b);
         }
@@ -1826,7 +1841,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let game = Game::new(world, demo);
     if o.headless {
         if game.demo.is_none() {
-            return Err("--headless needs --demo".into());
+            // ET_IDLE=N: N frames of the map with no input (for runtime warnings).
+            let n: u32 = std::env::var("ET_IDLE").ok().and_then(|v| v.parse().ok()).ok_or("--headless needs --demo (or ET_IDLE=N)")?;
+            let mut game = game;
+            for _ in 0..n {
+                game.step([0; 9]);
+                game.sound.clear();
+            }
+            println!("idle {n} frames, hero at ({}, {}) state {}", game.hero.x, game.hero.y, game.hero.state);
+            return Ok(());
         }
         // Sound stays off unless --wav asks for a capture.
         let capture = o.wav.as_ref().map(|p| sound::Capture::new(&o.data, p));

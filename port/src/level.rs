@@ -89,6 +89,8 @@ pub struct Effects {
     pub grinder_slow: bool,
     /// ScreenShake calls (strength, amplitude), in order.
     pub shakes: Vec<(i32, i32)>,
+    /// FUN_1050_5c7d calls (strength, amplitude): sideways shakes.
+    pub side_shakes: Vec<(i32, i32)>,
     /// FUN_1088_3a81: the hero bounced off an enemy's head (HeroStartJump(0, -50, 10)).
     pub hero_bounce: bool,
     /// A springboard under him: (vy, jump kind or -1 for none, y, whether the Up key is used up).
