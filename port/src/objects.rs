@@ -5,11 +5,14 @@
 
 /// A sector's seven collections (FUN_1068_0002), by byte offset in the sector object.
 pub mod list {
+    #[allow(dead_code)]
     pub const L1E: usize = 0;
+    #[allow(dead_code)]
     pub const L2A: usize = 1;
     /// +0x36: enemies and most actors; updated by FUN_1070_faec through VMT +0xc.
     pub const ACTORS: usize = 2;
     /// +0x42: things the hero code updates (FUN_1060_145a).
+    #[allow(dead_code)]
     pub const L42: usize = 3;
     /// +0x4e: rectangle triggers (record 0x1478), FUN_1068_08ff.
     pub const TRIGGERS: usize = 4;
@@ -66,6 +69,7 @@ impl Look {
         self
     }
 
+    #[allow(dead_code)]
     pub fn mode(mut self, m: i32) -> Look {
         self.mode = m;
         self

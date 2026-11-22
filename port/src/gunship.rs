@@ -36,7 +36,7 @@ impl Level {
             eprintln!("OBJ {} {}", env.frame + 1, ws.join(" "));
         }
         let state = self.o(id).w(0x32);
-        let mut sprite;
+        let sprite;
         match state {
             0 => {
                 self.ship_fly(id, now);

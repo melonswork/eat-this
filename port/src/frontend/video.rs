@@ -27,6 +27,7 @@ pub enum Then {
     /// Back to the menu shown before (intro at boot: 1080:17be, nothing to play in the menus).
     Menu,
     /// FUN_1080_16b7: the loaded level starts (its music).
+    #[allow(dead_code)]
     Level(PathBuf),
     /// FUN_1080_172a: the stats screen.
     Stats,

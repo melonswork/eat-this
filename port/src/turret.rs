@@ -59,7 +59,7 @@ impl Level {
         let on_screen = ex - env.camera.0 >= 0 && ey - env.camera.1 >= 0 && ex - env.camera.0 <= 0x13f && ey - env.camera.1 <= 199;
         let in_sight = on_screen && (0xb90..=0x1630).contains(&angle) && self.line_of_sight(env, hy, h.x, ey, ex);
         let state = self.o(id).w(0x24);
-        let mut see = |s: &mut Level, env: &mut Env| {
+        let see = |s: &mut Level, env: &mut Env| {
             let _ = env;
             let o = s.o(id);
             if o.w(0x2e) < 1 && in_sight {

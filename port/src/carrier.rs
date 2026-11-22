@@ -118,7 +118,7 @@ impl Level {
             }
             crate::actors::unbounded(self.o(id));
         } else {
-            sprite = 0x5c05;
+            // sprite 0x5c05: only the draw uses it here
             {
                 let o = self.o(id);
                 let (x, y) = (o.w(0xe), o.w(0x10));

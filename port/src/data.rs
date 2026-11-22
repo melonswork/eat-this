@@ -224,6 +224,7 @@ impl Map {
         })
     }
 
+    #[allow(dead_code)]
     pub fn cell(&self, plane: usize, tx: i32, ty: i32) -> u16 {
         if tx < 0 || ty < 0 || tx >= self.width || ty >= self.height {
             return 0;

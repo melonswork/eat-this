@@ -8,6 +8,7 @@ use crate::level::Level;
 use crate::sound;
 
 /// FUN_10e0_016b(x1, y1, x2, y2) with the volume `vol`: is the sound audible in either channel?
+#[allow(dead_code)]
 fn audible(env: &Env, vol: i32, rect: (i32, i32, i32, i32)) -> bool {
     volumes(env, vol, rect).is_some()
 }

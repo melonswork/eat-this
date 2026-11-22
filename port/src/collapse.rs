@@ -25,6 +25,7 @@ pub struct Collapse {
     /// 4ed4: the lever's map cell.
     pub lever: u16,
     /// 4ed6/4ed8: its sector (the draw only shows it there).
+    #[allow(dead_code)]
     pub sector: usize,
 }
 

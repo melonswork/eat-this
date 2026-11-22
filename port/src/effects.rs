@@ -615,6 +615,7 @@ fn clear_block(world: &mut World, y: i32, x: i32) -> (i32, i32, i32, i32) {
 }
 
 /// FUN_1040_6577: a puff of smoke, six particles, two Random() calls each.
+#[allow(dead_code)]
 pub fn smoke(_y: i32, _x: i32, rng: &mut PascalRandom) {
     for _ in 0..6 {
         rng.random(0xb);

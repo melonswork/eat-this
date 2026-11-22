@@ -474,6 +474,7 @@ pub fn sound_names(data: &Path) -> Vec<String> {
 
 pub struct Bank {
     pub samples: Vec<Option<Arc<Sample>>>,
+    #[allow(dead_code)]
     pub names: Vec<String>,
     /// The CD's audio tracks, extracted by tools/extract_audio.py (work/cd/AUDIO/TRACKnn.WAV).
     audio_dir: PathBuf,

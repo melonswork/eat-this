@@ -176,6 +176,7 @@ impl World {
         self.planes[MAIN_PLANE].as_mut().unwrap()
     }
 
+    #[allow(dead_code)]
     pub fn pixel_size(&self) -> (i32, i32) {
         (self.map.width * TILE, self.map.height * TILE)
     }

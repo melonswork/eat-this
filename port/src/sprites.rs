@@ -54,6 +54,7 @@ const SLOTS: &[(u16, &str)] = &[
 #[derive(Clone, Copy, Debug)]
 pub struct HitBox {
     pub kind: i32,
+    #[allow(dead_code)]
     pub value: i32,
     pub rect: (i32, i32, i32, i32),
 }

@@ -1692,20 +1692,6 @@ impl Level {
                     ps.p.group = 1;
                 }
             }
-            0x2299 => {
-                // FUN_1050_2299: a trail of smoke.
-                if m.w(0x24) % 4 == 3 {
-                    let (x, y) = (m.w(8), m.w(0xa));
-                    let ps = &mut self.particles;
-                    ps.p.delay = 3;
-                    ps.p.group = 0;
-                    ps.p.colour = 0x10;
-                    ps.spawn_seq(0x6805, 3, 10, y, x, 1);
-                    ps.p.colour = 0;
-                    ps.p.group = 1;
-                    ps.p.delay = 0;
-                }
-            }
             0x18e6 => {
                 // FUN_1050_18e6: smoke lying on the floor; gone when there's no floor.
                 let (x, y) = (m.w(8), m.w(0xa));

@@ -96,6 +96,7 @@ pub struct Hero {
     /// next HeroUpdate starts from them (the meat hooks, the tank).
     pub carry: (i32, i32),
     /// Sensitive-lever tiles touched this frame (HeroTouchTiles), as (ty, tx), for the level.
+    #[allow(dead_code)]
     pub touched: Vec<(i32, i32)>, // 1170:4e06: HeroPushOutOfWalls' push, becomes next frame's starting dx (FUN_1088_532c)
     released: [bool; 9],
     input_cache: [i8; 9],
@@ -2575,7 +2576,7 @@ impl Hero {
         let mut ground = self.ground;
         let mut belt = None;
         // One column test (FUN_1088_2cff + 2c97). `offset` and `pdy` are 0 for the map.
-        let mut column = |func0: u16,
+        let column = |func0: u16,
                           sol: u16,
                           sy: i32,
                           sx_abs: (usize, i32),
