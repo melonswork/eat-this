@@ -450,6 +450,98 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             sound::play_at(0x7b, y + 2, x + 0x10);
             fx.shakes.push((0xc, 5));
         }
+        35 => {
+            // FUN_1040_3c53: the cells left, right and above go, bits fly, a steam emitter
+            // (0x141e kind 0) takes its place (FUN_1068_17f8), a big shake.
+            let w = world.main().width;
+            let c = (y >> 4) * w + (x >> 4);
+            for d in [1, -1, -w] {
+                if let Some(v) = world.main_mut().cells.get_mut((c + d) as usize) {
+                    *v = 0;
+                }
+            }
+            chip_pairs(&mut lv.particles, rng, 0x7516, y, x);
+            fx.objects.push((0x141e, [0, 0, x as i16, (y + 8) as i16]));
+            fx.shakes.push((0x2a, 0x10));
+            sound::play_at(0x4a, y, x);
+        }
+        80 => {
+            // FUN_1040_3d9e: bits fly, a steam emitter (0x141e kind 1) takes its place.
+            chip_pairs(&mut lv.particles, rng, 0x7514, y, x);
+            fx.objects.push((0x141e, [0, 1, x as i16, (y + 7) as i16]));
+            fx.shakes.push((0x18, 10));
+            sound::play_at(0x4a, y, x);
+        }
+        68 => {
+            // FUN_1040_56ef: function-60300 cells above / below step on, a bonus 0xd10 one time
+            // in three, six bits of wood, a shake.
+            let w = world.main().width;
+            let fy = (y & 0xfff0) + 0xf;
+            let mut bx = x;
+            if world.tile_function_at(fy, x - 0x10) as i16 == -0x1474 {
+                step_cell(lv, world, ((fy >> 4) * w + ((x - 0x10) >> 4)) as u16, rng, fx);
+                bx -= 8;
+            }
+            if world.tile_function_at(fy, x + 0x10) as i16 == -0x1474 {
+                bx += 8;
+                step_cell(lv, world, ((fy >> 4) * w + ((x + 0x10) >> 4)) as u16, rng, fx);
+            }
+            if rng.random(3) == 0 {
+                lv.bonus(world, 0xd10, fy, bx);
+            }
+            let ps = &mut lv.particles;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            for i in 0..=5 {
+                let px = bx - 10 + i * 4;
+                let py = ((y & 0xfff0) + 0xb) - rng.random(8);
+                let k = rng.random(2);
+                ps.spawn(k + 0x3300, py, px);
+                let a = i * -0x30 + 0x5d8 + rng.random(0x81);
+                let v = rng.random(0x20);
+                ps.throw(9, v + 0x40, a);
+            }
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            fx.shakes.push((0x18, 0xe));
+            sound::play_at(0x4a, fy, bx);
+        }
+        79 => {
+            // FUN_1040_538f: a back-plane tile of function 60300 there steps on (plane 0), four
+            // leaves (0x5925) flutter down.
+            if world.tile_function_in(0, y, x) as i16 == -0x1474 {
+                if let Some(Some(p)) = world.planes.get(0) {
+                    let (tx, ty) = (x >> 4, y >> 4);
+                    let t = p.get(tx, ty);
+                    let next = (t as i32 + world.cell_function(t, 2) as i16 as i32) as u16;
+                    if (next as i16) >= 0 {
+                        world.planes[0].as_mut().unwrap().set(tx, ty, next);
+                    }
+                }
+                sound::discard(0x51);
+                let p = rng.random(0x28);
+                sound::pitch(0x100 - p);
+                sound::play_at(0x51, y, x);
+                let ps = &mut lv.particles;
+                ps.p.group = 0;
+                ps.p.hits = 0x8000;
+                ps.p.on_death = 0x10;
+                ps.p.callback = 0x177a;
+                ps.p.colour = 0x10;
+                for _ in 0..=3 {
+                    ps.p.delay = rng.random(0x10);
+                    let px = x - 7 + rng.random(0x10);
+                    let py = y - 7 + rng.random(0x10);
+                    let steps = rng.random(3) + 2;
+                    ps.spawn(0x5925, py, px);
+                    ps.last_mut().m.set(0x26, steps);
+                    let a = rng.random(0x321) + 0xf50;
+                    let v = rng.random(0x11);
+                    ps.throw(7, v + 0x10, a);
+                }
+                ps.p = crate::particles::Params::default();
+            }
+        }
         36 => {
             // FUN_1040_3f9c: the back plane's cell goes, chips burst (FUN_1040_3eb4).
             if let Some(Some(p)) = world.planes.get_mut(0) {
@@ -561,6 +653,42 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
         id if (30000..0x8000).contains(&id) => crate::sound::play_at(id as usize - 30000, y, x),
         id => eprintln!("warning: effect {id} not ported"),
     }
+}
+
+/// FUN_1050_5a07(cell): a main-plane cell steps on by its function 2 (FUN_1088_1364: a negative
+/// result blasts the cell right here, nested, not queued).
+fn step_cell(lv: &mut Level, world: &mut World, cell: u16, rng: &mut PascalRandom, fx: &mut Effects) {
+    let w = world.main().width;
+    let t = world.main().cells[cell as usize];
+    let next = (t as i32 + world.cell_function(t, 2) as i16 as i32) as u16;
+    if (next as i16) < 0 {
+        if world.cell_function(t, 1) & 0x80 != 0 {
+            let strength = -(next as i16 as i32) * 0x10;
+            explode_tile(lv, world, strength, 0xffff, (cell as i32 / w) << 4, (cell as i32 % w) << 4, rng, fx);
+        }
+    } else {
+        lv.set_cell(world, next, cell, fx);
+    }
+}
+
+/// FUN_1040_3c53 / 3d9e's bits: three pairs of chips (sprites `s`, `s` + 1) thrown up and out.
+fn chip_pairs(ps: &mut crate::particles::Particles, rng: &mut PascalRandom, s: i32, y: i32, x: i32) {
+    ps.p.group = 0;
+    ps.p.hits = 0x8000;
+    ps.p.on_death = 0x10;
+    for i in 0..=2 {
+        for v0 in [0x50, 0x70] {
+            let px = x - 4 + i * 4;
+            let k = rng.random(2);
+            ps.spawn(k + s, y, px);
+            let a = i * -0xb0 + 0x610 + rng.random(0x81);
+            let v = rng.random(0x10);
+            ps.throw(9, v + v0, a);
+        }
+    }
+    ps.p.on_death = 0;
+    ps.p.hits = 0;
+    ps.p.group = 1;
 }
 
 /// FUN_1040_6941(y, x): forty pairs of bits sprayed both ways (callback 0x26c8).
@@ -796,17 +924,7 @@ fn plank_breaks(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut Pas
     if std::env::var_os("ET_PLANK").is_some() { let c = world.cell_at(crate::world::MAIN_PLANE, y, x).unwrap_or(0); eprintln!("PLANK y {y} x {x} tile {c:#x} f2 {} f1 {:#x}", world.cell_function(c, 2) as i16, world.cell_function(c, 1)); }
     let w = world.main().width;
     let cell = ((y >> 4) * w + (x as u16 >> 4) as i32) as u16;
-    let t = world.main().cells[cell as usize];
-    let next = (t as i32 + world.cell_function(t, 2) as i16 as i32) as u16;
-    if (next as i16) < 0 {
-        // FUN_1088_1364 with a negative tile: the blast runs right here (nested), not queued.
-        if world.cell_function(t, 1) & 0x80 != 0 {
-            let strength = -(next as i16 as i32) * 0x10;
-            explode_tile(lv, world, strength, 0xffff, (cell as i32 / w) << 4, (cell as i32 % w) << 4, rng, fx);
-        }
-    } else {
-        lv.set_cell(world, next, cell, fx);
-    }
+    step_cell(lv, world, cell, rng, fx);
     let ps = &mut lv.particles;
     ps.p.delay = rng.random(4);
     ps.p.draw = rng.random(2);

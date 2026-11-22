@@ -105,6 +105,8 @@ pub struct Effects {
     pub secrets: i32,
     /// Object tiles a script placed (FUN_1088_0d5a): (tile, cell), spawned by `Level::flush_spawns`.
     pub spawns: Vec<(u16, u16)>,
+    /// Objects an effect made (FUN_1068_17f8 -> EnemyFactory): (kind, record words).
+    pub objects: Vec<(u16, [i16; 4])>,
     /// Effects a script asked for (command 2, FUN_1040_60bb): (id, y, x).
     pub effects: Vec<(u16, i32, i32)>,
     /// A bot carried the hero sideways (gHeroX += dx).
