@@ -85,6 +85,15 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
             p.mode = 0x10;
             sprite = age / 0x12 + m.w(0x14);
         }
+        0x16cc => {
+            // FUN_1050_16cc (weapon 9's balls): rolling (0x1900 + age / 8 % 4) while the motion
+            // record's +8 is under 5, else lying (0x1904); then its light, blinking every 32
+            // frames, a pixel higher on odd body sprites.
+            let body = if part.v.w(8) < 5 { 0x1900 + ((m.uw(0x24) >> 3) & 3) as i32 } else { 0x1904 };
+            p.at(body, x, y);
+            p.at(0x1906 + ((m.uw(0x24) >> 5) & 1) as i32, x, y - (body & 1));
+            return;
+        }
         0x2299 => sprite += (age / 4) % 2,
         0x2459 | 0x2497 | 0x2946 => sprite += (age >> 2) & 1,
         0x232e => {
@@ -101,7 +110,11 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
         // ground; over its last 0x120 frames the steps grow by k * k >> 5 (2/3 of it across),
         // k = age - life + 0x120: it shrinks away.
         0x18e6 | 0x19f8 | 0x1b90 => {
-            p.clip.3 = (y - p.cam.1).min(p.clip.3);
+            // 1ad0 = the ground's screen row, unless it is below the screen or above the clip.
+            let ground = y - p.cam.1;
+            if ground <= p.clip.3 && ground >= p.clip.1 {
+                p.clip.3 = ground;
+            }
             match m.uw(0x42) {
                 0x18e6 => {
                     let k = age - m.w(0x22) + 0x120;
@@ -130,7 +143,14 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
                         }
                     }
                 }
-                _ => p.flame(0xa00, 0x755, age as u32, x, y),
+                _ => {
+                    // FUN_1050_1b90: the flame pulses with |sin(age * 0xb40 / life)| / 8.
+                    let life = m.w(0x22).max(1) as i64;
+                    let a = (age as i64 * 0xb4 * 0x10 / life) as i32;
+                    let k = (crate::trig::sin(a) * 0x800 / 0x4000).abs();
+                    let sx = 0xa00 - k;
+                    p.flame(sx, (sx - 0x200) * 2 / 3 + 0x200, age as u32, x, y)
+                }
             }
             return;
         }
@@ -546,12 +566,23 @@ pub fn pickups(p: &mut Painter, world: &crate::world::World) {
     }
 }
 
+thread_local! {
+    /// 1170:45be: the vertical shake's last amount (the camera's), for the pick-ups' draw.
+    static SHAKE: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+}
+
+pub fn set_shake(amount: i32) {
+    SHAKE.with(|c| c.set(amount));
+}
+
 /// One pick-up of kind `k` at screen (x, y) (FUN_1088_022b's dispatch).
 pub fn pickup(p: &mut Painter, k: i32, x: i32, y: i32) {
     p.mix = Mix::Light;
     let f3 = per(p, 3);
+    // Kinds 0 and 16 (1088:0002, 003c) rise by half the shake (45be >> 1, unsigned).
+    let sy = y - ((SHAKE.with(|c| c.get()) as u16) >> 1) as i32;
     match k {
-        0 => p.sprite(0x2200 + (f3 & 7), x, y),
+        0 => p.sprite(0x2200 + (f3 & 7), x, sy),
         1 => shine(p, 0x2208 + ((f3 & 7) < 3) as i32, x, y),
         2 => {
             p.sprite((per(p, 2) & 0xf) + 0x900, x + 7, y + 7);
@@ -561,7 +592,7 @@ pub fn pickup(p: &mut Painter, k: i32, x: i32, y: i32) {
         4 => shine(p, 0x220a + f3 % 6, x, y),
         5..=12 => shine(p, 0x2216 + (k - 5), x, y),
         13..=15 => shine(p, 0x2228 + (k - 13), x, y),
-        16 => p.sprite(0x2233 - (f3 & 7), x, y),
+        16 => p.sprite(0x2233 - (f3 & 7), x, sy),
         _ => {}
     }
     p.reset();

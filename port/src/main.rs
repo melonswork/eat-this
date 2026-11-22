@@ -1234,6 +1234,7 @@ impl Graphics {
                 draw_plane(fb, &g.world, pl, ox - cam_x, oy - cam_y, frame, FULL);
             }
         }
+        draw::set_shake(g.camera.shake_amount());
         let ship = g.hero.ship;
         let mut p = render::Painter {
             fb,
