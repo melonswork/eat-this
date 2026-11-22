@@ -1088,7 +1088,7 @@ pub fn automap(p: &mut Painter, world: &crate::world::World, level: &Level, rect
     }
     let (w, h) = (x2 - x1, y2 - y1);
     let black = vga[0];
-    let mut set = |fb: &mut [u8], x: i32, y: i32, c: u8| {
+    let set = |fb: &mut [u8], x: i32, y: i32, c: u8| {
         if (0..W).contains(&x) && (0..H).contains(&y) {
             fb[(y * W + x) as usize] = c;
         }
