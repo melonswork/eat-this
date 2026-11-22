@@ -283,8 +283,13 @@ impl Level {
             eprintln!("SETCELL {} cell {cell} tile {tile:#x} f0 {}", self.now, world.cell_function(tile, 0));
         }
         let f = world.cell_function(tile, 0);
-        if (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f) {
+        if (tile as i16) > 0 && (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f) {
             self.run_scripts(world, cell, fx);
+        } else if f == 30000 {
+            // FUN_1088_12f9: the plane-2 cell is cleared, the tile flies out as a bonus.
+            world.planes[2].as_mut().expect("plane 2").cells[cell as usize] = 0;
+            let w = world.main().width;
+            self.bonus(world, tile as i32, (cell as i32 / w) << 4, (cell as i32 % w) << 4);
         }
     }
 
@@ -625,7 +630,10 @@ impl Level {
                     if (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f0) {
                         self.run_scripts(world, cell as u16, fx);
                     } else if f0 == 30000 {
-                        eprintln!("warning: a bonus tile uncovered (FUN_1040_6b03) not ported");
+                        // FUN_1088_12f9: the plane-2 cell is cleared, the tile flies out as a bonus.
+                        world.planes[2].as_mut().expect("plane 2").cells[cell as usize] = 0;
+                        let w = world.main().width;
+                        self.bonus(world, tile as i32, (cell / w) << 4, (cell % w) << 4);
                     }
                 }
             }

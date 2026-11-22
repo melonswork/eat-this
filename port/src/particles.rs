@@ -1756,7 +1756,11 @@ impl Level {
         if (crate::world::func::LEVER_FIRST..=crate::world::func::LEVER_LAST).contains(&f0) {
             self.run_scripts(world, idx as u16, fx);
         } else if f0 == 30000 {
-            eprintln!("warning: a bonus tile uncovered (FUN_1040_6b03) not ported");
+            // FUN_1088_12f9: the PLANE-2 cell there is cleared and the tile flies out as a bonus
+            // (FUN_1040_6b03).
+            world.planes[2].as_mut().expect("plane 2").cells[idx as usize] = 0;
+            let w = world.main().width;
+            self.bonus(world, tile as i32, (idx / w) << 4, (idx % w) << 4);
         }
     }
 
@@ -1808,7 +1812,12 @@ impl Level {
             let t = world.main().cells[below];
             let next = (t as i32 + world.cell_function(t, 2) as i16 as i32) as u16;
             if (next as i16) < 0 {
-                eprintln!("warning: FUN_1088_1364 with a negative tile not ported");
+                // FUN_1088_1364 with a negative tile: a nested blast of the cell below.
+                if world.cell_function(t, 1) & 0x80 != 0 {
+                    let strength = -(next as i16 as i32) * 0x10;
+                    let b = below as i32;
+                    crate::effects::explode_tile(self, world, strength, 0xffff, (b / width) << 4, (b % width) << 4, rng, fx);
+                }
             } else {
                 world.main_mut().cells[below] = next;
                 self.cell_changed(world, below as i32, fx);
