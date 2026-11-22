@@ -1807,6 +1807,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 let t = world.tile_function_at(y, x);
                 if let Some(c) = world.cell_at(world::MAIN_PLANE, y, x) {
+                    let f0 = world.cell_function(c, 0);
+                    if (6000..6010).contains(&f0) && world.cell_function(c, 1) != 0 {
+                        println!("SOLIDLEVER tile {c:#x} f0 {f0} f1 {:#x} f2 {:#x} at ({tx},{ty}) px ({x},{y})", world.cell_function(c, 1), world.cell_function(c, 2));
+                    }
                     if world.cell_function(c, 4) == 43 {
                         let next = (c as i32 + world.cell_function(c, 2) as i16 as i32) as u16;
                         println!("EFFECT43 tile {c:#x} f3 {:#x} -> {next:#x} f0 {} at ({tx},{ty}) px ({x},{y})", world.cell_function(c, 3), world.cell_function(next, 0) as i16);
