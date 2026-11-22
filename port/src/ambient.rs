@@ -64,6 +64,9 @@ impl Level {
                 return;
             }
         }
+        // Its volumes are worked out here; 315a leaves 1ab8 at 0x100 (which undoes the volume
+        // FUN_1040_34e3 leaves behind).
+        sound::set_volume(0x100);
         let key = crate::sound::key::obj(id, 0x1a);
         if kind < 10000 {
             // A plain emitter: its sound loops while audible (handle +0x1a).

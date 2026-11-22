@@ -120,6 +120,8 @@ pub struct Effects {
 }
 
 pub struct Level {
+    /// 1170:0f2a is 2 (a level running) rather than 1 (its setup): EnemyFactory's big aliens growl.
+    pub in_play: bool,
     /// 1170:4dc2: restarts of this level (GameFrame 4e60 = 10 counts them; a start from the menu
     /// or a level end resets it). Effect 93 only clears its tile on the first two tries.
     pub tries: i32,
@@ -206,6 +208,7 @@ impl Level {
             .find(|r| r[0] == 0x2724)
             .map(|r| Grinder::from_record(r));
         Level {
+            in_play: false,
             tries: 0,
             scripts,
             platforms: Vec::new(),

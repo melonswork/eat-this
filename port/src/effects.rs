@@ -307,7 +307,7 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             ps.p.group = 1;
             ps.p.delay = 0;
             let p = rng.random(0x1f); // the sound's pitch
-            sound::play_at_pitch(0x51, p + 0xf1, y, x + 0x10);
+            sound::play_at_pitch(0x51, p + 0xf1, y, px + 0x10);
             fx.shakes.push((0xc, 7));
         }
         83 => {
@@ -380,9 +380,9 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             }
             let p = rng.random(0x29); // the sound's pitch
             let v = rng.random(0x40);
+            // 1ab8 is not put back: later plays start from it until someone resets it.
             sound::set_volume(0x100 - v);
             sound::play_at_pitch(0x7b, p + 0xec, y, x);
-            sound::set_volume(0x100);
             fx.shakes.push((0xc, 7));
         }
         85 => {

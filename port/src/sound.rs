@@ -122,6 +122,7 @@ fn active(s: &Front) -> bool {
 
 /// FUN_10e0_0002 (GameFrameInGame's start): the listener is the camera's centre.
 pub fn listener(x: i32, y: i32) {
+    if std::env::var("ET_SNDPOS").is_ok() { let f = with(|s| s.frame); eprintln!("LISTENER {} ({},{})", f, x, y); }
     with(|s| s.listener = (x, y));
 }
 
@@ -270,6 +271,7 @@ pub fn play(id: usize) {
 
 /// SoundPlayAt (1050:5fe2): `id` at (x, y) if audible.
 pub fn play_at(id: usize, y: i32, x: i32) {
+    if std::env::var("ET_SNDPOS").is_ok() { let (l, f) = with(|s| (s.listener, s.frame)); eprintln!("SNDPOS {} id {} pos ({},{}) listener {:?}", f, id, x, y, l); }
     if audible(y, x) {
         play(id);
     } else {
