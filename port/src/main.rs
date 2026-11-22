@@ -517,6 +517,8 @@ impl Game {
         }
         if let Some((y, x, a)) = self.hero.gun.shell7 {
             self.level.particles.shell7(a, y, x);
+            let water = self.world.sectors[self.world.sector_at(y, x)].water[1];
+            self.level.particles.set_water(water);
             noise = 2;
         }
         if let Some((y, x, a)) = self.hero.gun.spread {
@@ -538,10 +540,14 @@ impl Game {
         }
         if let Some((y, x, a)) = self.hero.gun.charge {
             self.level.particles.mine(a, y, x);
+            let water = self.world.sectors[self.world.sector_at(y, x)].water[1];
+            self.level.particles.set_water(water);
             noise = 2;
         }
         if let Some((y, x, a)) = self.hero.gun.grenade {
             self.level.particles.grenade(0x40, a, y, x, &mut self.rng);
+            let water = self.world.sectors[self.world.sector_at(y, x)].water[1];
+            self.level.particles.set_water(water);
             noise = 2;
         }
         for ((tx, ty), effect, f3, y, x) in std::mem::take(&mut self.hero.pickups) {
@@ -1757,6 +1763,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _ = sprites::DIR.set(o.data.join("SPRITES"));
     let world = load_world(&o.data, &map_path)?;
     if std::env::var_os("ET_SCAN").is_some() {
+        for (i, sc) in world.sectors.iter().enumerate() {
+            if sc.water[1] != 0x7fff {
+                println!("WATER sector {i} line {} cam {:?}", sc.water[1], sc.cam);
+            }
+        }
         // Cells of rarely used features: slope rows with flags (function 2 of a slope tile) and
         // tile functions 8000..8099.
         for ty in 0..world.main().height {
@@ -1798,7 +1809,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 for tx in 0..p.width {
                     let c = p.get(tx, ty);
                     if world.cell_function(c, 0) == 30000 && world.cell_function(c, 4) == hero::WEAPON_PICKUP {
-                        println!("PICKUP weapon {} at x {} y {}", world.cell_function(c, 3) as i32 - 0x1e, tx * 16 + 7, ty * 16 + 7);
+                        println!("PICKUP weapon {} at x {} y {} cell ({tx},{ty}) = {c:#x}", world.cell_function(c, 3) as i32 - 0x1e, tx * 16 + 7, ty * 16 + 7);
                     }
                 }
             }

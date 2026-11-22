@@ -323,7 +323,6 @@ impl Particles {
         let s = 0x195a + rng.random(2) * 4;
         self.spawn_seq(s, 1, 0x78, y, x, 0);
         self.bounce(7, speed, angle);
-        // FUN_1050_44ae: the water line of its sector (none in the levels ported so far).
         self.p.draw = 0;
         self.p.on_death = 0;
         self.p.callback = 0;
@@ -373,6 +372,12 @@ impl Particles {
         self.p.flags = 0x84;
         self.p.hits = 0;
         self.p.group = 1;
+    }
+
+    /// FUN_1050_44ae: the water line of the sector where the last particle started (callers look
+    /// it up: `World::sector_at` of the spawn point, `Sector::water[1]`).
+    pub fn set_water(&mut self, water: i32) {
+        self.last_mut().m.set(0x4e, water);
     }
 
     /// FUN_1050_46d9(gravity, speed, angle): a rolling ball (FUN_1050_3044); `water` is the

@@ -815,6 +815,7 @@ impl Level {
                     let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
                     let s = world.sector_at(g(3), g(2));
                     world.sectors[s].water[..4].copy_from_slice(&[g(2), g(3), g(4), g(5)]);
+                    if std::env::var_os("ET_SCAN").is_some() { println!("WATER sector {s} line {} at ({}, {}) cam {:?}", g(3), g(2), g(3), world.sectors[s].cam); }
                 }
                 0x2719 => {
                     let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;

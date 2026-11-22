@@ -1,0 +1,18 @@
+# Particle splashes (FUN_1050_2bcf) and the water line a thrown particle keeps (FUN_1050_44ae):
+# CITY02's quay, water line 1023 in sector 2, a grenade pick-up copied onto the start (1020,1039).
+# The hero throws grenades (right button, FUN_1088_64fe -> FUN_1040_621f) up and away: they splash
+# down through the line (sound 0x6f, splash 0x6d00) and blow up; the blasts' debris splash too.
+level MAPS/CITY02.MAP
+start 1020 1039
+cell 2 63 64 0xd03
+mouse 250 60
+20
+3 rmb
+40
+3 rmb
+40
+mouse 60 60
+3 rmb
+40
+3 rmb
+120
