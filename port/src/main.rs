@@ -1779,6 +1779,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     let world = load_world(&o.data, &map_path)?;
     if std::env::var_os("ET_SCAN").is_some() {
         println!("MAP width {} height {}", world.main().width, world.main().height);
+        {
+            let mut seen = std::collections::BTreeSet::new();
+            for pl in [world::MAIN_PLANE, 0, 2] {
+                if let Some(Some(p)) = world.planes.get(pl) {
+                    for &c in &p.cells {
+                        let e = world.cell_function(c, 4) as i16;
+                        let f0 = world.cell_function(c, 0);
+                        let pick = pl == 2 && f0 == 30000;
+                        let blast = pl == world::MAIN_PLANE && world.cell_function(c, 3) != 0 && world.cell_function(c, 1) & 0x80 != 0;
+                        if e > 0 && e < 200 && (pick || blast) {
+                            seen.insert((if pick { "pick" } else { "blast" }, e));
+                        }
+                    }
+                }
+            }
+            println!("EFFECTS {seen:?}");
+        }
         if let Ok(v) = std::env::var("ET_CELL") {
             let c: i32 = v.parse().unwrap_or(0);
             let w = world.main().width;

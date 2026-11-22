@@ -427,28 +427,8 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             }
         }
         90 => {
-            // FUN_1040_3471: a post bursts: five splinters (FUN_1040_31d4), a crack, a shake.
-            let ps = &mut lv.particles;
-            ps.p.group = 0;
-            ps.p.hits = 0x8000;
-            ps.p.on_death = 0x10;
-            ps.p.callback = 0x177a;
-            ps.p.colour = 0x10;
-            for i in 0..=4 {
-                ps.p.delay = rng.random(4);
-                let px = x - 6 + i * 3;
-                let py = y + rng.random(4);
-                let steps = rng.random(2) + 3;
-                ps.spawn(0x7500, py, px); // FUN_1050_4106: its own frame step
-                ps.last_mut().m.set(0x26, steps);
-                ps.throw(7, 0x20, i * 0x80 + 0xfe0);
-            }
-            ps.p.colour = 0;
-            ps.p.callback = 0;
-            ps.p.on_death = 0;
-            ps.p.hits = 0;
-            ps.p.group = 1;
-            ps.p.delay = 0;
+            // FUN_1040_3471: a post bursts: rubble (FUN_1040_31d4), a crack, a shake.
+            chips(lv, rng, y, x);
             let p = rng.random(0x29);
             sound::pitch(p + 0xec);
             sound::play_at(0x7b, y, x);
