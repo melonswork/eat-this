@@ -93,6 +93,7 @@ streams and EVERY CHECK, so the method is the original's own.
 | `COLLAPSE1` | GRANNY, lever (146,30) set on (0xfd8) | the collapsing building 0x2715 (FUN_1088_a481 from background proc 15, `collapse.rs`): 0x42a frames of shakes and debris (particle group 2, mover FUN_1050_3d06 = `MOVE_BG_THROW`, callback 0x232e), the rumble loop; the tilted building (extra map plane 4 rotated, FUN_10f0_545b) is not drawn | exact |
 | `FREEZE1` | GRANNY, weapon-1 and weapon-5 pick-ups at (18,30), (19,30) | weapon 5's rockets (hit mask 0x400) freeze grannies (FUN_1070_564d, `deaths.rs`) into statues (state -0xd2, FUN_1068_0f32: wobble, tint row 2) that the pistol shatters (shards land as effect 48) | exact |
 | `BURN1` | GRANNY, weapon-1 pick-up at (19,30) | the flamethrower (mask 8) burns grannies (FUN_1070_544e: ash 0x5132, burning bits 0x5130 landing as effect 59 = FUN_1040_5ec6, smoke); the same deaths are wired for aliens and big aliens | exact |
+| `BG_STONES` `BG_CITY_I06` `BG_FALL` `BG_CITY03` | those maps, walking right | background procs 12, 13, 14 and (switched by command 0x15) 15 | exact |
 
 ## Tools (non-obvious usage)
 
@@ -210,8 +211,9 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   (ForegroundColors), which is how foreground tiles hide sprites. MIX tables: PalMix (`.MIX`, 256 rows),
   PalMixLight (`.LIT`, 129 rows: light levels), PalMixSea (`.SEA`, 80 rows: the water), and the tint table
   4c26 COMPUTED from the palette (`LevelPalette::tint_table`: row 0 red = hurt hero, 10 = shield).
-- Groups loaded by FUN_1088_4518 (PPGLIGHT 0x1b, FACBROCK 0x73, SVN 0x75), SEATILE 0x7c and script groups
-  flagged `,N` are NOT fitted to the palette: their pixels index the mix tables (`sprites::raw`).
+- Groups loaded by FUN_1088_4518 (PPGLIGHT 0x1b, FACBROCK 0x73, MOVIE 0x7d), SEATILE 0x7c and script groups
+  flagged `,N` are NOT fitted to the palette: their pixels index the mix tables (`sprites::raw`). SVN 0x75 is
+  raw only at boot (FUN_1088_d073); every level reloads it fitted (FUN_1088_c98f -> 458b).
 - Long divisions of 617e in draw code (`lcall` with cx = divisor) are frame/N animations: disassemble
   (capstone: segment for selector S is NE segment (S-0x1000)/8+1) rather than guess.
 - FUN_10f0_302b scales with source STEPS (8.8, 0x100 = 1:1, 0x200 = half size); FUN_1040_6315/6720 wrap it.
@@ -220,11 +222,35 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
 - Extra maps (`LoadExtraMap=`, slots 8..) keep only PLANE 0 and use the main map's tile groups; 0x272e
   records are parallax decor layers (depth < 0x100 behind the tiles, else over everything).
 - Background procs (`BackgroundProc=N` -> table 1170:189e, 17 entries; `ForegroundProc` -> 1170:18e2):
-  0 = 1090:075c (decor only, yet CITY01 shows the city: the port draws `bg::city` for it), 1 = 0a8c and
+  script command 0x15 switches both until the hero changes sector (FUN_1088_1280 restores 4c2a..4c30;
+  `Level::procs`, only the renderer follows it: the procs' simulation parts, storm/collapse/rain, are not
+  switched). Used a lot: CITY01's start sector switches to 1 on frame 0 (that is why it shows the city),
+  indoor areas to 0, 7, 9. 0 = 1090:075c (decor only: no backdrop), 1 = 0a8c and
   16 = 0ace (START: the city 0797, the bridge 0292 with its train when the sector's +0x1c >= 0 (OBJECTS
   0x2719), the rain 0418 while the storm 4eda runs, decor; 16 also the truck), 3 = 147b, 4 = 1629 (+ extra
   maps 9 and 8 at camera/4 and /2, `FUN_1088_a401` = repeated both ways), 5 = 178e (FORPLANE), 6 = 1a06.
-  Not ported: 12..15 (BUTCHERY/CITY_NET/RADIO_AC/STONES, CITY_I06, FALL, GRANNY; no demo shows them).
+  7 = 1d4f (0x3300 tiled at camera/2), 8 = 11ce (city + 0x3300), 9 = 16e8 (0x3800 tiled at camera/2),
+  10 = 1742 (forest above the line 0x290 - camY, 9 below), 11 = 1219 (city + rain), 12 = 0dd0 (sky above
+  y2, the 14-building skyline table 1170:18fe at camera/10, its building 0x3214 topples after script command
+  0x1b (4ef6, counted up by the draw: `Level::skyline_fall`), tree line 0x3200 at camera/6), 13 = 0bbe and 15 =
+  1f6f/1d8f (sky, 13 a window frame over colour 0xa8, the picture's rows faster with each row, skyline +
+  reflection; 15 also the bridge, rain and GRANNY's building), 14 = 1026 (FALL: a 0x20..0x11f view). All in
+  `Graphics::svn_background`; checked pixel-exact on BG_STONES/BG_FALL/BG_CITY_I06/BG_CITY03/MEATHOOK1/GRANNY1.
+  2 (123e) is never selected by any map. Scenarios BG_* (tools/scenarios) just walk those levels.
+- The city's movie screen (end of 0797): MOVIE.SPR (slot 0x7d, raw, loaded for every level by c98f), frame
+  617e/4 % count at (0xf9 - horizon, 0x68). GRANNY's building: LevelLoad loads SVEN2BAC.MAP into planes 4/5
+  when OBJECTS 0x2715 exists; FUN_1088_a481 draws plane 4 upright (513c) or plane 5 turned (FUN_10f0_545b:
+  16.16 steps, tile group 8 only, the cell's low byte) in the half-speed layer (`Graphics::building`,
+  tools/scenarios/draw/COLLAPSE2.txt; the port's collapse t equals the original's 4ece at draw time). That
+  scenario is NOT an oracle: a481 runs from the background proc, which the original's frame skipping can leave
+  out, and the rotated draw is slow under the emulator, so its recordings differ run to run; COLLAPSE1 (camera
+  far away) is not affected.
+- Automap (FUN_1088_2187, 1a94): typed ETSCAN (`Game::type_key`: FUN_1088_2845 keeps the last 40 letters,
+  FUN_1088_28c9 finds "ET"+word: ALIEN MOVIE STUFF DRONE BOOM RESTART WIN MAPS SCAN; only SCAN ported).
+  `draw::automap`; colours 1b14..1b23 = nearest of the 16 VGA colours among 1..=ForegroundColors (FUN_10f0_183d
+  reserves the rest; the port's older `Graphics::black` still searches all 256: 1b14 is 1 in GRANNY, not 0;
+  check the FORPLANE quad and the falling gunship's darkening, which assume 0). Pixel-exact with
+  `dumpframe.py --poke 1a94=1` vs `ET_AUTOMAP=1`.
 - START's storm: script command 0x16 darkens the palette once (FUN_1088_293a: each colour 3/4 of the way to
   its grey; `Graphics::palette_of`), rain drops come from a table drawn at boot under RandSeed 1000
   (`storm::rain_drops`, 4f0c = 4eda / 32 of them behind the tiles, the same count from drop 0x1e in front
@@ -232,8 +258,10 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   row 0x80), kind 0 tints the screen (tint row 3) three frames in six.
 - HUD (FUN_1088_4b64 -> 2501): GameStats (1a92) 1 = status bar, 2 = + the kill/hidden-area/bios counters
   (FUN_1088_248e: 4eb0/4eb2 kills at the bottom, 4eac/4eae, 4ea8/4eaa; icons STATSOBJ 0x2800 + f/6 % 12,
-  0x280c + f/9 % 12, 0x2824 + f/3 & 7). Totals: `Game::totals` (`frontend::level_totals` + COUNTED_KINDS +
-  alien icons over wall holes). The bar follows health a pixel a frame (4e30), the weapon icon slides in
+  0x280c + f/9 % 12, 0x2824 + f/3 & 7). Totals: `Game::totals` (`frontend::level_totals`: plane-2 icons and
+  alien icons over wall holes, + `Level::enemies_made`: EnemyFactory counts 10 kinds while 0f2a = 1, i.e. only
+  during the level setup (FUN_1088_d4b2), the alien only from a record of < 7 words, the carrier its riders).
+  Checked against 4eb2 (`dumpframe.py --peek 4eb2:2`, port `ET_TOTALS=1`) on 9 levels. The bar follows health a pixel a frame (4e30), the weapon icon slides in
   after a change (4e32 = -14, -16 in the vehicle); 2501 also CLAMPS health to 0..0x2c6 (`Hero::status_bar`).
   HeroReset selects gWeaponForDigitKey[0] (weapon 2). The pointer (4e50, `Particles::pointer`): enemy hit
   tests (mask & 0x59) whose box holds the pointer (4e42/4e44 = mouse + camera, set after the camera update)
@@ -244,13 +272,17 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   (-20, "needs a keycard" only if not the last line). Typed a byte a frame in PPFONT3 (slot 0x20) through the
   tint table over rows darkened by PalMixLight 0x20/0x24; markup ^| ^Cxx ^O ^Bxx. Pixel-exact on CITY01.
 - HeroClothes= in a script: the hero is PPHEROA/A2/A3 and slot 3 PPDOORA (`sprites::set_clothes`).
-- Still different: FUN_1088_2187 is the automap (1a94, toggled by a typed cheat), not drawn; the
-  little movie screen on START's skyline (4d9c, slot 0x7d MOVIE); GRANNY's tilting building (collapse.rs
-  simulates it, FUN_10f0_545b draws it); the HUD message blip's sound; platform objects of unported kinds sit at their start;
-  some kills totals are off by one (forest: other EnemyFactory counting); a few actor frames (FORPLANE's
-  pumpkin turret, WEAPON9's mines' lights) and the flamethrower's burning ground in START differ.
+- Fixed 2026-11-22: burning ground FUN_1050_1b90 (flame pulsing with |sin|), weapon 9's balls' lights
+  (FUN_1050_16cc), bios spheres / pick-up 16 drawn 45be/2 higher during a vertical shake.
+- Still different: the HUD message blip's sound; platform objects of unported kinds sit at their start;
+  FORPLANE's skull barrel (crate sprite 0x752c) has the right shape but other colours (SVN's fitting?);
+  small flame-shape differences of FUN_1040_6315 flames (LEVEL3_1 6000); FOREST03's top windows (LEVEL2_2 300,
+  same with proc 4 or 10); CITY03's burning barrel flame; START's big explosion cloud (LEVEL1_1 1000); the
+  other typed cheats; MOVIE cheat's movie2.spr.
   Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`,
-  `ET_MSG=1` the messages shown, `ET_HEALTH=1` the health each frame.
+  `ET_MSG=1` the messages shown, `ET_HEALTH=1` the health each frame, `ET_NOPROCS=1` ignores command 0x15,
+  `ET_AUTOMAP=1`, `ET_TOTALS=1`; `--bg-only` stops where dumpframe's .bg does (first FUN_1068_09bf), but the
+  .bg dump does not line up with the port's yet (compare full frames).
 
 ## State (2026-11-20: + WEAPON6/WEAPON9, next level; all oracle demos exact via tools/checkall.sh)
 

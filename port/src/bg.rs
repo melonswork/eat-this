@@ -23,7 +23,7 @@ pub struct Background {
 
 /// Row `y` of the picture copied to the screen row with the picture shifted left by `shift`
 /// (the original's two `FUN_1118_02db` memcpys).
-fn copy_row(fb: &mut [u8], pic: &Picture, y: usize, shift: usize) {
+pub fn copy_row(fb: &mut [u8], pic: &Picture, y: usize, shift: usize) {
     if y >= pic.height || pic.width != W as usize {
         return;
     }
@@ -76,12 +76,16 @@ impl Background {
     /// `frame` is the level frame counter as the original's draw sees it (frames completed before
     /// this one), (cam_x, cam_y) the camera.
     /// `flash`: a lightning flash of kind 1 lights the city's sky (4edc > 0, 4ede = 1).
-    pub fn draw(&self, fb: &mut [u8], cam: (i32, i32), frame: u32, flash: bool) {
-        match self.proc_ {
-            // 0 is FUN_1090_075c (decor only, yet CITY01 shows this city); 1 (FUN_1090_0a8c) and 16
+    pub fn draw(&self, proc_: u32, fb: &mut [u8], cam: (i32, i32), frame: u32, flash: bool) {
+        match proc_ {
+            // 0 is FUN_1090_075c: decor only (CITY01 shows the city because a script cell of its
+            // start sector switches to proc 1 on frame 0, command 0x15). 1 (FUN_1090_0a8c) and 16
             // (START, CITY: FUN_1090_0ace) draw the city, then the bridge and the rain (main.rs),
             // the decor (and 16 the truck).
-            0 | 1 | 16 => self.city(fb, cam, frame, flash),
+            0 => {}
+            1 | 16 => self.city(fb, cam, frame, flash),
+            // 8 (FUN_1090_11ce) and 11 (1219) draw the city too; main.rs adds their extras.
+            8 | 11 => self.city(fb, cam, frame, false),
             3 => self.sea(fb, cam, frame),
             6 => {
                 // FUN_1090_1a06 (GRINDER): the second group's backdrop at 1/4 of the camera,
@@ -91,7 +95,10 @@ impl Background {
                 self.sprite(1, 0, fb, 0, y + H);
             }
             4 => self.forest(fb, cam),
+            10 if cam.1 <= 0x290 => self.forest(fb, cam),
             5 => self.forplane(fb, cam, frame),
+            // 7, 9, 10 and 12..15: drawn by main.rs (`Graphics::svn_background`).
+            7 | 9 | 10 | 12..=15 => {}
             _ => {
                 if let Some(p) = &self.picture {
                     for y in 0..H as usize {

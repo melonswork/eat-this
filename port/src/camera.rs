@@ -75,6 +75,11 @@ impl Camera {
         self.vertical.strength - 1 == self.vertical.count
     }
 
+    /// 1170:45be: the vertical shake's last amount.
+    pub fn shake_amount(&self) -> i32 {
+        self.vertical.amount
+    }
+
     /// 1170:45c0.
     pub fn shake_amplitude(&self) -> i32 {
         self.vertical.amplitude

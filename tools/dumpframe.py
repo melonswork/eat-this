@@ -36,7 +36,11 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--camera-trace", metavar="FILE", help="also write frame, camera x y, hero x y for every frame up to the last FRAME")
     ap.add_argument("--menu-frames", type=int, default=5)
+    ap.add_argument("--poke", action="append", default=[], metavar="OFF=BYTE",
+                    help="set DS:OFF (hex) to BYTE (hex) when the demo starts, e.g. 1a94=1 for the automap")
     ap.add_argument("--overlay", help="folder over work/cd (default work/tracer/overlay; work/demos when the demo is there)")
+    ap.add_argument("--peek", action="append", default=[], metavar="OFF:LEN",
+                    help="print LEN bytes (hex) of DS:OFF (hex) at each dumped frame")
     o = ap.parse_args()
 
     game_path, _ = demo_files(o.demo)
@@ -79,6 +83,9 @@ def main():
             (out / f"frame{n}.bg").write_bytes(st["bg"])
         (out / f"frame{n}.pal").write_bytes(pal)
         print("camera", [e.rw(DS, CAMERA), e.rw(DS, CAMERA + 2)], "hero", [e.rw(DS, 0x4DC4), e.rw(DS, 0x4DC6)])
+        for pk in o.peek:
+            off, ln = (int(v, 16) for v in pk.split(":"))
+            print(f"DS:{off:04x}", e.rb(DS, off, ln).hex(" "))
         print("bgproc %04x:%04x fgproc %04x:%04x" % (e.rw(DS, 0x4C34), e.rw(DS, 0x4C32), e.rw(DS, 0x4C38), e.rw(DS, 0x4C36)))
         (out / f"frame{n}.cam").write_text(f"{e.rw(DS, CAMERA)} {e.rw(DS, CAMERA + 2)} {e.rw(DS, 0x4DC4)} {e.rw(DS, 0x4DC6)} {e.rw(DS, 0x667C)} {e.rw(DS, 0x667E)} {e.rw(DS, 0x617E)}\n")
         (out / f"frame{n}.res").write_bytes(e.rb(DS, RESERVED, 256))
@@ -93,7 +100,13 @@ def main():
 
     emu.hook(*GAME_FRAME, on_game_frame)
     emu.hook(*GAME_FRAME_IN_GAME, lambda e: st.update(frame=st["frame"] + st["started"]))
-    emu.hook(*DEMO_LOAD, lambda e: st.update(started=True, frame=0))
+    def on_demo_load(e):
+        st.update(started=True, frame=0)
+        for p in o.poke:
+            off, val = p.split("=")
+            e.wb(DS, int(off, 16), bytes([int(val, 16)]))
+
+    emu.hook(*DEMO_LOAD, on_demo_load)
     emu.hook(*DEMO_STOP, lambda e: e.uc.emu_stop())
     emu.hook(*BG_OBJECTS, on_bg)
     emu.hook(*VIDEO_PRESENT, on_present)

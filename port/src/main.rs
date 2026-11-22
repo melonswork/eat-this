@@ -186,6 +186,11 @@ struct Game {
     totals: level::Tally,
     /// The message box (1170:4f10..5114), only drawn.
     messages: messages::MessageBox,
+    /// Live play: the letters typed (1170:124e, the last 40; FUN_1088_2845's buffer for the
+    /// "ET" + word cheats of 1088:4b24..4b5f).
+    typed: Vec<u8>,
+    /// 1170:1a94: the automap (FUN_1088_2187), toggled by typing ETSCAN.
+    automap: bool,
 }
 
 #[derive(Default)]
@@ -225,7 +230,9 @@ impl Game {
         let mut totals = frontend::level_totals(&world);
         // LevelInit: icons and OBJECTS records become objects (their constructors draw Random).
         level.spawn_all(&mut world, hero.x, &mut rng);
-        totals.kills += level.objects.iter().flatten().filter(|o| frontend::COUNTED_KINDS.contains(&o.kind)).count() as i32;
+        // FUN_1088_d4b2: HeroReset sets 0f2a = 1, the level setup (LevelLoad, LevelInit) counts,
+        // then 0f2a = 2: enemies made later don't count.
+        totals.kills += level.enemies_made;
         // LevelFirstFrame (1088:b4db): enter the start sector (its scripts run), face its far side.
         let mut fx = Effects::default();
         let sector = world.sector_at(hero.y, hero.x);
@@ -267,6 +274,8 @@ impl Game {
             weapon_key: None,
             totals,
             messages: messages::MessageBox::default(),
+            typed: Vec::new(),
+            automap: false,
         };
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
         let hero_at = (g.hero.x, g.hero.y);
@@ -360,8 +369,34 @@ impl Game {
         self.level.flush_spawns(&mut self.world, &mut cx, fx);
     }
 
+    /// 4eb2 / 4eae / 4eaa as the HUD and the stats screen read them.
+    fn totals(&self) -> level::Tally {
+        self.totals
+    }
+
+    /// A letter key went down in live play (FUN_1088_2845: A..Z appended, the buffer kept to 40),
+    /// then the cheat test (FUN_1088_28c9: "ET" + word anywhere in it, the buffer cleared on a
+    /// hit). Only SCAN (the automap) is ported.
+    fn type_key(&mut self, c: u8) {
+        if !c.is_ascii_uppercase() {
+            return;
+        }
+        if self.typed.len() >= 40 {
+            self.typed.remove(0);
+        }
+        self.typed.push(c);
+        if self.typed.windows(6).any(|w| w == b"ETSCAN") {
+            self.typed.clear();
+            self.automap = !self.automap;
+        }
+    }
+
     /// One game frame. `keys` is ignored while a demo plays.
     fn step(&mut self, keys: [i8; 9]) {
+        if std::env::var_os("ET_TOTALS").is_some() {
+            let t = self.totals();
+            eprintln!("TOTALS {} kills {} secrets {} bios {}", self.frame, t.kills, t.secrets, t.bios);
+        }
         sound::begin_frame(self.frame + 1);
         // FUN_1088_4b64 clears 4e50 after drawing the pointer.
         self.level.particles.pointer = 0;
@@ -915,6 +950,9 @@ struct Graphics {
     tables: render::Tables,
     /// LoadExtraMap= maps (plane slots 8..): PLANE 0 of each (FUN_10f0_5e9f).
     extra: Vec<Option<world::Plane>>,
+    /// LevelLoad loads SVEN2BAC.MAP into planes 4 and 5 when the level has a collapsing building
+    /// (OBJECTS 0x2715); FUN_1088_a481 draws it.
+    building: Option<world::Plane>,
     decor: Vec<Decor>,
     /// Draw the pointer and the status bar (H toggles it in the window).
     show_hud: bool,
@@ -928,6 +966,9 @@ struct Graphics {
     rain_colour: u8,
     /// 1170:1b14: the level colour nearest to black.
     black: u8,
+    /// 1170:1b14..1b23: the level colours nearest to the 16 VGA colours (table 1170:1b24), among
+    /// colours 1..=ForegroundColors (LevelLoad, after FUN_10f0_183d).
+    vga: [u8; 16],
 }
 
 impl Graphics {
@@ -993,6 +1034,11 @@ impl Graphics {
                 g
             })
             .collect();
+        let building = (script.as_ref().map(|s| s.background_proc) == Some(15))
+            .then(|| find_ci(&data.join("MAPS"), "sven2bac.map"))
+            .flatten()
+            .and_then(|p| data::Map::load(&p).ok())
+            .and_then(|m| Some(world::Plane { width: m.width, height: m.height, cells: m.planes.first()?.clone() }));
         let extra = script
             .as_ref()
             .map(|s| s.extra_maps.clone())
@@ -1027,6 +1073,7 @@ impl Graphics {
         // The lists keep the farthest last and are drawn from the end.
         decor.sort_by_key(|d| d.depth);
         let colors6 = level.colors;
+        let fg_colours = level.foreground.clamp(1, 255) as usize;
         let storm_palette = LevelPalette {
             colors: colors6.map(|c| {
                 let lum = (c[0] as i32 * 0x12b + c[2] as i32 * 0x72 + c[1] as i32 * 0x24b) / 1000;
@@ -1049,6 +1096,7 @@ impl Graphics {
             bank: render::Bank::new(level),
             tables,
             extra,
+            building,
             decor,
             show_hud: true,
             hud_level: 2,
@@ -1058,6 +1106,20 @@ impl Graphics {
                 let c = colors6[i];
                 (((c[0] as i64).pow(2) + (c[1] as i64).pow(2)).pow(2) + (c[2] as i64).pow(4), i)
             }).unwrap_or(0) as u8,
+            vga: {
+                const VGA: [[i64; 3]; 16] = [
+                    [0, 0, 0], [0, 0, 42], [0, 42, 0], [0, 42, 42], [42, 0, 0], [42, 0, 42], [42, 21, 0], [42, 42, 42],
+                    [21, 21, 21], [21, 21, 63], [0, 63, 0], [21, 63, 63], [63, 21, 21], [63, 21, 63], [63, 63, 21], [63, 63, 63],
+                ];
+                VGA.map(|t| {
+                    let d = |c: [u8; 3]| {
+                        let (r, g, b) = (t[0] - c[0] as i64, t[1] - c[1] as i64, t[2] - c[2] as i64);
+                        (r * r + g * g).pow(2) + b.pow(4)
+                    };
+                    // FUN_10f0_183d leaves only colours 1..=ForegroundColors free for FUN_10f0_6039.
+                    (1..=fg_colours).min_by_key(|&i| (d(colors6[i]), i)).unwrap_or(0) as u8
+                })
+            },
             rain_colour: {
                 // FUN_10f0_6039(b, g, r): the smallest (dr^2 + dg^2)^2 + db^4, the first one.
                 let d = |c: [u8; 3]| -> i64 {
@@ -1088,8 +1150,29 @@ impl Graphics {
         // The level frame counter as the original's draw sees it: frames completed before this one.
         let frame = g.frame.saturating_sub(1);
         let st = &g.level.storm;
-        self.background.draw(fb, (cam_x, cam_y), frame, st.sky_flash > 0 && st.kind == 1);
-        if self.background.proc_ == 5 {
+        // The background proc: the script's, or the one script command 0x15 switched to.
+        let bp = g.level.procs.filter(|_| std::env::var("ET_NOPROCS").is_err()).map_or(self.background.proc_, |p| p.0);
+        self.background.draw(bp, fb, (cam_x, cam_y), frame, st.sky_flash > 0 && st.kind == 1);
+        if matches!(bp, 1 | 8 | 11 | 16) {
+            // The end of FUN_1090_0797: the little movie screen on a building of the skyline
+            // (MOVIE.SPR, slot 0x7d, loaded for every level by FUN_1088_c98f; 4d9c = its count),
+            // a frame per 4, at the skyline's speed.
+            let n = self.bank.count(0x7d);
+            if n > 0 {
+                let h = ((cam_x + 0x640) / 16) % W;
+                let s = 0x7d00 + ((frame / 4) % n as u32) as i32;
+                let mut p = self.painter(fb, frame);
+                p.mode = 0x20;
+                p.sprite(s, 0xf9 - h, 0x68);
+                if 0xf9 - h < 0 {
+                    p.sprite(s, 0x239 - h, 0x68);
+                }
+            }
+        }
+        if matches!(bp, 7 | 8 | 9 | 12..=15) {
+            self.svn_background(bp, fb, g, (cam_x, cam_y), frame);
+        }
+        if bp == 5 {
             if let Some((qx, qy)) = g.level.quad {
                 // FUN_1090_178e: OBJECTS 0x2716's quad (FUN_10d0_01e4, colour 1b14) under the
                 // skyline's decor: from (qx, qy) 0xa0 wide, down to its 8/9-parallax far edge.
@@ -1103,11 +1186,8 @@ impl Graphics {
                 }
             }
         }
-        if self.bg_only {
-            return;
-        }
-        if self.background.proc_ == 4 {
-            // FUN_1090_1629 (detail 3, as in demos): extra map 9 at a quarter of the camera, then
+        if bp == 4 || (bp == 10 && cam_y <= 0x290) {
+            // FUN_1090_1629 (10: FUN_1090_1742 above its line) (detail 3, as in demos): extra map 9 at a quarter of the camera, then
             // extra map 8 at half of it, both repeated across and down (FUN_1088_a401).
             for (k, div) in [(1, 4), (0, 2)] {
                 if let Some(Some(pl)) = self.extra.get(k) {
@@ -1115,8 +1195,11 @@ impl Graphics {
                 }
             }
         }
+        if bp == 10 {
+            self.svn_background(bp, fb, g, (cam_x, cam_y), frame);
+        }
         if let Some(Some(pl)) = self.extra.first() {
-            match self.background.proc_ {
+            match bp {
                 // FUN_1090_147b: extra map 8 at a third of the camera, repeated across (a371).
                 3 => self.layer(fb, g, pl, 1, (cam_x / 3, cam_y / 3), frame),
                 // FUN_1090_1a06: at half the camera's height, 24 px in, repeated down (a3b9).
@@ -1126,8 +1209,15 @@ impl Graphics {
         }
         // The sector's background decor (list +0x1e, FUN_1068_09bf from the background proc).
         let sector = g.level.sector.unwrap_or(0);
-        if matches!(self.background.proc_, 1 | 16) {
+        if matches!(bp, 1 | 11 | 15 | 16) {
             self.start_extras(fb, g, sector, (cam_x, cam_y), frame);
+        }
+        if bp == 15 {
+            self.building(fb, g, (cam_x, cam_y), frame);
+        }
+        if self.bg_only {
+            // What tools/dumpframe.py's .bg holds: the frame up to the first FUN_1068_09bf call.
+            return;
         }
         self.decor(fb, g, sector, false, (cam_x, cam_y), frame);
         // The map planes, then the platforms (their own planes, at their positions).
@@ -1144,6 +1234,7 @@ impl Graphics {
                 draw_plane(fb, &g.world, pl, ox - cam_x, oy - cam_y, frame, FULL);
             }
         }
+        draw::set_shake(g.camera.shake_amount());
         let ship = g.hero.ship;
         let mut p = render::Painter {
             fb,
@@ -1198,6 +1289,214 @@ impl Graphics {
             }
         }
         self.hud(fb, g, frame);
+    }
+
+    /// FUN_1088_a481's draw (from proc 15): GRANNY's building in its sector, in the half-speed
+    /// layer with its pivot at (4eca, 4ecc + t / 2), turned by t / 2 sixteenths of a degree:
+    /// plane 4 drawn straight while upright (FUN_10f0_513c), else plane 5 through tile group 8
+    /// (FUN_10f0_545b: 16.16 steps, the cell's low byte picks the tile, colour 0 is clear).
+    fn building(&self, fb: &mut [u8], g: &Game, cam: (i32, i32), frame: u32) {
+        let (Some(c), Some(pl)) = (&g.level.collapse, &self.building) else { return };
+        if c.x == 0x7fff || g.level.sector != Some(c.sector) {
+            return;
+        }
+        // t as the draw sees it (checked against COLLAPSE2's frames: the port's t is one behind
+        // the original's 4ece at this point, which the draw reads before its increment).
+        let t = c.t;
+        let a = (0x1680 - t / 2) % 0x1680;
+        let (s, co) = (trig::sin(a), trig::cos(a));
+        let (hx, hy) = (((cam.0 as u16) >> 1) as i32, ((cam.1 as u16) >> 1) as i32);
+        let x0 = c.x - hx;
+        let y0 = t / 2 + c.y - hy;
+        let right = pl.width * 16 + x0 - 1 - 0x140;
+        let bottom = c.y - hy + pl.height * 16 - 1 - 0xc0;
+        if x0 > W - 1 || y0 > H - 1 || right < 0 || bottom < 0 {
+            return;
+        }
+        let clip = (x0.max(0), y0.max(0), right.min(W - 1), bottom.min(H - 1));
+        if a == 0 {
+            draw_plane(fb, &g.world, pl, x0 - 0xa0, y0 - 0x80, frame, clip);
+            return;
+        }
+        let Some(group) = g.world.groups.get(8).and_then(|g| g.as_ref()) else { return };
+        let x = (0xa0 - x0) * 16 + s * 0x2300 / 0x4000;
+        let y = (0x80 - y0) * 16 - s * 0x1480 / 0x4000;
+        let u = (x as i16 as i32 * co) / 0x4000 - (y as i16 as i32 * s) / 0x4000;
+        let v = (x as i16 as i32 * s) / 0x4000 + (y as i16 as i32 * co) / 0x4000;
+        // Per screen pixel (A, B), per row (C, D); the origin at the clip's top left.
+        let (da, db, dc, dd) = (co * 0x100 / 0x400, s * 0x100 / 0x400, -(s * 0x100) / 0x400, co * 0x100 / 0x400);
+        let (ox, oy) = (-clip.0, -clip.1);
+        let mut ur = (u * 0x100 - ox * da - oy * dc - 0x1000) as i64;
+        let mut vr = (v * 0x100 - ox * db - oy * dd) as i64;
+        let tiles = group.len();
+        for sy in clip.1..=clip.3 {
+            let (mut uu, mut vv) = (ur, vr);
+            for sx in clip.0..=clip.2 {
+                uu += i64::from(da);
+                vv += i64::from(db);
+                let (tx, ty) = ((uu >> 16) as i32, (vv >> 16) as i32);
+                if (0..pl.width).contains(&tx) && (0..pl.height).contains(&ty) {
+                    let n = (pl.get(tx, ty) & 0xff) as usize;
+                    if n < tiles {
+                        let px = group.tile(n);
+                        let c = px[(((vv >> 12) & 15) * 16 + ((uu >> 12) & 15)) as usize];
+                        if c != 0 {
+                            fb[(sy * W + sx) as usize] = c;
+                        }
+                    }
+                }
+            }
+            ur += i64::from(dc);
+            vr += i64::from(dd);
+        }
+    }
+
+    /// Background procs 12..15 (table 1170:189e; the episode-3 sets SVNBAC02..05).
+    fn svn_background(&self, bp: u32, fb: &mut [u8], g: &Game, cam: (i32, i32), frame: u32) {
+        let sector = g.level.sector.unwrap_or(0);
+        let top = g.world.sectors.get(sector).map_or(0, |s| s.cam.1);
+        let dy = cam.1 - top;
+        let st = &g.level.storm;
+        let flash = st.sky_flash > 0 && st.kind == 1;
+        let sky = -(((frame >> 3) as i32) % W);
+        let fr = frame as i32;
+        let mut p = self.painter(fb, frame);
+        // The skyline of procs 12 and 14: 14 buildings (x, y, sprite) at 1170:18fe, repeated
+        // every 0x280 pixels.
+        const SKYLINE: [(i32, i32, i32); 14] = [
+            (13, 4, 0x3202), (47, 4, 0x3202), (99, 4, 0x3209), (132, 13, 0x3207), (161, 4, 0x3207),
+            (200, 0, 0x3209), (232, 0, 0x3202), (306, 0, 0x3203), (333, 0, 0x3204), (415, 0, 0x3205),
+            (450, 0, 0x320a), (503, 0, 0x3203), (528, 0, 0x3208), (590, 0, 0x3206),
+        ];
+        let skyline = |p: &mut render::Painter, base: i32, y: i32| {
+            for &(x, dy, s) in SKYLINE.iter().rev() {
+                p.sprite(s, (x + base) % 0x280 - 0x20, y + dy);
+            }
+        };
+        // FUN_1090_15da: a 320x200 sprite four times, from (x, y).
+        let tile4 = |p: &mut render::Painter, s: i32, x: i32, y: i32| {
+            for (dx, dy) in [(0, 0), (W, 0), (0, H), (W, H)] {
+                p.sprite(s, x + dx, y + dy);
+            }
+        };
+        match bp {
+            7 => {
+                // FUN_1090_1d4f: 0x3300 tiled at half the camera.
+                p.mode = 0x20;
+                tile4(&mut p, 0x3300, -(cam.0 >> 1) % W, -((cam.1 >> 1) % H));
+            }
+            8 => {
+                // FUN_1090_11ce: the city (bg.rs), then 0x3300 at half the camera (detail 3).
+                p.mode = 4;
+                p.sprite(0x3300, (0x193 - cam.0) / 2, (0x656 - cam.1) / 2);
+            }
+            9 | 10 => {
+                // FUN_1090_16e8: 0x3800 tiled at half the camera. 10 (FUN_1090_1742): the forest
+                // (proc 4: bg.rs and its layers, drawn before this) above the line 0x290 - camY,
+                // this below it.
+                let line = 0x290 - cam.1;
+                if bp == 10 {
+                    if line > 0xc8 {
+                        return;
+                    }
+                    if line > 0 {
+                        p.fb[(line * W) as usize..].fill(0);
+                        p.clip.1 = line;
+                    }
+                }
+                p.mode = 0x20;
+                tile4(&mut p, 0x3800, -((cam.0 >> 1) % W), -((cam.1 >> 1) % H));
+            }
+            12 => {
+                // FUN_1090_0dd0 (BUTCHERY, STONES, RADIO_AC, CITY_NET): the sky (0x3201) drifting
+                // a pixel per 16 frames above the tree line y2, the buildings at 1/10 of the
+                // camera (one of them, 0x3214, topples after script command 0x1b), the tree line
+                // (0x3200, 64 wide) at 1/6.
+                let y2 = 0x79 - dy / 0x24;
+                p.clip.3 = y2;
+                p.mode = 0x20;
+                let x = -((fr / 16) % W);
+                p.sprite(0x3201, x, 0x79);
+                p.sprite(0x3201, x + W, 0x79);
+                p.mode = 4;
+                let base = 0x500 - ((cam.0 + 0x640) / 10) % 0x500;
+                let y4 = 0x79 - dy / 0x48;
+                let t = g.level.skyline_fall.map_or(-1, |s| 4 * frame.saturating_sub(s) as i32);
+                if t < 0x5a0 {
+                    let (s, lx, ly) = if t >= 0 {
+                        let a = 0x5a0 - trig::sin(t + 0x5a0) * 0x5a0 / 0x4000;
+                        let s = 0x3215 + ((fr / 16) & 1);
+                        (s, base + 0x50 - trig::sin(a + 0x5a0) * 0x50 / 0x4000, y4 - trig::sin(a) * 0x50 / 0x4000)
+                    } else {
+                        (0x3214, base, y4)
+                    };
+                    p.sprite(s, (SKYLINE[5].0 + lx) % 0x280 - 0x20, ly);
+                }
+                skyline(&mut p, base, y4);
+                p.clip = render::SCREEN;
+                let x6 = (cam.0 / 6) % 0x40;
+                for k in (0..=5).rev() {
+                    p.sprite(0x3200, k * 0x40 - x6, y2);
+                }
+            }
+            14 => {
+                // FUN_1090_1026 (FALL): a still view 0x20..0x11f wide: the sky, the skyline (at
+                // 1/0x200 of the height), then two rows of 64-pixel tiles (0x3200 above y3, 0x320e).
+                let y2 = 0x79 - dy / 0x100;
+                let y3 = 0xc6 - dy / 0x80;
+                p.clip = (0x20, 0, 0x11f, y2);
+                p.mode = 0x20;
+                p.sprite(0x3201, sky, 0x79);
+                p.sprite(0x3201, sky + W, 0x79);
+                p.mode = 4;
+                skyline(&mut p, 0x500 - ((cam.0 + 0x640) / 10) % 0x500, 0x79 - dy / 0x200);
+                p.clip.3 = y3;
+                for k in (0..=4).rev() {
+                    p.sprite(0x3200, k * 0x40 + 0x20, y2);
+                }
+                p.clip.3 = H - 1;
+                for k in (0..=4).rev() {
+                    p.sprite(0x320e, k * 0x40 + 0x20, y3);
+                }
+            }
+            _ => {
+                // FUN_1090_0bbe (13, CITY_I06) and FUN_1090_1d8f (15, GRANNY): the sky (lit
+                // during a lightning flash), 13 a window frame over colour 0xa8, the picture's
+                // rows from 0x7c (0x7b) scrolling faster with each row, then the skyline and its
+                // reflection (0x3202, translucent) at 1/14 (1/16) of the camera.
+                let (div, first, k) = if bp == 13 { (0xe, 0x7c, 0xf8) } else { (0x10, 0x7b, 0xf6) };
+                if flash {
+                    p.mode = 0x2c;
+                    p.mix = render::Mix::Light;
+                    p.colour = 0x80;
+                } else {
+                    p.mode = 0x20;
+                }
+                p.sprite(0x3201, sky, 0);
+                p.sprite(0x3201, sky + W, 0);
+                p.mix = render::Mix::Level;
+                if bp == 13 {
+                    p.mode = 0x14;
+                    p.key = 0xa8;
+                    p.sprite(0x3203, 0, 0);
+                }
+                let h = ((cam.0 + 0x640) / div) % W;
+                if let Some(pic) = &self.background.picture {
+                    let a = i64::from(cam.0) + i64::from(frame / 3);
+                    let mut acc = a * k / div as i64;
+                    for y in first..H as usize {
+                        bg::copy_row(p.fb, pic, y, (acc / k % i64::from(W)).rem_euclid(i64::from(W)) as usize);
+                        acc += a;
+                    }
+                }
+                p.mode = 4;
+                p.sprite(0x3200, -h, 0);
+                p.sprite(0x3200, W - h, 0);
+                p.mode = 0x30;
+                p.sprite(0x3202, -h, 0);
+                p.sprite(0x3202, W - h, 0);
+            }
+        }
     }
 
     /// FUN_1090_0ace's (and 0a8c's, proc 1) middle part: the bridge (FUN_1090_0292, sectors with +0x1c >= 0: OBJECTS
@@ -1286,7 +1585,12 @@ impl Graphics {
             clip: render::SCREEN,
         };
         let got = level::TALLY.with(|t| t.get());
-        draw::hud(&mut p, &g.hero, g.level.particles.pointer, self.hud_level, got, g.totals);
+        draw::hud(&mut p, &g.hero, g.level.particles.pointer, self.hud_level, got, g.totals());
+        if g.automap || std::env::var_os("ET_AUTOMAP").is_some() {
+            let sector = g.level.sector.unwrap_or(0);
+            let rect = g.world.sectors.get(sector).map_or((0, 0, 0, 0), |s| s.cam);
+            draw::automap(&mut p, &g.world, &g.level, rect, (g.hero.x, g.hero.y), self.vga);
+        }
         draw::messages(&mut p, &g.messages);
     }
 
@@ -1603,10 +1907,15 @@ fn run_window(
                     ..
                 } => break 'main,
                 Event::KeyDown {
-                    scancode: Some(Scancode::H),
+                    scancode: Some(sc),
                     repeat: false,
                     ..
-                } => gfx.show_hud = !gfx.show_hud,
+                } if letter(sc).is_some() => {
+                    game.type_key(letter(sc).unwrap_or(0));
+                    if sc == Scancode::H {
+                        gfx.show_hud = !gfx.show_hud;
+                    }
+                }
                 Event::KeyDown {
                     scancode: Some(sc),
                     repeat: false,
@@ -1716,6 +2025,12 @@ fn screenshot(mut game: Game, gfx: &Graphics, frames: u32, path: &Path) -> std::
 }
 
 /// ReadGameInput's weapon keys: 1..9 0 (gWeaponForDigitKey slots 0..9), PgUp 10, PgDn 11.
+/// The letter a key types (A..Z), for the typed cheats.
+fn letter(sc: sdl2::keyboard::Scancode) -> Option<u8> {
+    let name = sc.name();
+    (name.len() == 1 && name.as_bytes()[0].is_ascii_uppercase()).then(|| name.as_bytes()[0])
+}
+
 fn weapon_key(sc: sdl2::keyboard::Scancode) -> Option<usize> {
     use sdl2::keyboard::Scancode::*;
     Some(match sc {

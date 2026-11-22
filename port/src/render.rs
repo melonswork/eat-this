@@ -68,6 +68,12 @@ impl Bank {
         Some(f(s))
     }
 
+    /// The number of sprites in a slot (FUN_10f0_143c).
+    pub fn count(&self, slot: i32) -> i32 {
+        self.with(slot << 8, |_| ());
+        self.groups.borrow().get(&(slot as u16)).and_then(|g| g.as_ref()).map_or(0, |g| g.sprites.len() as i32)
+    }
+
     /// Sprite `id`'s (width, height) (FUN_10f0_1f5f / 1f8e).
     pub fn size(&self, id: i32) -> Option<(i32, i32)> {
         self.with(id, |s| (s.width, s.height))

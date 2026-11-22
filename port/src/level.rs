@@ -149,6 +149,16 @@ pub struct Level {
     /// 1170:4ec8: the water line (the hero's sector, with its waves), computed by the foreground.
     pub water: i32,
     pub now: u32,
+    /// Script command 0x1b (4ef6 = 0): the frame the skyline building of background proc 12
+    /// started falling; its draw (FUN_1090_0dd0) counts 4ef6 up by 4 a frame from there.
+    pub skyline_fall: Option<u32>,
+    /// EnemyFactory's part of 1170:4eb2 (the kill total): enemies constructed so far (only the
+    /// level setup's count, while 0f2a = 1).
+    pub enemies_made: i32,
+    /// Script command 0x15: the background and foreground procs (1170:189e / 18e2 indices) in
+    /// place of the script's until the hero changes sector (FUN_1088_1280 restores 4c2a..4c30).
+    /// Only the renderer follows it: the procs' simulation parts (storm, collapse) are not switched.
+    pub procs: Option<(u32, u32)>,
     /// gHeroX as the objects and effects see it this frame.
     pub hero_x: i32,
     /// gCameraX/Y as the scripts and decals see them.
@@ -222,6 +232,9 @@ impl Level {
             vehicle: false,
             water: 0x7fff,
             now: 0,
+            skyline_fall: None,
+            enemies_made: 0,
+            procs: None,
             hero_x: 0,
             cam: (0, 0),
             plat_objs: Vec::new(),
@@ -253,6 +266,7 @@ impl Level {
         if self.sector == Some(sector) {
             return;
         }
+        self.procs = None;
         if let Some(old) = self.sector {
             let icon = world.sectors[old].icon;
             if icon != -1 {
@@ -519,11 +533,23 @@ impl Level {
                     lc += 4;
                 }
                 0x0f => lc += 5,
-                0x0c | 0x11 | 0x15 | 0x17 | 0x19 => lc += 3,
+                0x15 => {
+                    self.procs = Some((u32::from(arg(1)), u32::from(arg(2))));
+                    if std::env::var("ET_CMD").is_ok() {
+                        eprintln!("PROCS {} {:?}", self.now, self.procs);
+                    }
+                    lc += 3;
+                }
+                0x0c | 0x11 | 0x17 | 0x19 => lc += 3,
                 0x12 | 0x1a => lc += 2,
                 // FUN_1088_a9af: a hidden area found (1170:4eac, the stats screen's count).
                 0x18 => {
                     fx.secrets += 1;
+                    lc += 1;
+                }
+                // 4ef6 = 0: background proc 12's building falls (only the draw reads it).
+                0x1b => {
+                    self.skyline_fall = Some(self.now);
                     lc += 1;
                 }
                 _ => lc += 1,

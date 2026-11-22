@@ -1,0 +1,10 @@
+# GRANNY's collapsing building seen tilting (FUN_1088_a481's draw: plane 4 upright, then plane 5
+# rotated by FUN_10f0_545b): the lever (146,30) set on, the hero started beside it, waiting.
+level MAPS/GRANNY.MAP
+cell 1 146 30 0xfd8
+start 2250 470
+1100
+# A drawing check only (not in tools/checkall.sh): the original runs FUN_1088_a481 from its
+# background proc, which frame skipping can leave out, and the rotated building is slow to draw in
+# the emulator, so two recordings of this script differ (seen: debris 3 frames apart, window 1 or
+# window 19 diverging). Compare frames with dumpframe.py; don't trust its CHECKs.

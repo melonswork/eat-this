@@ -85,6 +85,15 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
             p.mode = 0x10;
             sprite = age / 0x12 + m.w(0x14);
         }
+        0x16cc => {
+            // FUN_1050_16cc (weapon 9's balls): rolling (0x1900 + age / 8 % 4) while the motion
+            // record's +8 is under 5, else lying (0x1904); then its light, blinking every 32
+            // frames, a pixel higher on odd body sprites.
+            let body = if part.v.w(8) < 5 { 0x1900 + ((m.uw(0x24) >> 3) & 3) as i32 } else { 0x1904 };
+            p.at(body, x, y);
+            p.at(0x1906 + ((m.uw(0x24) >> 5) & 1) as i32, x, y - (body & 1));
+            return;
+        }
         0x2299 => sprite += (age / 4) % 2,
         0x2459 | 0x2497 | 0x2946 => sprite += (age >> 2) & 1,
         0x232e => {
@@ -101,7 +110,11 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
         // ground; over its last 0x120 frames the steps grow by k * k >> 5 (2/3 of it across),
         // k = age - life + 0x120: it shrinks away.
         0x18e6 | 0x19f8 | 0x1b90 => {
-            p.clip.3 = (y - p.cam.1).min(p.clip.3);
+            // 1ad0 = the ground's screen row, unless it is below the screen or above the clip.
+            let ground = y - p.cam.1;
+            if ground <= p.clip.3 && ground >= p.clip.1 {
+                p.clip.3 = ground;
+            }
             match m.uw(0x42) {
                 0x18e6 => {
                     let k = age - m.w(0x22) + 0x120;
@@ -130,7 +143,14 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
                         }
                     }
                 }
-                _ => p.flame(0xa00, 0x755, age as u32, x, y),
+                _ => {
+                    // FUN_1050_1b90: the flame pulses with |sin(age * 0xb40 / life)| / 8.
+                    let life = m.w(0x22).max(1) as i64;
+                    let a = (age as i64 * 0xb4 * 0x10 / life) as i32;
+                    let k = (crate::trig::sin(a) * 0x800 / 0x4000).abs();
+                    let sx = 0xa00 - k;
+                    p.flame(sx, (sx - 0x200) * 2 / 3 + 0x200, age as u32, x, y)
+                }
             }
             return;
         }
@@ -546,12 +566,23 @@ pub fn pickups(p: &mut Painter, world: &crate::world::World) {
     }
 }
 
+thread_local! {
+    /// 1170:45be: the vertical shake's last amount (the camera's), for the pick-ups' draw.
+    static SHAKE: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+}
+
+pub fn set_shake(amount: i32) {
+    SHAKE.with(|c| c.set(amount));
+}
+
 /// One pick-up of kind `k` at screen (x, y) (FUN_1088_022b's dispatch).
 pub fn pickup(p: &mut Painter, k: i32, x: i32, y: i32) {
     p.mix = Mix::Light;
     let f3 = per(p, 3);
+    // Kinds 0 and 16 (1088:0002, 003c) rise by half the shake (45be >> 1, unsigned).
+    let sy = y - ((SHAKE.with(|c| c.get()) as u16) >> 1) as i32;
     match k {
-        0 => p.sprite(0x2200 + (f3 & 7), x, y),
+        0 => p.sprite(0x2200 + (f3 & 7), x, sy),
         1 => shine(p, 0x2208 + ((f3 & 7) < 3) as i32, x, y),
         2 => {
             p.sprite((per(p, 2) & 0xf) + 0x900, x + 7, y + 7);
@@ -561,7 +592,7 @@ pub fn pickup(p: &mut Painter, k: i32, x: i32, y: i32) {
         4 => shine(p, 0x220a + f3 % 6, x, y),
         5..=12 => shine(p, 0x2216 + (k - 5), x, y),
         13..=15 => shine(p, 0x2228 + (k - 13), x, y),
-        16 => p.sprite(0x2233 - (f3 & 7), x, y),
+        16 => p.sprite(0x2233 - (f3 & 7), x, sy),
         _ => {}
     }
     p.reset();
@@ -1038,5 +1069,71 @@ pub fn water(p: &mut Painter, level: &Level, world: &crate::world::World) {
             }
             x += 0x80;
         }
+    }
+}
+
+/// FUN_1088_2187 (1170:1a94, typed ETSCAN): the sector's map, a pixel a tile, in a darkened box at
+/// (2, 0x21) under a black frame: walls (solidity & 0x223, platforms included) in VGA green
+/// through PalMixLight row 0x10; plane-2 cells 0xd00 and pick-ups (function 30000) and the hero
+/// in light green, light red and white through row 0x30 or 0x40 (blinking every 16 frames).
+use crate::{H, W};
+pub fn automap(p: &mut Painter, world: &crate::world::World, level: &Level, rect: (i32, i32, i32, i32), hero: (i32, i32), vga: [u8; 16]) {
+    let (x1, y1) = (((rect.0 as u16) >> 4) as i32, ((rect.1 as u16) >> 4) as i32);
+    let (mut x2, mut y2) = (((rect.2 as u16) >> 4) as i32, ((rect.3 as u16) >> 4) as i32);
+    if (x2 - x1) as u16 > 0x13b {
+        x2 = 0x13b - x1;
+    }
+    if (y2 - y1) as u16 > 0xa4 {
+        y2 = 0xa4 - y1;
+    }
+    let (w, h) = (x2 - x1, y2 - y1);
+    let black = vga[0];
+    let mut set = |fb: &mut [u8], x: i32, y: i32, c: u8| {
+        if (0..W).contains(&x) && (0..H).contains(&y) {
+            fb[(y * W + x) as usize] = c;
+        }
+    };
+    // FUN_10f0_0113 kind 0x11: each pixel through PalMix row 1b14; kind 0: the frame.
+    if let Some(mix) = p.tables.mix.as_deref() {
+        for y in 0x21..=(h + 0x21).min(H - 1) {
+            for x in 2..=(w + 2).min(W - 1) {
+                let at = (y * W + x) as usize;
+                p.fb[at] = mix[black as usize * 256 + p.fb[at] as usize];
+            }
+        }
+    }
+    for y in 0x21..h + 0x22 {
+        set(p.fb, 1, y, black);
+        set(p.fb, w + 3, y, black);
+    }
+    for x in 1..=w + 3 {
+        set(p.fb, x, 0x20, black);
+        set(p.fb, x, h + 0x22, black);
+    }
+    let Some(light) = p.tables.light.as_deref() else { return };
+    let row = if p.frame % 0x20 < 0x10 { 0x30 } else { 0x40 };
+    let lit = |c: u8, r: usize| light[r * 256 + c as usize];
+    let (door, pick, wall, me) = (lit(vga[10], row), lit(vga[12], row), lit(vga[2], 0x10), lit(vga[15], row));
+    let width = world.main().width;
+    let items = world.planes[2].as_ref();
+    for ty in y1..=y2 {
+        for tx in x1..=x2 {
+            let (sx, sy) = (tx - x1 + 2, ty - y1 + 0x21);
+            if crate::hero::Hero::solidity_all(world, level, ty << 4, tx << 4) & 0x223 != 0 {
+                set(p.fb, sx, sy, wall);
+            }
+            let cell = items.and_then(|pl| pl.cells.get((ty * width + tx) as usize)).copied().unwrap_or(0);
+            if cell as i16 > 0 {
+                if cell == 0xd00 {
+                    set(p.fb, sx, sy, door);
+                } else if world.cell_function(cell, 0) == 30000 {
+                    set(p.fb, sx, sy, pick);
+                }
+            }
+        }
+    }
+    let (hx, hy) = ((hero.0 >> 4) - x1, (hero.1 >> 4) - y1);
+    if (hx as u32) <= w as u32 && (hy as u32) <= h as u32 {
+        set(p.fb, hx + 2, hy + 0x21, me);
     }
 }

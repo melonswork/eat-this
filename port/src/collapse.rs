@@ -3,7 +3,7 @@
 //! 0x42a frames the building (extra map plane 4, drawn in the half-speed background layer) tilts
 //! over, shaking the screen and shedding debris (particle group 2, mover FUN_1050_3d06, drawn by
 //! callback 0x232e) with a rumble loop (0x53). Afterwards the debris goes and it stops.
-//! The tilted building itself is not drawn yet.
+//! The building is drawn by main.rs (`Graphics::building`, from SVEN2BAC.MAP = planes 4/5).
 
 use crate::level::Level;
 use crate::rng::PascalRandom;
