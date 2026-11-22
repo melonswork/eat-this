@@ -1,0 +1,915 @@
+# The vehicle destroyed (FUN_1088_4a81 -> FUN_1088_4a34): LEVEL3_2 (HYDRO_02) replayed to frame 3600
+# (health 182 after two sea plants burst at it), then down-left into more plants: their bursts
+# finish it (sound 0x3b, shake, bubbles FUN_1068_2c56, pieces FUN_1088_46e9, blast FUN_1040_613b).
+level LEVEL3_2
+mouse 480 167
+1
+mouse 319 167
+7
+mouse 315 169
+2
+mouse 311 171
+2
+mouse 308 172
+1
+mouse 307 172
+28
+mouse 301 172
+3
+mouse 292 168
+2
+mouse 281 167
+1
+mouse 271 165
+1
+mouse 265 163
+3
+mouse 262 162
+2
+mouse 260 161
+1
+mouse 259 161
+2
+mouse 254 158
+2
+mouse 247 154
+1
+mouse 238 151
+1
+mouse 227 146
+3
+mouse 205 135
+2
+mouse 198 130
+1
+mouse 196 127
+3
+mouse 196 125
+2
+mouse 196 124
+34
+35 left
+35 up left
+12 left
+mouse 196 126
+2 left
+mouse 192 129
+1 left
+mouse 187 132
+2 left
+mouse 182 135
+2 left
+mouse 176 137
+1 left
+mouse 167 139
+2 left
+mouse 160 139
+1 left
+mouse 154 139
+2 left
+mouse 150 139
+5 left
+mouse 148 140
+2 left
+mouse 145 141
+1 left
+mouse 139 141
+2 left
+mouse 132 141
+1 left
+mouse 122 141
+2 left
+mouse 114 141
+1 left
+mouse 107 141
+1 left
+mouse 103 141
+2 left
+mouse 102 141
+2 left
+mouse 101 141
+2 left
+mouse 99 141
+1 left
+mouse 94 139
+1 left
+mouse 89 139
+3 left
+mouse 83 139
+2 left
+mouse 80 139
+1 left
+mouse 79 138
+2 left
+mouse 77 138
+4 left
+mouse 74 138
+3 left
+mouse 71 141
+1 left
+mouse 70 144
+2 left
+mouse 68 146
+2 left
+mouse 67 149
+1 left
+mouse 67 152
+2 left
+mouse 67 154
+4 left
+mouse 67 156
+13 left
+5 left right
+15 right
+8
+mouse 67 155
+4
+54 left
+10
+27 right
+10
+34 left
+mouse 66 155
+1 left
+mouse 65 155
+1 left
+mouse 62 158
+2 left
+mouse 58 163
+1 left
+mouse 55 168
+11 left
+6 down left
+28 down
+mouse 56 168
+2 down
+mouse 59 168
+4 down
+mouse 60 170
+3 down
+mouse 61 171
+1 down
+mouse 63 171
+2 down
+mouse 68 173
+2 down
+mouse 69 173
+3 down
+mouse 69 174
+16 down
+3
+mouse 70 174
+32
+mouse 71 174
+2
+4 right
+mouse 72 174
+1 right
+mouse 74 174
+2 right
+mouse 79 174
+2 right
+mouse 84 176
+1 right
+mouse 91 177
+2 right
+mouse 99 177
+2 right
+mouse 107 177
+1 right
+mouse 113 177
+2 right
+mouse 118 177
+1 right
+mouse 119 177
+1 right
+mouse 121 177
+2 right
+mouse 122 177
+1 right
+mouse 122 179
+2 right
+mouse 122 182
+1 right
+mouse 123 183
+2 right
+mouse 126 183
+1 right
+mouse 129 183
+1 right
+mouse 131 183
+2 right
+mouse 134 183
+2
+mouse 135 182
+7
+mouse 134 182
+5
+3 left
+1 up left
+29 up
+mouse 134 179
+2 up
+mouse 134 178
+1 up
+mouse 134 176
+8 up
+2
+mouse 133 176
+3
+mouse 130 177
+2
+mouse 126 179
+1
+mouse 124 180
+1
+mouse 124 181
+7
+15 lmb
+7
+mouse 124 183
+1
+mouse 123 186
+13
+mouse 123 187
+1
+1 rmb
+mouse 123 188
+12 rmb
+6
+mouse 123 189
+36
+mouse 124 189
+1
+mouse 127 188
+6
+mouse 128 188
+4
+mouse 129 188
+3
+mouse 130 188
+24
+17 down
+mouse 131 188
+3 down
+mouse 132 188
+2 down
+mouse 138 190
+1 down
+mouse 143 194
+2 down
+mouse 148 198
+1 down
+mouse 153 201
+1 down
+mouse 158 202
+1 down
+mouse 158 199
+1 down
+mouse 165 202
+1 down
+mouse 165 199
+1 down
+mouse 170 202
+1 down
+mouse 176 201
+1 down
+mouse 176 199
+1 down
+mouse 182 200
+1 down
+mouse 182 199
+1 down
+mouse 186 201
+1 down
+mouse 186 199
+1 down
+mouse 196 201
+1 down
+mouse 196 199
+1 down
+mouse 197 199
+5 down
+mouse 197 197
+2 down
+mouse 197 193
+2 down
+mouse 197 191
+3 down
+mouse 197 192
+1 down
+mouse 197 195
+2 down
+mouse 197 202
+1 down
+mouse 197 199
+1 down
+mouse 197 209
+1 down
+mouse 197 199
+1 down
+mouse 194 228
+1 down
+mouse 194 199
+2 down
+mouse 193 216
+1 down
+mouse 193 199
+1 down
+mouse 193 203
+1 down
+mouse 193 199
+13 down
+mouse 193 198
+2 down
+mouse 193 196
+2
+mouse 193 193
+2
+mouse 193 191
+1
+mouse 193 189
+2
+mouse 193 188
+1
+mouse 192 186
+1
+mouse 189 181
+1
+mouse 188 175
+3
+mouse 187 164
+3
+mouse 184 151
+1
+mouse 183 144
+2
+mouse 183 141
+2
+mouse 183 140
+1
+4 up left
+27 up
+mouse 180 140
+2 up
+mouse 180 143
+1 up
+mouse 177 145
+2 up
+mouse 175 148
+1 up
+mouse 172 150
+2 up
+mouse 168 154
+1 up
+mouse 164 156
+1 up
+mouse 159 160
+3 up
+mouse 155 163
+2 up
+mouse 152 164
+1 up
+3
+mouse 151 164
+1
+mouse 150 164
+3
+mouse 149 164
+4
+mouse 148 164
+3
+8 rmb
+mouse 147 164
+4 rmb
+1
+mouse 144 164
+1
+mouse 143 164
+20
+mouse 154 165
+5
+mouse 168 165
+2
+mouse 199 166
+1
+mouse 213 166
+3
+mouse 220 166
+1
+mouse 221 166
+3
+mouse 222 166
+2
+mouse 225 166
+2
+mouse 229 163
+1
+mouse 238 162
+2
+mouse 241 162
+2
+mouse 244 162
+1
+mouse 247 162
+4
+mouse 251 162
+3
+mouse 252 162
+2
+2 rmb
+mouse 253 162
+12 rmb
+mouse 253 163
+1
+mouse 253 168
+2
+mouse 253 170
+6
+5 left
+mouse 253 171
+4 left
+mouse 253 172
+2 left
+mouse 253 173
+29 left
+13
+31 down
+4 down right
+60 right
+3
+25 left
+mouse 252 173
+7 left
+5 down left
+50 down
+9 left
+mouse 251 173
+26 left
+8 up left
+22 up
+18 up left
+20 left
+2 left right
+40 right
+mouse 250 173
+3 right
+mouse 249 173
+3 right
+mouse 248 173
+43 right
+38 up right
+mouse 249 173
+1 up right
+mouse 252 173
+2 up right
+mouse 258 173
+2 up right
+mouse 268 173
+1 up right
+mouse 280 173
+1 up right
+mouse 293 173
+1 up right
+2 right
+mouse 307 172
+1 right
+mouse 319 172
+2 right
+mouse 331 172
+1 right
+mouse 319 172
+36 right
+mouse 319 173
+1 right
+mouse 320 173
+1 right
+mouse 319 173
+6 right
+mouse 319 174
+3 right
+mouse 319 177
+2 right
+mouse 318 177
+9 right
+2 down right
+mouse 317 178
+2 down
+mouse 314 179
+1 down
+mouse 310 179
+2 down
+mouse 307 180
+1 down
+mouse 305 180
+1 down
+mouse 304 180
+3 down
+mouse 303 178
+2 down
+mouse 301 170
+2 down
+mouse 300 162
+2 down
+mouse 300 157
+7 down
+mouse 300 156
+4 down
+mouse 294 150
+3 down
+mouse 289 147
+1 down
+mouse 282 140
+2 down
+mouse 278 134
+1 down
+mouse 276 129
+1 down
+mouse 276 126
+1 down
+mouse 276 123
+2 down
+mouse 275 120
+1
+mouse 273 116
+1
+mouse 270 110
+2
+mouse 269 105
+2
+mouse 268 103
+1
+mouse 268 102
+3 left
+mouse 268 101
+2 left
+mouse 268 99
+3 left
+mouse 268 96
+1 left
+mouse 268 94
+4 left
+mouse 267 93
+7 left
+5 left rmb
+mouse 266 92
+1 left rmb
+mouse 264 91
+2 left rmb
+mouse 262 89
+2 left rmb
+mouse 262 88
+4 left rmb
+4 left
+17
+mouse 263 89
+4
+mouse 265 91
+2
+mouse 268 93
+1
+mouse 268 94
+2
+mouse 269 94
+1 right
+mouse 271 96
+11 right
+mouse 271 98
+2 right
+mouse 271 101
+2 right
+mouse 271 103
+2 right
+mouse 271 109
+1 right
+mouse 271 116
+1 right
+mouse 271 122
+2 right
+mouse 271 128
+3 right
+mouse 271 130
+1 right
+mouse 271 135
+6 right
+mouse 272 137
+1 right
+mouse 272 140
+2 right
+mouse 272 146
+2 right
+mouse 272 151
+2 right
+mouse 271 153
+1 right
+mouse 271 156
+12 right
+4
+11 right
+mouse 270 157
+2 right
+mouse 268 157
+2 right
+mouse 267 158
+1 right
+1 down right
+mouse 266 159
+22 down
+mouse 265 159
+4 down
+mouse 264 159
+1 down
+mouse 263 160
+2 down
+mouse 262 160
+6 down
+3 down left
+38 left
+mouse 261 160
+9 left
+37 up
+19
+32 up
+mouse 261 159
+5 up
+mouse 261 158
+4 up
+mouse 261 157
+1 up
+mouse 262 151
+2 up
+mouse 262 145
+3 up
+mouse 263 139
+1 up
+mouse 269 121
+2 up
+mouse 273 108
+1 up
+mouse 277 92
+2 up
+mouse 277 76
+1 up
+mouse 277 74
+2 up
+mouse 278 66
+6 up
+mouse 278 65
+2 up
+mouse 279 63
+1 up
+mouse 280 56
+2 up
+mouse 280 51
+1 up
+mouse 280 45
+2 up
+mouse 280 40
+1 up
+mouse 280 37
+1 up
+mouse 280 35
+2 up
+mouse 280 27
+3 up
+mouse 280 24
+2 up
+mouse 280 22
+6 up
+mouse 286 23
+2 up
+mouse 296 25
+1 up
+mouse 308 25
+2 up
+mouse 316 25
+28 up
+mouse 316 27
+1 up
+mouse 316 29
+1 up
+mouse 316 30
+3 up
+mouse 316 31
+8 up
+mouse 317 32
+5 up
+mouse 317 34
+1 up
+mouse 317 35
+1 up
+mouse 318 35
+1 up
+mouse 318 36
+2 up
+mouse 318 38
+2 up
+mouse 318 41
+2 up
+mouse 318 45
+2 up right
+mouse 318 46
+13 right
+mouse 319 47
+4 right
+mouse 320 47
+1 right
+mouse 321 48
+1 right
+mouse 319 48
+3 right
+mouse 322 48
+1 right
+mouse 320 50
+1 right
+mouse 322 51
+1 right
+mouse 319 51
+1 right
+mouse 322 53
+1 right
+mouse 319 56
+3 right
+mouse 320 56
+1 right
+mouse 319 56
+2 right
+mouse 319 57
+4 right
+mouse 319 58
+3 right
+mouse 319 61
+13 right
+mouse 320 61
+1 right
+mouse 319 61
+35 right
+mouse 320 61
+1 right
+mouse 319 61
+1 right
+mouse 319 63
+3 right
+mouse 320 63
+1 right
+mouse 319 65
+2 right
+mouse 319 68
+2 right
+42 up right
+12 right
+5 down right
+2 down
+mouse 319 69
+45 down
+6 down right
+25 right
+84 left
+94 up left
+mouse 311 69
+6 up left
+mouse 305 69
+2 up left
+mouse 285 71
+2 up left
+mouse 269 74
+1 up left
+mouse 252 77
+2 up left
+mouse 237 79
+2 left
+mouse 216 85
+1 left
+mouse 212 87
+2 left
+mouse 209 90
+3 left
+mouse 209 92
+4 left
+mouse 209 93
+3 left
+10 down left
+31 down
+4 down left
+37 left
+65 up left
+74 left
+6 up left
+44 up
+30 up right
+24 up
+7
+19 left
+14 up left
+mouse 209 94
+13 up left
+mouse 208 94
+28 up left
+19 left
+16 down left
+36 left
+38 up left
+24 left
+mouse 208 95
+23 up left
+65 left
+4 down left
+23 down
+2 down left
+21 left
+10 down
+5
+6 left
+4 up left
+5 up
+mouse 205 92
+1 up
+mouse 204 91
+3 up
+mouse 203 91
+1 up
+mouse 201 90
+2 up
+mouse 195 88
+1 up
+mouse 190 88
+3 up
+mouse 186 88
+2
+mouse 182 87
+1
+mouse 178 87
+3
+mouse 174 84
+1
+mouse 171 81
+2
+mouse 165 79
+1
+mouse 158 79
+2
+mouse 145 79
+2
+mouse 127 79
+1
+mouse 113 78
+2
+mouse 104 75
+1
+mouse 104 70
+1
+mouse 104 67
+1
+mouse 104 65
+3
+mouse 104 64
+1
+mouse 104 62
+4
+mouse 103 60
+3
+mouse 102 59
+2
+6 rmb
+mouse 101 59
+14 rmb
+32
+mouse 101 58
+1
+2 left
+4 up left
+56 up
+55
+1 up
+102 up left
+5
+mouse 101 59
+1
+mouse 101 61
+2
+mouse 97 68
+1
+mouse 89 78
+2
+mouse 82 83
+2
+mouse 76 86
+2
+mouse 75 88
+6
+mouse 75 89
+3
+mouse 75 91
+3 rmb
+mouse 76 93
+17 rmb
+27
+mouse 76 94
+2
+1 left
+mouse 75 95
+3 left
+mouse 75 96
+4 left
+400 down left
+150
