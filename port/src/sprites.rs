@@ -98,11 +98,10 @@ fn slot_name(slot: u16, draw: bool) -> Option<String> {
     fixed.or(level)
 }
 
-/// Groups loaded through FUN_1088_4518 (and SEATILE, LevelLoad with PalMixSea; MOVIE by FUN_1088_c98f),
-/// SVN.SPR (0x75) is not among them in game: FUN_1088_d073 loads it raw at boot, but every new
-/// level reloads it fitted (FUN_1088_c98f -> FUN_1088_458b).
-/// which skip the palette fitting (FUN_10f0_1a99): their pixels are raw indices, mostly into
-/// the mix tables.
+/// Groups loaded through FUN_1088_4518 (and SEATILE, LevelLoad with PalMixSea; MOVIE by
+/// FUN_1088_c98f), which skip the palette fitting (FUN_10f0_1a99): their pixels are raw indices,
+/// mostly into the mix tables. SVN.SPR (0x75) is not one in game: FUN_1088_d073 loads it raw at
+/// boot, but every new level reloads it fitted (FUN_1088_c98f -> FUN_1088_458b).
 pub fn raw(slot: u16) -> bool {
     matches!(slot, 0x1b | 0x73 | 0x7c | 0x7d)
         || (slot >= 0x32
