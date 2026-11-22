@@ -1,0 +1,17 @@
+# Tile effect 49 (FUN_1040_5608: the block goes, smoke, six bits, shake, 0x4a): CITY_I01's statues 
+# on the fence posts near (3400,568), tiles 0xa6e/0xa6f (mask 4: blasts only). The start moved onto 
+# the fence top with a weapon-3 pick-up copied there: rockets at the statue on the left.
+level MAPS/CITY_I01.MAP
+start 3470 580
+cell 2 216 36 0xd06
+mouse 20 100
+20
+1 left
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
