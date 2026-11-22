@@ -1,0 +1,20 @@
+# Wall chunks (effect 43, FUN_1040_45db): CITY01's blocks with effect 43 near (1240..1303, 1200..1231)
+# and (1464..1511, 1224), explodable by blasts (function 3 & 7). A weapon-3 pick-up copied onto the
+# start (1360,1231); his homing rockets (right button) find the right-hand block (tile 0x653, function
+# 60309: two bits), which bursts: shake, 0x4a, the block cleared, a bonus 0xd10 one time in three.
+level MAPS/CITY01.MAP
+start 1360 1231
+cell 2 85 76 0xd06
+mouse 20 125
+20
+1 left
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150

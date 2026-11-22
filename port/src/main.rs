@@ -1806,6 +1806,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
                 let t = world.tile_function_at(y, x);
+                if let Some(c) = world.cell_at(world::MAIN_PLANE, y, x) {
+                    if world.cell_function(c, 4) == 43 {
+                        let next = (c as i32 + world.cell_function(c, 2) as i16 as i32) as u16;
+                        println!("EFFECT43 tile {c:#x} f3 {:#x} -> {next:#x} f0 {} at ({tx},{ty}) px ({x},{y})", world.cell_function(c, 3), world.cell_function(next, 0) as i16);
+                    }
+                }
+                if t == 60304 || t == 60308 {
+                    println!("TILEFN {t} at ({tx},{ty}) px ({x},{y})");
+                }
                 if (8000..8100).contains(&t) {
                     println!("TILEFN {t} at ({tx},{ty}) px ({x},{y})");
                 }
@@ -1839,6 +1848,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     let game = Game::new(world, demo);
+    if std::env::var_os("ET_SCAN").is_some() {
+        for p in game.level.platforms.iter().flatten() {
+            if p.flags & 0x1c != 0 {
+                println!("PLATFORM flags {:#x} at ({}, {}) {}x{}", p.flags, p.x, p.y, p.width, p.height);
+            }
+        }
+    }
     if o.headless {
         if game.demo.is_none() {
             // ET_IDLE=N: N frames of the map with no input (for runtime warnings).
