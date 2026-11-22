@@ -105,8 +105,6 @@ pub struct Effects {
     pub secrets: i32,
     /// Object tiles a script placed (FUN_1088_0d5a): (tile, cell), spawned by `Level::flush_spawns`.
     pub spawns: Vec<(u16, u16)>,
-    /// Objects an effect made (FUN_1068_17f8 -> EnemyFactory): (kind, record words).
-    pub objects: Vec<(u16, [i16; 4])>,
     /// Effects a script asked for (command 2, FUN_1040_60bb): (id, y, x).
     pub effects: Vec<(u16, i32, i32)>,
     /// A bot carried the hero sideways (gHeroX += dx).
@@ -127,6 +125,8 @@ pub struct Level {
     /// 1170:4dc2: restarts of this level (GameFrame 4e60 = 10 counts them; a start from the menu
     /// or a level end resets it). Effect 93 only clears its tile on the first two tries.
     pub tries: i32,
+    /// 1170:4f0e: the wind (OBJECTS 0x2717), an angle offset for drifting smoke.
+    pub wind: i32,
     /// 1170:25ae: the strength of the last tile blast whose effect ran (FUN_1050_5a33).
     pub blast_strength: i32,
     /// Script buffers as the game keeps them (1170:513c): w[0] = word count, w[1] = type, ...
@@ -213,6 +213,7 @@ impl Level {
             .map(|r| Grinder::from_record(r));
         Level {
             tries: 0,
+            wind: 0,
             blast_strength: 0,
             scripts,
             platforms: Vec::new(),

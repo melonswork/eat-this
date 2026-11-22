@@ -1,0 +1,18 @@
+# Tile effect 35 (FUN_1040_3c53: the cells left, right and above go, six chips, a steam emitter 
+# 0x141e kind 0 takes its place through EnemyFactory, shake, 0x4a): CITYHS near (712,1288..1311), 
+# with effect-34 tiles. The start moved right of it with a weapon-3 pick-up copied there: rockets 
+# up-left.
+level MAPS/CITYHS.MAP
+start 760 1340
+cell 2 47 83 0xd06
+mouse 20 70
+20
+1 left
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+200

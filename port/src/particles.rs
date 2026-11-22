@@ -50,6 +50,8 @@ pub const MOVE_ROCKET: u16 = 0x3c4f;
 pub const MOVE_AGE: u16 = 0x2ac9;
 /// FUN_1050_36a9: a running critter (FUN_1050_4622).
 pub const MOVE_CRITTER: u16 = 0x36a9;
+/// FUN_1050_3acd: drifting smoke (FUN_1050_47e7).
+pub const MOVE_DRIFT: u16 = 0x3acd;
 /// FUN_1050_3d06: a throw in the half-speed background layer (no walls; gone below 0x1c8 + camY / 2).
 pub const MOVE_BG_THROW: u16 = 0x3d06;
 
@@ -290,6 +292,19 @@ impl Particles {
         v.set(0xc, bounce);
         p.m.set(0x4e, 0x7fff);
         p.m.set(0x3c, p.m.w(0x3c) | 0x200);
+    }
+
+    /// FUN_1050_47e7(gravity, speed, angle): drifting smoke (mover FUN_1050_3acd): a throw that
+    /// sways (sin(age * 0x30) * 16 px across, its size * 8 px up).
+    pub fn drift(&mut self, gravity: i32, speed: i32, angle: i32) {
+        let p = self.last_mut();
+        p.m.set(0x4a, MOVE_DRIFT as i32);
+        p.m.set(0x4c, 0xc);
+        let v = &mut p.v;
+        v.set_l(0, trig::cos(angle) * speed);
+        v.set_l(4, trig::sin(angle) * speed);
+        v.set(8, 0);
+        v.set(0xa, gravity);
     }
 
     /// FUN_1050_4999(gravity, speed, angle): a throw in the background layer (GRANNY's collapse).
@@ -1023,6 +1038,27 @@ impl Level {
                     m.set(0x3e, -10);
                 }
             }
+            MOVE_DRIFT => {
+                let t = v.w(8);
+                let sw = trig::sin(((m.w(0x24) * 0x30) % 0x1680 + 0x1680) % 0x1680);
+                let a = v.l(0).wrapping_mul(t) / 0x40000;
+                let b = (sw * 0x10) / 0x4000;
+                m.set(8, m.w(4) + b + a);
+                let c = (t * t) / v.w(0xa);
+                let d = v.l(4).wrapping_mul(t) / 0x40000;
+                let mut e = (sw * 8) / 0x4000;
+                if sw < 0 {
+                    e = -e;
+                }
+                m.set(0xa, ((m.w(6) - e) - d) + c);
+                v.set(8, t + 1);
+                if off_screen(m, -0x200) {
+                    m.set(0x24, m.w(0x22));
+                    m.set(0x3e, -10);
+                } else {
+                    m.set(0x24, m.w(0x24) + 1);
+                }
+            }
             MOVE_THROW => {
                 let t = v.w(8);
                 m.set(8, m.w(4) + v.l(0).wrapping_mul(t) / 0x40000);
@@ -1482,7 +1518,7 @@ impl Level {
                 let m = &mut self.particles.list[i].m;
                 m.set(0x16, if t < 5 { ((m.uw(0x24) >> 3) & 3) as i32 + 0x1900 } else { 0x1904 });
             }
-            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a | 0x232e | 0x2459 | 0x2497 | 0x236b => {} // drawing only
+            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a | 0x20ed | 0x232e | 0x2459 | 0x2497 | 0x236b => {} // drawing only
             0x2299 => {
                 // FUN_1050_2299: a burning bit trails smoke.
                 if m.w(0x24) % 4 == 3 {
@@ -1554,6 +1590,39 @@ impl Level {
                 // FUN_1050_1b90: a flame goes out without floor under it.
                 if f.world.solidity_at(m.w(0xa) + 1, m.w(8)) & 0x211 == 0 {
                     m.set(0x24, m.w(0x22));
+                }
+            }
+            0x1e16 => {
+                // FUN_1050_1e16: a block sinking out of sight (effect 33). It goes down age/steps
+                // (+0x26) px; every 0x32 frames, two times in three, a puff of smoke drifts off
+                // its top (sprite 0x5100, mover 0x3acd, the wind 1170:4f0e); at its end a cloud
+                // (FUN_1040_66fa) at its right end.
+                m.set(0xa, m.w(6) - m.w(0x24) / m.w(0x26).max(1));
+                let (x, y, age, life) = (m.w(8), m.w(0xa), m.w(0x24), m.w(0x22));
+                let cols = self.particles.list[i].v.w(6);
+                if self.particles.now % 0x32 == 0 && f.rng.random(3) < 2 {
+                    let ps = &mut self.particles;
+                    let saved = ps.p;
+                    ps.p.group = 0;
+                    ps.p.hits = 0x8000;
+                    ps.p.callback = 0x20ed;
+                    let r = f.rng.random(0x201);
+                    let off = (r * (cols * 16 + 0xf)) / 0x200;
+                    ps.spawn(0x5100, y, x + off);
+                    let a = (self.wind + 0x6a0) - r;
+                    let g = f.rng.random(0x38) + 0xe0;
+                    self.particles.drift(g, 0x10, a);
+                    let ps = &mut self.particles;
+                    ps.p = saved;
+                    ps.p.callback = 0;
+                    ps.p.hits = 0;
+                    ps.p.group = 1;
+                }
+                if age == life && cols > 0 {
+                    let ps = &mut self.particles;
+                    ps.p.colour = 0x10;
+                    ps.spawn_seq(0x6c00, 4, 0x19, y + 2, cols * 8 + x + 8, 1); // FUN_1040_66fa
+                    ps.p.colour = 0;
                 }
             }
             0x2588 => {
@@ -1748,7 +1817,7 @@ impl Level {
 
     /// FUN_1088_12f9 for the cell's current tile: levers run their scripts; bonus tiles
     /// (function 30000) turn into bonus objects.
-    fn cell_changed(&mut self, world: &mut World, idx: i32, fx: &mut Effects) {
+    pub(crate) fn cell_changed(&mut self, world: &mut World, idx: i32, fx: &mut Effects) {
         let tile = world.main().cells[idx as usize];
         if tile as i16 <= 0 {
             return;

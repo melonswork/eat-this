@@ -450,6 +450,41 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             sound::play_at(0x7b, y + 2, x + 0x10);
             fx.shakes.push((0xc, 5));
         }
+        33 => {
+            // FUN_1040_39a1: the block of the tile's function sinks out of sight: it leaves the
+            // main plane and a particle draws it going down (callback 0x1e16, mover 0x3ab8 = age
+            // only; record: top-left tile, x, y, columns, rows); then FUN_1088_12f9 for the cell
+            // under its left end.
+            let f = world.tile_function_at(y, x);
+            let (mut lx, mut ty) = (x, y);
+            while world.tile_function_at(y, lx - 0x10) == f {
+                lx -= 0x10;
+            }
+            while world.tile_function_at(ty - 0x10, lx) == f {
+                ty -= 0x10;
+            }
+            let w = world.main().width;
+            let base = world.cell_at(MAIN_PLANE, ty, lx).unwrap_or(0) as i32;
+            let (x1, y1, x2, y2) = clear_block(world, ty & 0xfff0, lx & 0xfff0);
+            let ps = &mut lv.particles;
+            ps.p.group = 0;
+            ps.p.callback = 0x1e16;
+            let steps = rng.random(0x18) + 5;
+            ps.spawn_seq(0, steps, (y2 - y1) + 0x10, y2 + 0xf, x1, 0);
+            {
+                let p = ps.last_mut();
+                p.m.set(0x4a, crate::particles::MOVE_AGE as i32);
+                for (k, v) in [base, x1, y1, (x2 - x1) >> 4, (y2 - y1) >> 4].into_iter().enumerate() {
+                    p.v.set(k * 2, v);
+                }
+            }
+            ps.p.callback = 0;
+            ps.p.group = 1;
+            let below = ((y2 >> 4) + 1) * w + (x1 >> 4);
+            if below >= 0 && (below as usize) < world.main().cells.len() {
+                lv.cell_changed(world, below, fx);
+            }
+        }
         35 => {
             // FUN_1040_3c53: the cells left, right and above go, bits fly, a steam emitter
             // (0x141e kind 0) takes its place (FUN_1068_17f8), a big shake.
@@ -461,14 +496,18 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                 }
             }
             chip_pairs(&mut lv.particles, rng, 0x7516, y, x);
-            fx.objects.push((0x141e, [0, 0, x as i16, (y + 8) as i16]));
+            // FUN_1068_17f8: made at once (a blast's object pass right after hits it).
+            let mut cx = crate::factory::Ctx { hero_x: 0, rng: &mut *rng };
+            lv.factory(world, &mut cx, 0x141e, &crate::factory::Rec { w: &[0, 0, x as i16, (y + 8) as i16], count: 4 });
             fx.shakes.push((0x2a, 0x10));
             sound::play_at(0x4a, y, x);
         }
         80 => {
             // FUN_1040_3d9e: bits fly, a steam emitter (0x141e kind 1) takes its place.
             chip_pairs(&mut lv.particles, rng, 0x7514, y, x);
-            fx.objects.push((0x141e, [0, 1, x as i16, (y + 7) as i16]));
+            // FUN_1068_17f8: made at once (a blast's object pass right after hits it).
+            let mut cx = crate::factory::Ctx { hero_x: 0, rng: &mut *rng };
+            lv.factory(world, &mut cx, 0x141e, &crate::factory::Rec { w: &[0, 1, x as i16, (y + 7) as i16], count: 4 });
             fx.shakes.push((0x18, 10));
             sound::play_at(0x4a, y, x);
         }
@@ -1124,7 +1163,7 @@ pub fn explode_tile(
     let cell_index = ((y >> 4) * w + (x >> 4)) as u16;
     let original = world.main().cells[cell_index as usize];
     if std::env::var_os("ET_EXPL").is_some() {
-        eprintln!("EXPL strength {strength} mask {mask:x} at {y},{x} cell {original:#x} f1 {:#x} f2 {} f3 {} f4 {}", world.cell_function(original, 1), world.cell_function(original, 2) as i16, world.cell_function(original, 3), world.cell_function(original, 4));
+        eprintln!("EXPL {} strength {strength}", lv.now); eprintln!("  strength {strength} mask {mask:x} at {y},{x} cell {original:#x} f1 {:#x} f2 {} f3 {} f4 {}", world.cell_function(original, 1), world.cell_function(original, 2) as i16, world.cell_function(original, 3), world.cell_function(original, 4));
     }
     if world.cell_function(original, 3) & mask == 0 {
         return;

@@ -830,6 +830,7 @@ impl Level {
                     world.sectors[s].water[4] = ((g(3) - 100) >> 1) + 100;
                 }
                 0x271a => self.vehicle = true,
+                0x2717 => self.wind = rec.get(1).copied().unwrap_or(0) as i32,
                 0x2716 => {
                     let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
                     self.quad = Some((g(2), g(3)));
@@ -888,9 +889,6 @@ impl Level {
 
     /// Spawn what scripts asked for (FUN_1088_0d5a): enemy icons in `fx.spawns`.
     pub fn flush_spawns(&mut self, world: &mut World, cx: &mut Ctx, fx: &mut crate::level::Effects) {
-        for (kind, w) in std::mem::take(&mut fx.objects) {
-            self.factory(world, cx, kind, &Rec { w: &w, count: 4 });
-        }
         for (tile, cell) in std::mem::take(&mut fx.spawns) {
             let w = world.main().width;
             let f = world.cell_function(tile, 0);
