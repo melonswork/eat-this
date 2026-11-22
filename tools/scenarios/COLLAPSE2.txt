@@ -1,0 +1,6 @@
+# GRANNY's collapsing building seen tilting (FUN_1088_a481's draw: plane 4 upright, then plane 5
+# rotated by FUN_10f0_545b): the lever (146,30) set on, the hero started beside it, waiting.
+level MAPS/GRANNY.MAP
+cell 1 146 30 0xfd8
+start 2250 470
+1100

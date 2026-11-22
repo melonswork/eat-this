@@ -915,6 +915,9 @@ struct Graphics {
     tables: render::Tables,
     /// LoadExtraMap= maps (plane slots 8..): PLANE 0 of each (FUN_10f0_5e9f).
     extra: Vec<Option<world::Plane>>,
+    /// LevelLoad loads SVEN2BAC.MAP into planes 4 and 5 when the level has a collapsing building
+    /// (OBJECTS 0x2715); FUN_1088_a481 draws it.
+    building: Option<world::Plane>,
     decor: Vec<Decor>,
     /// Draw the pointer and the status bar (H toggles it in the window).
     show_hud: bool,
@@ -993,6 +996,11 @@ impl Graphics {
                 g
             })
             .collect();
+        let building = (script.as_ref().map(|s| s.background_proc) == Some(15))
+            .then(|| find_ci(&data.join("MAPS"), "sven2bac.map"))
+            .flatten()
+            .and_then(|p| data::Map::load(&p).ok())
+            .and_then(|m| Some(world::Plane { width: m.width, height: m.height, cells: m.planes.first()?.clone() }));
         let extra = script
             .as_ref()
             .map(|s| s.extra_maps.clone())
@@ -1049,6 +1057,7 @@ impl Graphics {
             bank: render::Bank::new(level),
             tables,
             extra,
+            building,
             decor,
             show_hud: true,
             hud_level: 2,
@@ -1108,9 +1117,6 @@ impl Graphics {
                 }
             }
         }
-        if self.bg_only {
-            return;
-        }
         if bp == 4 || (bp == 10 && cam_y <= 0x290) {
             // FUN_1090_1629 (10: FUN_1090_1742 above its line) (detail 3, as in demos): extra map 9 at a quarter of the camera, then
             // extra map 8 at half of it, both repeated across and down (FUN_1088_a401).
@@ -1136,6 +1142,13 @@ impl Graphics {
         let sector = g.level.sector.unwrap_or(0);
         if matches!(bp, 1 | 11 | 15 | 16) {
             self.start_extras(fb, g, sector, (cam_x, cam_y), frame);
+        }
+        if bp == 15 {
+            self.building(fb, g, (cam_x, cam_y), frame);
+        }
+        if self.bg_only {
+            // What tools/dumpframe.py's .bg holds: the frame up to the first FUN_1068_09bf call.
+            return;
         }
         self.decor(fb, g, sector, false, (cam_x, cam_y), frame);
         // The map planes, then the platforms (their own planes, at their positions).
@@ -1206,6 +1219,66 @@ impl Graphics {
             }
         }
         self.hud(fb, g, frame);
+    }
+
+    /// FUN_1088_a481's draw (from proc 15): GRANNY's building in its sector, in the half-speed
+    /// layer with its pivot at (4eca, 4ecc + t / 2), turned by t / 2 sixteenths of a degree:
+    /// plane 4 drawn straight while upright (FUN_10f0_513c), else plane 5 through tile group 8
+    /// (FUN_10f0_545b: 16.16 steps, the cell's low byte picks the tile, colour 0 is clear).
+    fn building(&self, fb: &mut [u8], g: &Game, cam: (i32, i32), frame: u32) {
+        let (Some(c), Some(pl)) = (&g.level.collapse, &self.building) else { return };
+        if c.x == 0x7fff || g.level.sector != Some(c.sector) {
+            return;
+        }
+        // t as the draw sees it (checked against COLLAPSE2's frames: the port's t is one behind
+        // the original's 4ece at this point, which the draw reads before its increment).
+        let t = c.t;
+        let a = (0x1680 - t / 2) % 0x1680;
+        let (s, co) = (trig::sin(a), trig::cos(a));
+        let (hx, hy) = (((cam.0 as u16) >> 1) as i32, ((cam.1 as u16) >> 1) as i32);
+        let x0 = c.x - hx;
+        let y0 = t / 2 + c.y - hy;
+        let right = pl.width * 16 + x0 - 1 - 0x140;
+        let bottom = c.y - hy + pl.height * 16 - 1 - 0xc0;
+        if x0 > W - 1 || y0 > H - 1 || right < 0 || bottom < 0 {
+            return;
+        }
+        let clip = (x0.max(0), y0.max(0), right.min(W - 1), bottom.min(H - 1));
+        if a == 0 {
+            draw_plane(fb, &g.world, pl, x0 - 0xa0, y0 - 0x80, frame, clip);
+            return;
+        }
+        let Some(group) = g.world.groups.get(8).and_then(|g| g.as_ref()) else { return };
+        let x = (0xa0 - x0) * 16 + s * 0x2300 / 0x4000;
+        let y = (0x80 - y0) * 16 - s * 0x1480 / 0x4000;
+        let u = (x as i16 as i32 * co) / 0x4000 - (y as i16 as i32 * s) / 0x4000;
+        let v = (x as i16 as i32 * s) / 0x4000 + (y as i16 as i32 * co) / 0x4000;
+        // Per screen pixel (A, B), per row (C, D); the origin at the clip's top left.
+        let (da, db, dc, dd) = (co * 0x100 / 0x400, s * 0x100 / 0x400, -(s * 0x100) / 0x400, co * 0x100 / 0x400);
+        let (ox, oy) = (-clip.0, -clip.1);
+        let mut ur = (u * 0x100 - ox * da - oy * dc - 0x1000) as i64;
+        let mut vr = (v * 0x100 - ox * db - oy * dd) as i64;
+        let tiles = group.len();
+        for sy in clip.1..=clip.3 {
+            let (mut uu, mut vv) = (ur, vr);
+            for sx in clip.0..=clip.2 {
+                uu += i64::from(da);
+                vv += i64::from(db);
+                let (tx, ty) = ((uu >> 16) as i32, (vv >> 16) as i32);
+                if (0..pl.width).contains(&tx) && (0..pl.height).contains(&ty) {
+                    let n = (pl.get(tx, ty) & 0xff) as usize;
+                    if n < tiles {
+                        let px = group.tile(n);
+                        let c = px[(((vv >> 12) & 15) * 16 + ((uu >> 12) & 15)) as usize];
+                        if c != 0 {
+                            fb[(sy * W + sx) as usize] = c;
+                        }
+                    }
+                }
+            }
+            ur += i64::from(dc);
+            vr += i64::from(dd);
+        }
     }
 
     /// Background procs 12..15 (table 1170:189e; the episode-3 sets SVNBAC02..05).
