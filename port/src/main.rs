@@ -569,10 +569,10 @@ impl Game {
         // After HeroUpdate: its camera nudges and shakes, then FUN_1088_0a3b(1) .. FUN_1088_0c82.
         self.camera.offset.0 += self.hero.cam_nudge.0;
         self.camera.offset.1 += self.hero.cam_nudge.1;
-        for &(a, b) in &self.hero.shakes {
+        for (a, b) in std::mem::take(&mut self.hero.shakes) {
             self.camera.shake(a, b);
         }
-        for &(a, b) in &self.hero.side_shakes {
+        for (a, b) in std::mem::take(&mut self.hero.side_shakes) {
             self.camera.shake_sideways(a, b);
         }
         // FUN_10a8_1311 (doors opening by themselves) runs before FUN_1088_087b: its door sounds
@@ -630,6 +630,14 @@ impl Game {
             self.camera.y + 199,
         );
         self.world_update(&mut fx, noise, input[hero::UP] > 0, window);
+        // Objects hitting the hero (FUN_1088_3c32: a falling weight, the hovering machine, the
+        // tank, ...) shake the screen at once (ScreenShake / FUN_1050_5c7d set the globals).
+        for (a, b) in std::mem::take(&mut self.hero.shakes) {
+            self.camera.shake(a, b);
+        }
+        for (a, b) in std::mem::take(&mut self.hero.side_shakes) {
+            self.camera.shake_sideways(a, b);
+        }
         for (tile, y, x) in std::mem::take(&mut fx.bonus_pickups) {
             let (effect, f3) = (self.world.cell_function(tile, 4), self.world.cell_function(tile, 3));
             self.pick_effect(effect, f3, y, x);
@@ -1846,7 +1854,11 @@ fn script_lines(map_path: &Path) -> Vec<(String, String)> {
             String::from_utf8_lossy(&t)
                 .lines()
                 .filter_map(|l| {
-                    let l = l.split('\'').next()?.trim();
+                    // A comment is a whole line starting with ': texts have apostrophes (AddMsg=IT'S UP).
+                    let l = l.trim();
+                    if l.starts_with('\'') {
+                        return None;
+                    }
                     let (k, v) = l.split_once('=')?;
                     Some((k.trim().to_string(), v.trim().to_string()))
                 })

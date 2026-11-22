@@ -104,6 +104,12 @@ plays by id within +-1 frame, then compares volumes and pitch (only fields whose
 - The thunder (FUN_1088_11a3): FUN_10e8_037f(param_1, param_2) stores param_1 in rvol (5d90), param_2 in lvol.
 - START's rain loop (FUN_1090_04d7): volume 4eda * 0x100 / 0x3bf, priority 0x17d0, handle 4de0.
 - LevelFirstFrame calls FUN_10e0_03d5 (all loops stop) before the camera's 0c82 sets the listener: a teleport
+- 1ab8 is not always put back: FUN_1040_34e3 (effect 84) leaves 0x100 - Random(0x40) for whatever plays next;
+  FUN_1068_315a (sound emitters) sets 0x100 at its end every frame.
+- The listener is the camera after FUN_1088_0c82; code before it in GameFrameInGame (HeroUpdate, FUN_10a8_1311's
+  doors) hears the previous frame's. ScreenShake only sets globals, but at once: an object's hit on the hero
+  (FUN_1088_3c32) shakes from the next camera update on.
+- EnemyFactory's big alien growls (0xa5, FUN_1070_584e) when made while 0f2a = 2 (a script spawn during play).
   restarts the loops.
 
 ## Port

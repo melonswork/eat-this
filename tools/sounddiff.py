@@ -5,6 +5,7 @@
 Needs work/tracer/<DEMO>/sounds.tsv (any `mise run trace` of the demo writes it) and runs the
 port headless with ET_SOUND_TSV. Plays are matched by sound id within +-1 frame (the tracer
 labels object calls a frame early); matched plays must have the same volumes and pitch.
+Port plays in the demo's last frame (the tracer stops inside it) are not counted as extra.
 Prints the totals, the original's unmatched plays by caller (what the port doesn't play yet),
 the port's extra plays, and value mismatches.
 """
@@ -76,8 +77,20 @@ def main():
         # Only the fields the original set (its flags) are compared.
         if (o[2] is not None and p[2] != o[2]) or (o[3] is not None and p[3] != o[3]):
             bad.append((o, p))
-    extra = [p for i, p in enumerate(port) if not used[i]]
+    # The tracer stops the emulator when the demo stops, inside its last frame (the last row of
+    # watch.tsv): that frame's sounds are never logged, so the port's plays there can't be extra.
+    last = None
+    watch = Path("work/tracer") / name / "watch.tsv"
+    if watch.exists():
+        rows = watch.read_text().split("\n")
+        rows = [r for r in rows[1:] if r]
+        if rows:
+            last = int(rows[-1].split("\t")[0])
+    unseen = [p for i, p in enumerate(port) if not used[i] and last is not None and p[0] >= last]
+    extra = [p for i, p in enumerate(port) if not used[i] and not (last is not None and p[0] >= last)]
     print(f"{name}: original {len(orig)} plays, port {len(port)}; matched {matched}, missing {len(missing)}, extra {len(extra)}, value mismatches {len(bad)}")
+    if unseen:
+        print(f"  ({len(unseen)} port plays in the last frame {last}, which the tracer stops inside: not compared)")
     by_caller = collections.Counter((o[4].split(" <- ")[-1].split("+")[0], o[1]) for o in missing)
     for (caller, sid), n in by_caller.most_common(None if show_all else 25):
         print(f"  missing {n:4} x id {sid:3} from {caller}")

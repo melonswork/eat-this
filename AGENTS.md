@@ -186,16 +186,21 @@ Effects are SOUNDS/*.WAV (ids = ETMAIN.SCR's `LoadWAV=` lines in order), played 
 - Oracle: every `mise run trace` now writes `work/tracer/<DEMO>/sounds.tsv` (each SoundPlay/SoundSetInfo/loop stop
   with lvol/rvol/pitch and the caller). `python3 tools/sounddiff.py DEMO [--all]`: matched/missing/extra plays and
   value mismatches (only fields the original's flags set; same-frame plays of one id pair by value); the missing
-  list by caller is the to-do list. State (2026-11-21): every oracle demo plays what the original plays but for 3
-  of 6501: GRINDER 99/99, LEVEL1_1 1183/1183, LEVEL1_2 1800/1801, LEVEL2_1 905/905, LEVEL2_2 1310/1311, LEVEL3_1
-  486/486, LEVEL3_2 236/237, all 14 scenario demos complete; 1 extra (CARRIER1's last frame, where the recording
-  stops). Every enemy, object, effect, the vehicle, lifts, hurt cries, the message blip, START's train and rain
-  are wired; a sound call sits where the original's is, under the same conditions, with the Random() the port
-  already drew (comments like "the sound's pitch" next to a bare `rng.random` mark one not wired yet: none left
-  in the demos' paths).
-- Left: the big alien's growl 0xa5 once in LEVEL1_2 (frame 11171) and LEVEL2_2, one blip 0x57 in LEVEL3_2; small
-  volume differences (1-5) on door sounds (60bb from FUN_10a8_0975: probably the listener of the frame they start
-  in) and WEIGHT1's 50cf. Not in any demo, so unchecked: the frozen/burnt aliens, the tank, other unported objects.
+  list by caller is the to-do list; port plays in a demo's last frame (the tracer stops inside it) aren't
+  counted. State (2026-11-22): all 28 oracle demos play exactly what the original plays (7236 plays, every one
+  matched, no extra), with the same volumes and pitch but for ONE: LEVEL1_2 frame 14720, a far ricochet 0x7c
+  (26,58 vs 23,54) whose bullet hits a ceiling off screen one bullet step (10 px) further right in the port
+  (unchecked without a working tracer `--particles`). Every enemy, object, effect, the vehicle, lifts, hurt
+  cries, the message blip, START's train and rain are wired; a sound call sits where the original's is, under
+  the same conditions, with the Random() the port already drew.
+- Lessons from closing the last differences: volumes off by 1-5 mean the listener (camera) of another moment:
+  FUN_10a8_1311 (doors opening by themselves) runs BEFORE the camera update; object hits on the hero shake the
+  screen at once (`hero.shakes` from an object are applied after the actors, not lost); `--watch gCameraX,gCameraY`
+  in the tracer shows the original's camera (watch row N+1 = after frame N). 1ab8 is global state: FUN_1040_34e3
+  leaves it at 0x100 - Random(0x40), the next emitter (315a) resets it. Big aliens made during play (0f2a = 2,
+  `Level::in_play`) growl at once. Scripts' comments are whole lines starting with ' (AddMsg=IT'S UP MATE!).
+  Not in any demo, so unchecked: the frozen/burnt aliens' sounds, other unported objects. `ET_SNDPOS=1` prints
+  every positional play with the listener.
   Sound helpers for objects: `sound::play_at`/`play_at_pitch`/`play_at_vol`, loops `audible` + `priority(0x11f4)`
   + `keep(key::obj(id, handle_offset), id)`, `looping(key)` for code that tests a handle (the carrier),
   `stop_loops` = 03d5 (LevelFirstFrame). The pitch direction (higher = faster) is assumed, see re/sound.md.
