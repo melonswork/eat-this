@@ -1,0 +1,11 @@
+# Tile function 8000 (FUN_1088_55bd from FUN_1088_55f0): CITY_LIB's strip at (632..728, 1600..1631),
+# the start moved just above it. Touching it hurts (FUN_1088_3c32(100), kind 1: cry, thrown back,
+# shake) and, when it hurt, sound 0x16 and a sideways shake (FUN_1050_5c7d); the hero walks over it.
+level MAPS/CITY_LIB.MAP
+start 650 1590
+mouse 160 100
+30
+30 right
+60
+30 left
+150
