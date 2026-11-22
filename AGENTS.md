@@ -93,6 +93,16 @@ streams and EVERY CHECK, so the method is the original's own.
 | `COLLAPSE1` | GRANNY, lever (146,30) set on (0xfd8) | the collapsing building 0x2715 (FUN_1088_a481 from background proc 15, `collapse.rs`): 0x42a frames of shakes and debris (particle group 2, mover FUN_1050_3d06 = `MOVE_BG_THROW`, callback 0x232e), the rumble loop; the tilted building (extra map plane 4 rotated, FUN_10f0_545b) is not drawn | exact |
 | `FREEZE1` | GRANNY, weapon-1 and weapon-5 pick-ups at (18,30), (19,30) | weapon 5's rockets (hit mask 0x400) freeze grannies (FUN_1070_564d, `deaths.rs`) into statues (state -0xd2, FUN_1068_0f32: wobble, tint row 2) that the pistol shatters (shards land as effect 48) | exact |
 | `BURN1` | GRANNY, weapon-1 pick-up at (19,30) | the flamethrower (mask 8) burns grannies (FUN_1070_544e: ash 0x5132, burning bits 0x5130 landing as effect 59 = FUN_1040_5ec6, smoke); the same deaths are wired for aliens and big aliens | exact |
+| `SLIP1` | CITY_I04, start on the dirt pile (1020,790) | slippery slopes (slope row 30, flags 0xe: HeroUpdate row flag 2): he slides down both sides, dust every 16 frames one time in four (flag 8) | exact |
+| `HARM1` | CITY_LIB, start above the strip at (632..728, 1600) | tile function 8000 (FUN_1088_55bd from 55f0, main plane and platforms): FUN_1088_3c32(100), sound 0x16, sideways shake | exact |
+| `SPLASH1` | CITY02, grenade pick-up on the start | particle splashes (FUN_1050_2bcf) through sector 2's water line; thrown grenades/shells/charges keep their water line (FUN_1050_44ae) | exact |
+| `SWINGLEVER1/2` | STONES, start on the platform at (720,110); 2: lever (52,20) set on (0xf58) | swinging platforms obey their lever (FUN_1060_0819 +0x2c/+0x26): off it hangs still under him, on it swings him round | exact |
+| `VEHICLE1` | LEVEL3_2 to frame 3600, then down-left | the vehicle destroyed by sea-plant bursts (FUN_1088_4a81 -> 4a34: bubbles, pieces FUN_1088_46e9, blast) | exact |
+| `TANKGRAB1` | TANK2's first 740 frames, then walk up | the tank's claw holds the hero (state -3) until he dies | exact |
+| `PRESS1` | CITY_I03, start left of the press (2850,897) | the press (icon 61001, weight type 1): drop, landing bits, pumping | exact |
+| `CHUNKS1` | CITY01, weapon-3 pick-up at (1360,1231) | wall chunks (effect 43, FUN_1040_45db) from rockets | exact |
+| `SHOTLEVER1` | CITYHS, start right of the posts at (5..8,70) | shot levers (FUN_1088_14a3) on explodable posts: effect 90 (FUN_1040_3471) | exact |
+| `FX1`..`FX11` | CITY_I01, FOREST04, FOREST02, CITY02, GRANNY, CITYRAIN, CITYHS (start moved, weapon-3 pick-ups copied) | tile effects of explodable tiles: 31/32 (FX1), 49 (FX2), 68 (FX4), 79 (FX5), 80 (FX6: a steam emitter made at once by EnemyFactory), 45 (FX7), 51 (FX9), 33 (FX10: the sinking block, drifting smoke mover 0x3acd, wind OBJECTS 0x2717), 35 (FX11) | exact |
 
 ## Tools (non-obvious usage)
 

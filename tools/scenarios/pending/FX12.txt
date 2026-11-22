@@ -1,0 +1,39 @@
+# Tile effect 40 (FUN_1040_431e: a gate with hit points kept negated in plane 2; spent, both its 
+# posts of function 60302 burst (FUN_1040_426d: bits, smoke, flames on the floor) and its cell is 
+# set again 12 frames later; else smoke puffs and a clank): CITYHS's gate at (2064..2191, 
+# 1360..1391). The start moved right of it: pistol shots.
+level MAPS/CITYHS.MAP
+start 2240 1390
+cell 2 140 86 0xd06
+mouse 20 115
+20
+1 left
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+150

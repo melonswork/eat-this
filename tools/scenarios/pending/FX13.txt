@@ -1,0 +1,21 @@
+# Tile effect 40 as FX12, with rockets (a weapon-3 pick-up copied onto the start): strength-4 
+# blasts (no puffs, no clank) and effects 34/83 around.
+level MAPS/CITYHS.MAP
+start 2240 1390
+cell 2 140 86 0xd06
+mouse 20 115
+20
+1 left
+5 rmb
+25
+5 rmb
+25
+5 rmb
+25
+5 rmb
+25
+5 rmb
+25
+5 rmb
+25
+150

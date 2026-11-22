@@ -39,22 +39,47 @@ collapse 0x2715 (COLLAPSE1), FORPLANE's quad 0x2716 (draw only), the burnt/froze
 statue (BURN1, FREEZE1). Side fixes: a group-0 ScreenShake acts before the actors; gHeroDX/DY set by objects
 carry into the next HeroUpdate (`Hero::carry`); effects 9, 47, 59; particle spawn sounds (30000 + n).
 
-Ported, never exercised by an oracle (write scenarios to check them):
-1. The tank's claw grabbing the hero (hero state -3, `Hero::HELD`) and the hero standing on the tank.
-2. The spiked ball pushed by shakes (amplitude > 7).
-3. Platform shake (flags 8), dust (0x10) and end shake (4) in FUN_1078_0aef (no demo map has one).
-4. Wall chunks of tile functions 60308/60304 and the wall's bonus 0xd10 (FUN_1040_45db).
-5. Shot levers (FUN_1088_14a3): only solid lever tiles stop bullets (GRANNY's posts don't).
-6. The hero on a big alien's shield; burnt/frozen aliens and big aliens (the granny's are tested).
-7. The long fire callback 1050:19f8 (its floor test; it ages only when the game runs late).
-8. Earlier: path-platform modes 0x4000/0x680/0x8000, platform kinds 2/3, the press (icon 61001), the
-   carrier's mid-air blast.
+## The gameplay-rest pass (2026-11-23, branch claude/strange-nightingale-1eeefd)
 
-Still not ported (warnings): GRANNY's tilting building's draw (FUN_10f0_545b on extra map planes 4/5),
-particle splashes (FUN_1050_2bcf), slippery slopes (HeroUpdate row flag 2), FUN_1088_55bd (tile functions
-8000..8099), the vehicle's destruction (FUN_1088_4a34), bonus tiles uncovered by particles (FUN_1040_6b03 from
-FUN_1050_*), FUN_1088_1364 with a negative tile from particles, platform objects with a lever, path platforms
-driven by the hero / bobbing / slowing, FUN_1088_11a3 (a big alien's taunt), the big alien's sideways shake.
+Ported, each with an exact scenario (AGENTS.md table): slippery slopes (SLIP1), tile function 8000 (HARM1:
+main plane and platform planes), particle splashes + the water line of thrown grenades/shells/charges
+(SPLASH1), swinging platforms' levers (SWINGLEVER1/2), the vehicle's destruction FUN_1088_4a34 (VEHICLE1),
+the tank's claw hold (TANKGRAB1), the press 61001 (PRESS1), wall chunks effect 43 (CHUNKS1), shot levers +
+effect 90 (SHOTLEVER1), and the tile effects of explodable tiles that had no port: 31, 32, 33, 35, 36, 40,
+45, 46, 49, 51, 58, 61, 68, 71, 79, 80, 86, 90 (FX1..FX11 check 31/32/33/35/45/49/51/68/79/80).
+Ported without a scenario: effects 36, 46, 58, 61, 71, 86 (no hit placed in reasonable time), the big
+alien's sideways shake (`Effects::side_shakes`), its kill's lightning FUN_1088_11a3 (= thunder, only when
+4f0c > 10, never in the port), bonus tiles uncovered by tile changes (FUN_1088_12f9 -> 6b03, also from
+`set_cell`), the breakable wall's negative next tile (nested FUN_1088_1364).
+Fixes found on the way: negative tiles set by scripts and tile events blast at once (nested), not queued
+(the rng is threaded through `set_cell`/`run_scripts`); objects and spawns queued by the hero's particles
+are flushed after them (they were dropped); effects 35/80 make their steam emitter at once (the blast's
+object pass then hits it, FUN_1070_5280).
+
+`ET_SCAN=1 ./target/release/eatthis --headless --map X.MAP` (+ `ET_IDLE=N` to run N idle frames headless)
+lists the rare features per map: slope rows with flags, tile functions 8000 and 60304/60308, water lines,
+path/swing platforms (mode, lever), weights (type), solid levers, effect-43 tiles, flagged platforms, the
+effects of pick-ups and explodable tiles; `ET_FX=N` lists the explodable tiles with effect N.
+
+Not reachable from the episode maps (not ported, no warning can fire on them): path-platform modes 0x4000
+(bobbing), 0x680 (driven by the hero), 0x8000 (slowing) and OBJECTS types 101..199 other than 100 (no map
+uses them: `ET_SCAN` PATHPLAT/SWINGPLAT lines show modes 0x4 and 0x1 only); platform flags 8/0x10 (no map
+makes one; flags 4 comes from CITYHS's gate script, see below).
+
+Left:
+1. Tile effects 24, 25 (FUN_1040_2b0f/2d5c: CITY_I00, CITY_I02, CITY_I06: wrecks that make an object 0x1400
+   through FUN_1068_17f8) still warn when blown up.
+2. CITYHS's gate (effect 40, scenarios in `tools/scenarios/pending/FX12.txt`, `FX13.txt`): the effect itself
+   matches, but its delayed cell (0x308) runs a script that builds an accelerating platform (script commands
+   8/9/3, platform flags 4); from there something dies one frame later in the port than in the original
+   (valdiff: FUN_1068_186c gibs at 62 vs 63 in FX13, FUN_1040_4ed6 at 279 vs 280 in FX12). Suspect: the
+   platform's start/end handling (FUN_1078_0aef sets +0x19 = 0x7fff when done; FUN_1078_0765) or the
+   crush test under it.
+3. Not recorded: the carrier's mid-air blast (FUN_1070_0b70 runs when its physics returns 1/2: squeezed into
+   a wall or on a trap tile, not arrangeable), burnt/frozen aliens (their deaths need a blow-apart kill; the
+   granny's are tested by BURN1/FREEZE1, same `deaths.rs`), the spiked ball pushed by shakes (amplitude > 7),
+   the hero on a big alien's shield, the long fire callback 1050:19f8 (ages only when 4f0c > 10).
+4. GRANNY's tilting building's draw (FUN_10f0_545b, renderer).
 
 ## Sounds the new objects play (for the sound session)
 
