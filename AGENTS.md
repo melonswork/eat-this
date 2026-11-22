@@ -93,7 +93,6 @@ streams and EVERY CHECK, so the method is the original's own.
 | `COLLAPSE1` | GRANNY, lever (146,30) set on (0xfd8) | the collapsing building 0x2715 (FUN_1088_a481 from background proc 15, `collapse.rs`): 0x42a frames of shakes and debris (particle group 2, mover FUN_1050_3d06 = `MOVE_BG_THROW`, callback 0x232e), the rumble loop; the tilted building (extra map plane 4 rotated, FUN_10f0_545b) is not drawn | exact |
 | `FREEZE1` | GRANNY, weapon-1 and weapon-5 pick-ups at (18,30), (19,30) | weapon 5's rockets (hit mask 0x400) freeze grannies (FUN_1070_564d, `deaths.rs`) into statues (state -0xd2, FUN_1068_0f32: wobble, tint row 2) that the pistol shatters (shards land as effect 48) | exact |
 | `BURN1` | GRANNY, weapon-1 pick-up at (19,30) | the flamethrower (mask 8) burns grannies (FUN_1070_544e: ash 0x5132, burning bits 0x5130 landing as effect 59 = FUN_1040_5ec6, smoke); the same deaths are wired for aliens and big aliens | exact |
-| `COLLAPSE2` | GRANNY, lever (146,30) set on, start (2250,470) | the collapsing building seen tilting (drawing check of `Graphics::building`) | exact |
 | `BG_STONES` `BG_CITY_I06` `BG_FALL` `BG_CITY03` | those maps, walking right | background procs 12, 13, 14 and (switched by command 0x15) 15 | exact |
 
 ## Tools (non-obvious usage)
@@ -242,7 +241,10 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   617e/4 % count at (0xf9 - horizon, 0x68). GRANNY's building: LevelLoad loads SVEN2BAC.MAP into planes 4/5
   when OBJECTS 0x2715 exists; FUN_1088_a481 draws plane 4 upright (513c) or plane 5 turned (FUN_10f0_545b:
   16.16 steps, tile group 8 only, the cell's low byte) in the half-speed layer (`Graphics::building`,
-  scenario COLLAPSE2; the port's collapse t equals the original's 4ece at draw time).
+  tools/scenarios/draw/COLLAPSE2.txt; the port's collapse t equals the original's 4ece at draw time). That
+  scenario is NOT an oracle: a481 runs from the background proc, which the original's frame skipping can leave
+  out, and the rotated draw is slow under the emulator, so its recordings differ run to run; COLLAPSE1 (camera
+  far away) is not affected.
 - Automap (FUN_1088_2187, 1a94): typed ETSCAN (`Game::type_key`: FUN_1088_2845 keeps the last 40 letters,
   FUN_1088_28c9 finds "ET"+word: ALIEN MOVIE STUFF DRONE BOOM RESTART WIN MAPS SCAN; only SCAN ported).
   `draw::automap`; colours 1b14..1b23 = nearest of the 16 VGA colours among 1..=ForegroundColors (FUN_10f0_183d
