@@ -186,6 +186,11 @@ struct Game {
     totals: level::Tally,
     /// The message box (1170:4f10..5114), only drawn.
     messages: messages::MessageBox,
+    /// Live play: the letters typed (1170:124e, the last 40; FUN_1088_2845's buffer for the
+    /// "ET" + word cheats of 1088:4b24..4b5f).
+    typed: Vec<u8>,
+    /// 1170:1a94: the automap (FUN_1088_2187), toggled by typing ETSCAN.
+    automap: bool,
 }
 
 #[derive(Default)]
@@ -267,6 +272,8 @@ impl Game {
             weapon_key: None,
             totals,
             messages: messages::MessageBox::default(),
+            typed: Vec::new(),
+            automap: false,
         };
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
         let hero_at = (g.hero.x, g.hero.y);
@@ -358,6 +365,23 @@ impl Game {
         }
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.flush_spawns(&mut self.world, &mut cx, fx);
+    }
+
+    /// A letter key went down in live play (FUN_1088_2845: A..Z appended, the buffer kept to 40),
+    /// then the cheat test (FUN_1088_28c9: "ET" + word anywhere in it, the buffer cleared on a
+    /// hit). Only SCAN (the automap) is ported.
+    fn type_key(&mut self, c: u8) {
+        if !c.is_ascii_uppercase() {
+            return;
+        }
+        if self.typed.len() >= 40 {
+            self.typed.remove(0);
+        }
+        self.typed.push(c);
+        if self.typed.windows(6).any(|w| w == b"ETSCAN") {
+            self.typed.clear();
+            self.automap = !self.automap;
+        }
     }
 
     /// One game frame. `keys` is ignored while a demo plays.
@@ -931,6 +955,9 @@ struct Graphics {
     rain_colour: u8,
     /// 1170:1b14: the level colour nearest to black.
     black: u8,
+    /// 1170:1b14..1b23: the level colours nearest to the 16 VGA colours (table 1170:1b24), among
+    /// colours 1..=ForegroundColors (LevelLoad, after FUN_10f0_183d).
+    vga: [u8; 16],
 }
 
 impl Graphics {
@@ -1035,6 +1062,7 @@ impl Graphics {
         // The lists keep the farthest last and are drawn from the end.
         decor.sort_by_key(|d| d.depth);
         let colors6 = level.colors;
+        let fg_colours = level.foreground.clamp(1, 255) as usize;
         let storm_palette = LevelPalette {
             colors: colors6.map(|c| {
                 let lum = (c[0] as i32 * 0x12b + c[2] as i32 * 0x72 + c[1] as i32 * 0x24b) / 1000;
@@ -1067,6 +1095,20 @@ impl Graphics {
                 let c = colors6[i];
                 (((c[0] as i64).pow(2) + (c[1] as i64).pow(2)).pow(2) + (c[2] as i64).pow(4), i)
             }).unwrap_or(0) as u8,
+            vga: {
+                const VGA: [[i64; 3]; 16] = [
+                    [0, 0, 0], [0, 0, 42], [0, 42, 0], [0, 42, 42], [42, 0, 0], [42, 0, 42], [42, 21, 0], [42, 42, 42],
+                    [21, 21, 21], [21, 21, 63], [0, 63, 0], [21, 63, 63], [63, 21, 21], [63, 21, 63], [63, 63, 21], [63, 63, 63],
+                ];
+                VGA.map(|t| {
+                    let d = |c: [u8; 3]| {
+                        let (r, g, b) = (t[0] - c[0] as i64, t[1] - c[1] as i64, t[2] - c[2] as i64);
+                        (r * r + g * g).pow(2) + b.pow(4)
+                    };
+                    // FUN_10f0_183d leaves only colours 1..=ForegroundColors free for FUN_10f0_6039.
+                    (1..=fg_colours).min_by_key(|&i| (d(colors6[i]), i)).unwrap_or(0) as u8
+                })
+            },
             rain_colour: {
                 // FUN_10f0_6039(b, g, r): the smallest (dr^2 + dg^2)^2 + db^4, the first one.
                 let d = |c: [u8; 3]| -> i64 {
@@ -1532,6 +1574,11 @@ impl Graphics {
         };
         let got = level::TALLY.with(|t| t.get());
         draw::hud(&mut p, &g.hero, g.level.particles.pointer, self.hud_level, got, g.totals);
+        if g.automap || std::env::var_os("ET_AUTOMAP").is_some() {
+            let sector = g.level.sector.unwrap_or(0);
+            let rect = g.world.sectors.get(sector).map_or((0, 0, 0, 0), |s| s.cam);
+            draw::automap(&mut p, &g.world, &g.level, rect, (g.hero.x, g.hero.y), self.vga);
+        }
         draw::messages(&mut p, &g.messages);
     }
 
@@ -1848,10 +1895,15 @@ fn run_window(
                     ..
                 } => break 'main,
                 Event::KeyDown {
-                    scancode: Some(Scancode::H),
+                    scancode: Some(sc),
                     repeat: false,
                     ..
-                } => gfx.show_hud = !gfx.show_hud,
+                } if letter(sc).is_some() => {
+                    game.type_key(letter(sc).unwrap_or(0));
+                    if sc == Scancode::H {
+                        gfx.show_hud = !gfx.show_hud;
+                    }
+                }
                 Event::KeyDown {
                     scancode: Some(sc),
                     repeat: false,
@@ -1961,6 +2013,12 @@ fn screenshot(mut game: Game, gfx: &Graphics, frames: u32, path: &Path) -> std::
 }
 
 /// ReadGameInput's weapon keys: 1..9 0 (gWeaponForDigitKey slots 0..9), PgUp 10, PgDn 11.
+/// The letter a key types (A..Z), for the typed cheats.
+fn letter(sc: sdl2::keyboard::Scancode) -> Option<u8> {
+    let name = sc.name();
+    (name.len() == 1 && name.as_bytes()[0].is_ascii_uppercase()).then(|| name.as_bytes()[0])
+}
+
 fn weapon_key(sc: sdl2::keyboard::Scancode) -> Option<usize> {
     use sdl2::keyboard::Scancode::*;
     Some(match sc {

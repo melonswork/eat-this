@@ -1286,7 +1286,7 @@ fn shot(data: &Path, script: &str) -> Result<(), Box<dyn Error>> {
                 let n: u32 = n.parse().map_err(|_| format!("ET_FE_SHOT: bad step {step}"))?;
                 let keys: Vec<Scancode> = words[1..].iter().filter_map(|k| Scancode::from_name(k)).collect();
                 for k in &keys {
-                    if fe.video.is_some() || matches!(k, Scancode::Escape | Scancode::F1 | Scancode::F3 | Scancode::F4 | Scancode::F5 | Scancode::F6 | Scancode::F7) || crate::weapon_key(*k).is_some() {
+                    if fe.video.is_some() || matches!(k, Scancode::Escape | Scancode::F1 | Scancode::F3 | Scancode::F4 | Scancode::F5 | Scancode::F6 | Scancode::F7) || crate::weapon_key(*k).is_some() || (fe.in_game && crate::letter(*k).is_some()) {
                         fe.key_down(*k);
                     }
                 }
@@ -1306,6 +1306,13 @@ impl FrontEnd {
         use sdl2::keyboard::Scancode;
         if let Some(v) = self.video.as_mut() {
             v.key(sc, &mut self.video_evs);
+            return;
+        }
+        if let (true, Some(c)) = (self.in_game, crate::letter(sc)) {
+            // The typed cheats (FUN_1088_2845 / 28c9).
+            if let Some(r) = self.level.as_mut() {
+                r.game.type_key(c);
+            }
             return;
         }
         match sc {

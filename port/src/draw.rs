@@ -1040,3 +1040,69 @@ pub fn water(p: &mut Painter, level: &Level, world: &crate::world::World) {
         }
     }
 }
+
+/// FUN_1088_2187 (1170:1a94, typed ETSCAN): the sector's map, a pixel a tile, in a darkened box at
+/// (2, 0x21) under a black frame: walls (solidity & 0x223, platforms included) in VGA green
+/// through PalMixLight row 0x10; plane-2 cells 0xd00 and pick-ups (function 30000) and the hero
+/// in light green, light red and white through row 0x30 or 0x40 (blinking every 16 frames).
+use crate::{H, W};
+pub fn automap(p: &mut Painter, world: &crate::world::World, level: &Level, rect: (i32, i32, i32, i32), hero: (i32, i32), vga: [u8; 16]) {
+    let (x1, y1) = (((rect.0 as u16) >> 4) as i32, ((rect.1 as u16) >> 4) as i32);
+    let (mut x2, mut y2) = (((rect.2 as u16) >> 4) as i32, ((rect.3 as u16) >> 4) as i32);
+    if (x2 - x1) as u16 > 0x13b {
+        x2 = 0x13b - x1;
+    }
+    if (y2 - y1) as u16 > 0xa4 {
+        y2 = 0xa4 - y1;
+    }
+    let (w, h) = (x2 - x1, y2 - y1);
+    let black = vga[0];
+    let mut set = |fb: &mut [u8], x: i32, y: i32, c: u8| {
+        if (0..W).contains(&x) && (0..H).contains(&y) {
+            fb[(y * W + x) as usize] = c;
+        }
+    };
+    // FUN_10f0_0113 kind 0x11: each pixel through PalMix row 1b14; kind 0: the frame.
+    if let Some(mix) = p.tables.mix.as_deref() {
+        for y in 0x21..=(h + 0x21).min(H - 1) {
+            for x in 2..=(w + 2).min(W - 1) {
+                let at = (y * W + x) as usize;
+                p.fb[at] = mix[black as usize * 256 + p.fb[at] as usize];
+            }
+        }
+    }
+    for y in 0x21..h + 0x22 {
+        set(p.fb, 1, y, black);
+        set(p.fb, w + 3, y, black);
+    }
+    for x in 1..=w + 3 {
+        set(p.fb, x, 0x20, black);
+        set(p.fb, x, h + 0x22, black);
+    }
+    let Some(light) = p.tables.light.as_deref() else { return };
+    let row = if p.frame % 0x20 < 0x10 { 0x30 } else { 0x40 };
+    let lit = |c: u8, r: usize| light[r * 256 + c as usize];
+    let (door, pick, wall, me) = (lit(vga[10], row), lit(vga[12], row), lit(vga[2], 0x10), lit(vga[15], row));
+    let width = world.main().width;
+    let items = world.planes[2].as_ref();
+    for ty in y1..=y2 {
+        for tx in x1..=x2 {
+            let (sx, sy) = (tx - x1 + 2, ty - y1 + 0x21);
+            if crate::hero::Hero::solidity_all(world, level, ty << 4, tx << 4) & 0x223 != 0 {
+                set(p.fb, sx, sy, wall);
+            }
+            let cell = items.and_then(|pl| pl.cells.get((ty * width + tx) as usize)).copied().unwrap_or(0);
+            if cell as i16 > 0 {
+                if cell == 0xd00 {
+                    set(p.fb, sx, sy, door);
+                } else if world.cell_function(cell, 0) == 30000 {
+                    set(p.fb, sx, sy, pick);
+                }
+            }
+        }
+    }
+    let (hx, hy) = ((hero.0 >> 4) - x1, (hero.1 >> 4) - y1);
+    if (hx as u32) <= w as u32 && (hy as u32) <= h as u32 {
+        set(p.fb, hx + 2, hy + 0x21, me);
+    }
+}
