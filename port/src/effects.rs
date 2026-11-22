@@ -426,6 +426,123 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                 *c = c.wrapping_add(2);
             }
         }
+        31 | 32 => {
+            // FUN_1040_37aa / 38a9: chips thrown left / right, a crack, a shake.
+            let ps = &mut lv.particles;
+            ps.p.group = 0;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            ps.p.callback = 0x177a;
+            ps.p.colour = 0x10;
+            for i in 0..=4 {
+                ps.p.delay = rng.random(4);
+                let px = if id == 31 { x + 4 - i * 3 } else { x - 4 + i * 3 };
+                let py = y + 2 + rng.random(4);
+                ps.spawn(0x7500, py, px); // FUN_1050_4106: its own frame step
+                ps.last_mut().m.set(0x26, 3);
+                let r = rng.random(0x71);
+                let a = if id == 31 { 0x10e0 - (i * 0x80 - 0xc0 + r) } else { i * 0x80 + r + 0x1020 };
+                ps.throw(7, 0x20, a);
+            }
+            ps.p = crate::particles::Params::default();
+            let p = rng.random(0x15);
+            sound::pitch(p + 0xf6);
+            sound::play_at(0x7b, y + 2, x + 0x10);
+            fx.shakes.push((0xc, 5));
+        }
+        36 => {
+            // FUN_1040_3f9c: the back plane's cell goes, chips burst (FUN_1040_3eb4).
+            if let Some(Some(p)) = world.planes.get_mut(0) {
+                if x >= 0 && y >= 0 && (x >> 4) < p.width && (y >> 4) < p.height {
+                    p.set(x >> 4, y >> 4, 0);
+                }
+            }
+            lv.chip_burst(y, x, rng, fx);
+        }
+        49 => {
+            // FUN_1040_5608: the block goes (FUN_1040_3aed), smoke, six bits of rubble.
+            let (x1, y1, x2, y2) = clear_block(world, y, x);
+            let cx = ((x1 + x2 + 0xf) as u16 >> 1) as i32;
+            let cy = ((y1 + y2 + 0xf) as u16 >> 1) as i32;
+            let ps = &mut lv.particles;
+            crate::alien::smoke_sprite(ps, y2 + 0xf, cx);
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            for i in 0..=5 {
+                let px = (cx - 10) + i * 4;
+                let py = cy - rng.random(0x14);
+                let s = rng.random(2) + 0x7534;
+                ps.spawn(s, py, px);
+                let a = i * -0x40 + 0x600 + rng.random(0x81);
+                let v = rng.random(0x20);
+                ps.throw(9, v + 0x40, a);
+            }
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            fx.shakes.push((0x18, 0xe));
+            sound::play_at(0x4a, cy, cx);
+        }
+        58 => {
+            // FUN_1040_5e4e: a crash, smoke, a spray of bits (FUN_1040_6941); an explodable tile
+            // above blows up 0x19 frames later.
+            let p = rng.random(0x14);
+            sound::pitch(0x100 - p);
+            sound::play_at(0x62, y, x);
+            lv.particles.p.colour = 0x10;
+            crate::particles::smoke(&mut lv.particles, rng, y - 0x10, x);
+            lv.particles.p.colour = 0;
+            spray(&mut lv.particles, rng, y - 9, x);
+            if world.solidity_at(y - 0x10, x) & 0x80 != 0 {
+                let w = world.main().width;
+                lv.queue_tile_event(0x19, 0xffff, (((y - 0x10) >> 4) * w + (x >> 4)) as u16);
+            }
+        }
+        61 => {
+            // FUN_1040_600e: the cell blows up 0x14 frames later (tile -1).
+            let w = world.main().width;
+            lv.queue_tile_event(0x14, 0xffff, ((y >> 4) * w + (x >> 4)) as u16);
+        }
+        71 => {
+            // FUN_1040_6861 (from 4bdf): the block goes, bits fly up (FUN_1040_677d), a splash
+            // rising, smoke, a crash and a big shake.
+            let (x1, _, x2, y2) = clear_block(world, y & 0xfff0, x & 0xfff0);
+            let cx = ((x1 + x2) as u16 >> 1) as i32 + 7;
+            let ps = &mut lv.particles;
+            crate::weight::press_bits(ps, rng, y2 + 0xf, cx);
+            ps.p.colour = 0x10;
+            ps.spawn_seq(0x6d00, 3, 0x13, y, cx, 1);
+            ps.line(8, 0x5a0);
+            ps.spawn_seq(0x6c00, 4, 0x19, y2 + 7, cx, 1); // FUN_1040_66fa
+            ps.p.colour = 0;
+            crate::alien::smoke_sprite(ps, y2 + 0xf, cx);
+            sound::play_at(0x26, y, cx);
+            sound::play_at(0x1c, y, cx);
+            fx.shakes.push((0x2a, 0x10));
+        }
+        86 => {
+            // FUN_1040_3557: the 2x2 block of function 60309 it belongs to steps on by 2
+            // (FUN_1040_0002, FUN_10f0_5b14), dust, a crash.
+            let f = 0xeb95u16;
+            let (mut x1, mut y1) = (x, y);
+            while world.tile_function_at(y, x1 - 0x10) == f {
+                x1 -= 0x10;
+            }
+            while world.tile_function_at(y1 - 0x10, x) == f {
+                y1 -= 0x10;
+            }
+            let w = world.main().width;
+            let mut c = ((y1 >> 4) * w + (x1 >> 4)) as usize;
+            for _ in 0..2 {
+                for k in [1, 0] {
+                    if let Some(v) = world.main_mut().cells.get_mut(c + k) {
+                        *v = v.wrapping_add(2);
+                    }
+                }
+                c += w as usize;
+            }
+            crate::alien::dust(&mut lv.particles, y1 + 0xe, x1 + 8);
+            sound::play_at(0x4a, y1 + 0xe, x1 + 8);
+        }
         90 => {
             // FUN_1040_3471: a post bursts: rubble (FUN_1040_31d4), a crack, a shake.
             chips(lv, rng, y, x);
@@ -444,6 +561,31 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
         id if (30000..0x8000).contains(&id) => crate::sound::play_at(id as usize - 30000, y, x),
         id => eprintln!("warning: effect {id} not ported"),
     }
+}
+
+/// FUN_1040_6941(y, x): forty pairs of bits sprayed both ways (callback 0x26c8).
+fn spray(ps: &mut crate::particles::Particles, rng: &mut PascalRandom, y: i32, x: i32) {
+    ps.p.hits = 0x8000;
+    ps.p.group = 0;
+    ps.p.callback = 0x26c8;
+    for i in 1..=0x28 {
+        let base = (i * 5) % 8;
+        let spread = (i * 0x1e0) / 0x28;
+        for side in 0..2 {
+            ps.p.delay = base + rng.random(8);
+            let px = x - 6 + rng.random(0xc);
+            let py = y - 6 + rng.random(0xc);
+            ps.spawn_seq(if side == 0 { 0x5307 } else { 0x5306 }, 1, 0x46, py, px, 0);
+            let r = rng.random(0x80);
+            let a = if side == 0 { (r + 0x780) - spread } else { ((0x1a40 - r) + spread) % 0x1680 };
+            let v = rng.random(0x30);
+            ps.throw(0x1c, v, a);
+        }
+    }
+    ps.p.delay = 0;
+    ps.p.callback = 0;
+    ps.p.group = 1;
+    ps.p.hits = 0;
 }
 
 /// FUN_1040_31d4(y, x): five chips of rubble thrown up, each after a short delay.

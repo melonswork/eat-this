@@ -2781,9 +2781,8 @@ impl Level {
         crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
     }
 
-    /// Effect 73, FUN_1040_3fc4(y, x): a tile bursts (FUN_1040_3eb4: five chips thrown up,
-    /// some sound), and two times in three a spark follows later.
-    pub fn tile_burst(&mut self, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+    /// FUN_1040_3eb4(y, x): five chips thrown up, a sound (0x51) and a shake.
+    pub fn chip_burst(&mut self, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
         let ps = &mut self.particles;
         ps.p.group = 0;
         ps.p.hits = 0x8000;
@@ -2808,6 +2807,13 @@ impl Level {
         let p = rng.random(0x1f);
         sound::play_at_pitch(0x51, p + 0xf1, y + 1, x + 0x10);
         fx.shakes.push((0xc, 5));
+    }
+
+    /// Effect 73, FUN_1040_3fc4(y, x): a tile bursts (FUN_1040_3eb4: five chips thrown up,
+    /// some sound), and two times in three a spark follows later.
+    pub fn tile_burst(&mut self, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+        self.chip_burst(y, x, rng, fx);
+        let ps = &mut self.particles;
         if rng.random(3) != 0 {
             ps.p.delay = rng.random(0x28) + 0x28;
             // FUN_1040_3440: a spark (group 0, a sound when it appears).

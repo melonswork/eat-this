@@ -1788,6 +1788,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let f0 = world.cell_function(c, 0);
                         let pick = pl == 2 && f0 == 30000;
                         let blast = pl == world::MAIN_PLANE && world.cell_function(c, 3) != 0 && world.cell_function(c, 1) & 0x80 != 0;
+                        if blast && std::env::var("ET_FX").ok().and_then(|v| v.parse::<i16>().ok()) == Some(e) {
+                            let i = p.cells.iter().position(|&d| std::ptr::eq(&d, &c)).unwrap_or(0);
+                            let _ = i;
+                        }
                         if e > 0 && e < 200 && (pick || blast) {
                             seen.insert((if pick { "pick" } else { "blast" }, e));
                         }
@@ -1795,6 +1799,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             println!("EFFECTS {seen:?}");
+            if let Some(want) = std::env::var("ET_FX").ok().and_then(|v| v.parse::<i16>().ok()) {
+                let p = world.main();
+                for (i, &c) in p.cells.iter().enumerate() {
+                    if world.cell_function(c, 4) as i16 == want && world.cell_function(c, 1) & 0x80 != 0 {
+                        let (tx, ty) = (i as i32 % p.width, i as i32 / p.width);
+                        println!("FX {want} tile {c:#x} f3 {:#x} at ({tx},{ty}) px ({},{})", world.cell_function(c, 3), tx * 16 + 8, ty * 16 + 8);
+                    }
+                }
+            }
         }
         if let Ok(v) = std::env::var("ET_CELL") {
             let c: i32 = v.parse().unwrap_or(0);

@@ -1,0 +1,20 @@
+# Tile effects 31 and 32 (FUN_1040_37aa / 38a9: chips thrown left / right, sound 0x7b, shake):
+# CITY_I01's street lamp at (944..991, 864..879), its arms tiles 0x186 / 0x188 (explodable, mask 7).
+# The start moved under it: pistol shots up at both arms.
+level MAPS/CITY_I01.MAP
+start 1020 920
+mouse 75 95
+20
+3 lmb
+15
+3 lmb
+15
+3 lmb
+15
+mouse 100 98
+3 lmb
+15
+3 lmb
+15
+3 lmb
+100

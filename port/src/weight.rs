@@ -90,7 +90,7 @@ impl Level {
                     }
                 } else if t == 1 {
                     crate::sound::play_at(0x1c, y, x);
-                    self.press_bits(env, y, x);
+                    press_bits(&mut self.particles, env.rng, y, x);
                     crate::alien::dust(&mut self.particles, y - 0xe, x);
                     self.o(id).set(0x18, broken);
                 }
@@ -196,32 +196,6 @@ impl Level {
         ps.p.group = 1;
     }
 
-    /// FUN_1040_677d: a press lands: thirteen bits fly up.
-    fn press_bits(&mut self, env: &mut Env, y: i32, x: i32) {
-        let ps = &mut self.particles;
-        ps.p.hits = 0x8000;
-        ps.p.on_death = 0x10;
-        ps.p.group = 0;
-        ps.p.callback = 0x17f4;
-        for i in 0..=0xc {
-            ps.p.delay = env.rng.random(6);
-            ps.p.draw = env.rng.random(2);
-            let px = x - 0xc + i * 2;
-            let py = (y - 8) - env.rng.random(0x1e);
-            let step = env.rng.random(3) + 2;
-            ps.spawn(0x7552, py, px); // FUN_1050_4106: its own frame step
-            ps.last_mut().m.set(0x26, step);
-            let a = (0x7a0 - env.rng.random(0x41)) - i * 0x50;
-            let s = env.rng.random(0x10) + 0x40;
-            ps.throw(9, s, a);
-        }
-        ps.p.delay = 0;
-        ps.p.draw = 0;
-        ps.p.callback = 0;
-        ps.p.hits = 0;
-        ps.p.on_death = 0;
-        ps.p.group = 1;
-    }
 }
 
 /// RangesOverlap (either pair in any order).
@@ -313,3 +287,30 @@ pub fn draw_slab(p: &mut crate::render::Painter, o: &crate::objects::Obj) {
     let (x, y) = (o.w(0xe), o.w(0x10));
     p.at((y - o.w(0x14)) / 0x14 + 0x3300, x, y);
 }
+
+/// FUN_1040_677d: a press lands: thirteen bits fly up.
+pub(crate) fn press_bits(ps: &mut crate::particles::Particles, rng: &mut crate::rng::PascalRandom, y: i32, x: i32) {
+    ps.p.hits = 0x8000;
+    ps.p.on_death = 0x10;
+    ps.p.group = 0;
+    ps.p.callback = 0x17f4;
+    for i in 0..=0xc {
+        ps.p.delay = rng.random(6);
+        ps.p.draw = rng.random(2);
+        let px = x - 0xc + i * 2;
+        let py = (y - 8) - rng.random(0x1e);
+        let step = rng.random(3) + 2;
+        ps.spawn(0x7552, py, px); // FUN_1050_4106: its own frame step
+        ps.last_mut().m.set(0x26, step);
+        let a = (0x7a0 - rng.random(0x41)) - i * 0x50;
+        let s = rng.random(0x10) + 0x40;
+        ps.throw(9, s, a);
+    }
+    ps.p.delay = 0;
+    ps.p.draw = 0;
+    ps.p.callback = 0;
+    ps.p.hits = 0;
+    ps.p.on_death = 0;
+    ps.p.group = 1;
+}
+

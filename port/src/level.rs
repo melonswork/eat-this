@@ -295,6 +295,14 @@ impl Level {
         }
     }
 
+    /// FUN_10a0_009b(delay, tile, cell) on the main plane: the cell changes later (a negative
+    /// tile blows it up).
+    pub fn queue_tile_event(&mut self, delay: i32, tile: u16, cell: u16) {
+        let due = self.now.wrapping_add(delay as u32);
+        let at = self.tile_events.iter().position(|e| due < e.0).unwrap_or(self.tile_events.len());
+        self.tile_events.insert(at, (due, cell, tile, MAIN_PLANE));
+    }
+
     /// FUN_10a0_023f's tile events that are due (FUN_10a0_00eb).
     pub fn release_tile_events(&mut self, world: &mut World, fx: &mut Effects, hero_x: i32) {
         while self.tile_events.first().is_some_and(|e| e.0 <= self.now) {
