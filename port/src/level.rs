@@ -257,32 +257,33 @@ impl Level {
     }
 
     /// FUN_1088_1280: the hero is now in `sector`.
-    pub fn enter_sector(&mut self, world: &mut World, sector: usize, fx: &mut Effects) {
+    pub fn enter_sector(&mut self, world: &mut World, sector: usize, rng: &mut crate::rng::PascalRandom, fx: &mut Effects) {
         if self.sector == Some(sector) {
             return;
         }
         if let Some(old) = self.sector {
             let icon = world.sectors[old].icon;
             if icon != -1 {
-                self.set_cell(world, SECTOR_OFF_TILE, icon as u16, fx);
+                self.set_cell(world, SECTOR_OFF_TILE, icon as u16, rng, fx);
             }
         }
         self.sector = Some(sector);
         let icon = world.sectors[sector].icon;
         if icon != -1 {
-            self.set_cell(world, SECTOR_ON_TILE, icon as u16, fx);
+            self.set_cell(world, SECTOR_ON_TILE, icon as u16, rng, fx);
         }
     }
 
     /// FUN_1088_1364 + FUN_1088_12f9: put a tile in a main-plane cell; levers run their scripts.
-    pub fn set_cell(&mut self, world: &mut World, tile: u16, cell: u16, fx: &mut Effects) {
+    pub fn set_cell(&mut self, world: &mut World, tile: u16, cell: u16, rng: &mut crate::rng::PascalRandom, fx: &mut Effects) {
         if (tile as i16) < 0 {
             // A negative tile is a blast of strength -tile * 0x10 on a breakable cell.
             let cur = world.main().cells[cell as usize];
+            // (FUN_1050_5a33 runs right here, nested.)
             if world.cell_function(cur, 1) & 0x80 != 0 {
                 let w = world.main().width;
                 let (row, col) = (cell as i32 / w, cell as i32 % w);
-                fx.explodes.push((-(tile as i16 as i32) * 0x10, row << 4, col << 4));
+                crate::effects::explode_tile(self, world, -(tile as i16 as i32) * 0x10, 0xffff, row << 4, col << 4, rng, fx);
             }
             return;
         }
@@ -292,7 +293,7 @@ impl Level {
         }
         let f = world.cell_function(tile, 0);
         if (tile as i16) > 0 && (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f) {
-            self.run_scripts(world, cell, fx);
+            self.run_scripts(world, cell, rng, fx);
         } else if f == 30000 {
             // FUN_1088_12f9: the plane-2 cell is cleared, the tile flies out as a bonus.
             world.planes[2].as_mut().expect("plane 2").cells[cell as usize] = 0;
@@ -310,7 +311,7 @@ impl Level {
     }
 
     /// FUN_10a0_023f's tile events that are due (FUN_10a0_00eb).
-    pub fn release_tile_events(&mut self, world: &mut World, fx: &mut Effects, hero_x: i32) {
+    pub fn release_tile_events(&mut self, world: &mut World, rng: &mut crate::rng::PascalRandom, fx: &mut Effects, hero_x: i32) {
         while self.tile_events.first().is_some_and(|e| e.0 <= self.now) {
             let (_, cell, tile, plane) = self.tile_events.remove(0);
             let width = world.main().width;
@@ -318,7 +319,7 @@ impl Level {
             if world.tile_function_at(cy, cx) == crate::doors::DOOR {
                 self.door_set(world, false, (tile == 1) as i32, cy, cx, false, hero_x);
             } else if plane == MAIN_PLANE {
-                self.set_cell(world, tile, cell, fx);
+                self.set_cell(world, tile, cell, rng, fx);
             } else if let Some(p) = world.planes[plane].as_mut() {
                 p.cells[cell as usize] = tile;
             }
@@ -327,7 +328,7 @@ impl Level {
 
     /// FUN_1088_a9af: run the scripts that list `cell` among their conditions and whose
     /// conditions all hold (0x44c) or don't all hold (0x44d).
-    pub fn run_scripts(&mut self, world: &mut World, cell: u16, fx: &mut Effects) {
+    pub fn run_scripts(&mut self, world: &mut World, cell: u16, rng: &mut crate::rng::PascalRandom, fx: &mut Effects) {
         let mut i = 0;
         while i < self.scripts.len() {
             let w = self.scripts[i].clone();
@@ -342,7 +343,7 @@ impl Level {
                     eprintln!("SCRIPT {} cell {cell} type {:#x} all {all} run {run} words {:x?}", self.now, w[1], w);
                 }
                 if run {
-                    let aborted = self.run_commands(world, &w, 2 + 2 * n, fx);
+                    let aborted = self.run_commands(world, &w, 2 + 2 * n, rng, fx);
                     self.platform_sound = 0;
                     self.platform_volume = 0x100;
                     if w[2] >> 8 == 1 && !aborted {
@@ -362,6 +363,7 @@ impl Level {
         world: &mut World,
         w: &[u16],
         mut lc: usize,
+        rng: &mut crate::rng::PascalRandom,
         fx: &mut Effects,
     ) -> bool {
         let mut last_platform = usize::MAX;
@@ -382,7 +384,7 @@ impl Level {
                     } else if (v as i16) > 0 && world.cell_function(v, 0) >= 61000 {
                         fx.spawns.push((v, arg(1)));
                     } else if plane == MAIN_PLANE {
-                        self.set_cell(world, arg(2), arg(1), fx);
+                        self.set_cell(world, arg(2), arg(1), rng, fx);
                     } else if let Some(p) = world.planes[plane].as_mut() {
                         p.cells[arg(1) as usize] = arg(2);
                     }
@@ -526,7 +528,7 @@ impl Level {
                                 continue;
                             }
                             if plane == MAIN_PLANE {
-                                self.set_cell(world, tile, dest as u16, fx);
+                                self.set_cell(world, tile, dest as u16, rng, fx);
                             } else if let Some(p) = world.planes[plane].as_mut() {
                                 p.cells[dest as usize] = tile;
                             }
@@ -580,21 +582,21 @@ impl Level {
             } else {
                 t += 1;
             }
-            self.set_cell(world, t, idx as u16, fx);
+            self.set_cell(world, t, idx as u16, rng, fx);
         } else {
             let (cy, cx) = ((idx / width) * 16 + 7, (idx % width) * 16 + 7);
             let id = world.cell_function(tile, 4);
             if id as i16 > 0 {
                 crate::effects::effect(self, world, id, cy, cx, rng, fx);
             }
-            self.set_cell(world, tile - 1, idx as u16, fx);
+            self.set_cell(world, tile - 1, idx as u16, rng, fx);
         }
     }
 
     /// FUN_1088_72f9(dir, y, x): the hero pushes against the wall at (x, y): a pushable block
     /// (OBJECTS record 0x4b0 in the sector's list +0x66) with room behind it slides one tile as a
     /// platform; its cell (+0x16) is touched either way.
-    pub fn push_block(&mut self, world: &mut World, hero_y: i32, dir: i32, y: i32, x: i32, fx: &mut Effects) {
+    pub fn push_block(&mut self, world: &mut World, hero_y: i32, dir: i32, y: i32, x: i32, rng: &mut crate::rng::PascalRandom, fx: &mut Effects) {
         let wall = |yy| world.solidity_at(yy, x) & 2 != 0;
         if !((wall(hero_y - 0x10) || wall(hero_y - 0x20))
             && world.tile_function_at(hero_y - 0x10, x) != func::NOT_CUT
@@ -644,7 +646,7 @@ impl Level {
                 if tile as i16 > 0 {
                     let f0 = world.cell_function(tile, 0);
                     if (func::LEVER_FIRST..=func::LEVER_LAST).contains(&f0) {
-                        self.run_scripts(world, cell as u16, fx);
+                        self.run_scripts(world, cell as u16, rng, fx);
                     } else if f0 == 30000 {
                         // FUN_1088_12f9: the plane-2 cell is cleared, the tile flies out as a bonus.
                         world.planes[2].as_mut().expect("plane 2").cells[cell as usize] = 0;
@@ -1017,7 +1019,7 @@ impl Level {
         let new = (tile as i32 + step) as u16;
         for r in top..=bottom {
             for c in left..=right {
-                self.set_cell(world, new, (r * w + c) as u16, fx);
+                self.set_cell(world, new, (r * w + c) as u16, rng, fx);
             }
         }
     }

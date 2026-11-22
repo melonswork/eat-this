@@ -229,7 +229,7 @@ impl Game {
         // LevelFirstFrame (1088:b4db): enter the start sector (its scripts run), face its far side.
         let mut fx = Effects::default();
         let sector = world.sector_at(hero.y, hero.x);
-        level.enter_sector(&mut world, sector, &mut fx);
+        level.enter_sector(&mut world, sector, &mut rng, &mut fx);
         if let (Some(g), Some(i)) = (level.grinder.as_mut(), fx.grinder_platform) {
             g.platform = Some(i);
         }
@@ -382,7 +382,7 @@ impl Game {
             self.camera.shake(a, b);
         }
         for cell in std::mem::take(&mut self.level.pasted) {
-            self.level.run_scripts(&mut self.world, cell, &mut fx);
+            self.level.run_scripts(&mut self.world, cell, &mut self.rng, &mut fx);
         }
         self.flush_spawns(&mut fx);
         // FUN_10a0_023f: delayed particles due this frame.
@@ -390,7 +390,7 @@ impl Game {
         self.level.particles.release_due();
         {
             let mut fx = Effects::default();
-            self.level.release_tile_events(&mut self.world, &mut fx, self.hero.x);
+            self.level.release_tile_events(&mut self.world, &mut self.rng, &mut fx, self.hero.x);
             self.flush_spawns(&mut fx);
             self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
             for &(a, b) in &fx.side_shakes {
@@ -562,19 +562,19 @@ impl Game {
             self.pick_effect(effect, f3, y, x);
         }
         for cell in std::mem::take(&mut self.hero.script_cells) {
-            self.level.run_scripts(&mut self.world, cell, &mut fx);
+            self.level.run_scripts(&mut self.world, cell, &mut self.rng, &mut fx);
         }
         for cell in std::mem::take(&mut self.hero.cell_steps) {
             let v = self.world.main().cells[cell as usize];
             let off = self.world.cell_function(v, 2);
-            self.level.set_cell(&mut self.world, v.wrapping_add(off), cell, &mut fx);
+            self.level.set_cell(&mut self.world, v.wrapping_add(off), cell, &mut self.rng, &mut fx);
         }
         for (idx, y, x, pull) in std::mem::take(&mut self.hero.levers) {
             self.level.work_lever(&mut self.world, idx, y, x, pull, &mut self.rng, &mut fx);
         }
         if let Some((dir, y, x)) = self.hero.push {
             let hy = self.hero.y;
-            self.level.push_block(&mut self.world, hy, dir, y, x, &mut fx);
+            self.level.push_block(&mut self.world, hy, dir, y, x, &mut self.rng, &mut fx);
         }
         self.flush_spawns(&mut fx);
         // After HeroUpdate: its camera nudges and shakes, then FUN_1088_0a3b(1) .. FUN_1088_0c82.
@@ -833,12 +833,12 @@ impl Game {
         let mut fx = Effects::default();
         // FUN_1068_08ff: the old sector's triggers see him go.
         self.level
-            .run_triggers(old, &mut self.world, &mut fx, self.hero.x, self.hero.y);
+            .run_triggers(old, &mut self.world, &mut self.rng, &mut fx, self.hero.x, self.hero.y);
         // LevelFirstFrame: enter the sector (FUN_1088_1280), face its far side, the camera,
         // then a frame without the hero.
         let mut noise = self.camera.shake_started() as i32;
         let sector = self.world.sector_at(self.hero.y, self.hero.x);
-        self.level.enter_sector(&mut self.world, sector, &mut fx);
+        self.level.enter_sector(&mut self.world, sector, &mut self.rng, &mut fx);
         let cam = self.world.sectors[sector].cam;
         self.hero.facing = if self.hero.x - cam.0 < cam.2 - self.hero.x { 1 } else { -1 };
         let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));

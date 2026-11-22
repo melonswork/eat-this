@@ -1272,7 +1272,7 @@ impl Level {
                         t = t.wrapping_sub(1);
                     }
                 }
-                self.set_cell(f.world, t, idx, f.fx);
+                self.set_cell(f.world, t, idx, f.rng, f.fx);
             } else if func == crate::doors::DOOR {
                 self.door_hit(f.world, strength, y, x, 0, f.fx);
             }
@@ -1339,7 +1339,7 @@ impl Level {
                     let width = f.world.main().width;
                     let idx = (y / 16) * width + x / 16;
                     f.world.main_mut().cells[idx as usize] = tile;
-                    self.cell_changed(f.world, idx - width, f.fx);
+                    self.cell_changed(f.world, idx - width, f.rng, f.fx);
                 }
             }
             0 => {}
@@ -1817,14 +1817,14 @@ impl Level {
 
     /// FUN_1088_12f9 for the cell's current tile: levers run their scripts; bonus tiles
     /// (function 30000) turn into bonus objects.
-    pub(crate) fn cell_changed(&mut self, world: &mut World, idx: i32, fx: &mut Effects) {
+    pub(crate) fn cell_changed(&mut self, world: &mut World, idx: i32, rng: &mut PascalRandom, fx: &mut Effects) {
         let tile = world.main().cells[idx as usize];
         if tile as i16 <= 0 {
             return;
         }
         let f0 = world.cell_function(tile, 0);
         if (crate::world::func::LEVER_FIRST..=crate::world::func::LEVER_LAST).contains(&f0) {
-            self.run_scripts(world, idx as u16, fx);
+            self.run_scripts(world, idx as u16, rng, fx);
         } else if f0 == 30000 {
             // FUN_1088_12f9: the PLANE-2 cell there is cleared and the tile flies out as a bonus
             // (FUN_1040_6b03).
@@ -1890,7 +1890,7 @@ impl Level {
                 }
             } else {
                 world.main_mut().cells[below] = next;
-                self.cell_changed(world, below as i32, fx);
+                self.cell_changed(world, below as i32, rng, fx);
             }
             sound::play_at(0x4b, y, x);
         } else {
@@ -3182,7 +3182,7 @@ fn puff_at(ps: &mut Particles, y: i32, x: i32) {
 }
 
 /// FUN_1040_6405.
-fn smoke4_at(ps: &mut Particles, y: i32, x: i32) {
+pub(crate) fn smoke4_at(ps: &mut Particles, y: i32, x: i32) {
     puff_at(ps, y, x - 4);
     ps.p.delay += 7;
     puff_at(ps, y - 5, x + 1);

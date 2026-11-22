@@ -101,7 +101,7 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                 let cell = (((y1 - 0x10) >> 4) * width + (x1 >> 4) + i) as usize;
                 if let Some(&v) = world.main().cells.get(cell) {
                     let off = world.cell_function(v, 2);
-                    lv.set_cell(world, v.wrapping_add(off), cell as u16, fx);
+                    lv.set_cell(world, v.wrapping_add(off), cell as u16, rng, fx);
                 }
             }
             let cx = ((x1 + x2 + 0xf) as u16 >> 1) as i32;
@@ -256,7 +256,7 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                     let c = (y >> 4) * width + ((x + dx) >> 4);
                     let v = world.main().cells[c as usize];
                     let off = world.cell_function(v, 2);
-                    lv.set_cell(world, v.wrapping_add(off), c as u16, fx);
+                    lv.set_cell(world, v.wrapping_add(off), c as u16, rng, fx);
                 }
             }
             let p = rng.random(0x1f); // the sound's pitch
@@ -269,18 +269,18 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             let width = world.main().width;
             let mut c = (y >> 4) * width + (x >> 4);
             let f = world.cell_function(world.main().cells[(c - 1) as usize], 0);
-            let step = |lv: &mut Level, world: &mut World, c: i32, fx: &mut Effects| {
+            let step = |lv: &mut Level, world: &mut World, c: i32, rng: &mut PascalRandom, fx: &mut Effects| {
                 let v = world.main().cells[c as usize];
                 let off = world.cell_function(v, 2);
-                lv.set_cell(world, v.wrapping_add(off), c as u16, fx);
+                lv.set_cell(world, v.wrapping_add(off), c as u16, rng, fx);
             };
             if f == 60300 || f == 60601 {
-                step(lv, world, c - 1, fx);
+                step(lv, world, c - 1, rng, fx);
                 c -= 2;
-                step(lv, world, c, fx);
+                step(lv, world, c, rng, fx);
             } else {
-                step(lv, world, c + 1, fx);
-                step(lv, world, c + 2, fx);
+                step(lv, world, c + 1, rng, fx);
+                step(lv, world, c + 2, rng, fx);
             }
             let px = (c % width) * 0x10;
             let ps = &mut lv.particles;
@@ -482,7 +482,7 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             ps.p.group = 1;
             let below = ((y2 >> 4) + 1) * w + (x1 >> 4);
             if below >= 0 && (below as usize) < world.main().cells.len() {
-                lv.cell_changed(world, below, fx);
+                lv.cell_changed(world, below, rng, fx);
             }
         }
         35 => {
@@ -581,6 +581,76 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                 ps.p = crate::particles::Params::default();
             }
         }
+        40 => {
+            // FUN_1040_431e: a gate with hit points kept negated in plane 2 (FUN_10f0_59a0): spent,
+            // both its posts (function 60302) burst (FUN_1040_426d) and its cell is set again 12
+            // frames later; else puffs of smoke and a clank.
+            let w = world.main().width;
+            let mut y = y;
+            if world.cell_at(2, y, x).is_some_and(|v| (v as i16) >= 0) {
+                y += 0x10;
+            }
+            let left = match world.planes[2].as_mut() {
+                Some(p2) if x >= 0 && y >= 0 && (x >> 4) < p2.width && (y >> 4) < p2.height => {
+                    let idx = ((y >> 4) * p2.width + (x >> 4)) as usize;
+                    let v = p2.cells[idx] as i16 as i32;
+                    let left = if v < 0 { -v } else { 0 } - lv.blast_strength;
+                    p2.cells[idx] = if left < 1 { 0 } else { (-left) as u16 };
+                    left
+                }
+                _ => -lv.blast_strength,
+            };
+            if left < 1 {
+                fx.shakes.push((0x20, 0x12));
+                sound::play_at(0x4a, y, x);
+                effect(lv, world, 9, y - 5, x, rng, fx);
+                {
+                    let m = &mut lv.particles.last_mut().m; // FUN_1050_4a29(0x100, 0x180)
+                    m.set(0x1c, 0x180);
+                    m.set(0x1e, 0x100);
+                    m.set(0x42, 0x2148);
+                }
+                let (mut a, mut b) = (x, x);
+                if world.tile_function_at(y, x + 0x10) == 0x1771 {
+                    loop {
+                        a += 0x10;
+                        if world.tile_function_at(y, a) as i16 == -0x1472 {
+                            break;
+                        }
+                    }
+                } else {
+                    b = x - 0x20;
+                    while world.tile_function_at(y, b) as i16 != -0x1472 {
+                        b -= 0x10;
+                    }
+                }
+                for px in [a, b] {
+                    gate_post(lv, world, rng, y, px);
+                }
+                let cell = (y >> 4) * w + (b >> 4) + 1;
+                let tile = world.main().cells[cell as usize];
+                if std::env::var_os("ET_GATE").is_some() {
+                    eprintln!("GATE {} {} y {y} x {x} a {a} b {b} cell {cell} tile {tile:#x}", lv.now, lv.particles.now);
+                }
+                lv.queue_tile_event(0xc, tile, cell as u16);
+            } else {
+                let ps = &mut lv.particles;
+                if lv.blast_strength != 4 {
+                    for i in 0..=2 {
+                        ps.p.delay = i << 3;
+                        let px = (x - 5) + rng.random(0xb);
+                        let py = y - rng.random(0x10);
+                        ps.spawn_seq(0x6800, 2, 0xf, py, px, 1);
+                        ps.line(8, 0x5a0);
+                    }
+                    ps.p.delay = 0;
+                }
+                fx.shakes.push((0x12, 6));
+                if lv.blast_strength != 4 {
+                    sound::play_at(1, y, x);
+                }
+            }
+        }
         45 => {
             // FUN_1040_48b8: the function-60300 cells above and below step on by 1
             // (FUN_1088_13dc); with a strength-4 blast or one time in four the cell steps on by
@@ -591,14 +661,14 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             while world.tile_function_at(ly, x) as i16 == -0x1474 {
                 let c = cell_of(ly);
                 let v = world.main().cells[c as usize];
-                lv.set_cell(world, v.wrapping_add(1), c, fx);
+                lv.set_cell(world, v.wrapping_add(1), c, rng, fx);
                 ly -= 0x10;
             }
             let mut ly = y + 0x10;
             while world.tile_function_at(ly, x) as i16 == -0x1474 {
                 let c = cell_of(ly);
                 let v = world.main().cells[c as usize];
-                lv.set_cell(world, v.wrapping_add(1), c, fx);
+                lv.set_cell(world, v.wrapping_add(1), c, rng, fx);
                 ly += 0x10;
             }
             if lv.blast_strength == 4 || rng.random(4) == 0 {
@@ -867,7 +937,7 @@ fn step_cell(lv: &mut Level, world: &mut World, cell: u16, rng: &mut PascalRando
             explode_tile(lv, world, strength, 0xffff, (cell as i32 / w) << 4, (cell as i32 % w) << 4, rng, fx);
         }
     } else {
-        lv.set_cell(world, next, cell, fx);
+        lv.set_cell(world, next, cell, rng, fx);
     }
 }
 
@@ -889,6 +959,27 @@ fn chip_pairs(ps: &mut crate::particles::Particles, rng: &mut PascalRandom, s: i
     ps.p.on_death = 0;
     ps.p.hits = 0;
     ps.p.group = 1;
+}
+
+/// FUN_1040_426d(y, x) (nested in 431e): a gate post bursts: its block goes, five bits, smoke,
+/// flames on the floor below.
+fn gate_post(lv: &mut Level, world: &mut World, rng: &mut PascalRandom, y: i32, x: i32) {
+    clear_block(world, y, x);
+    let ps = &mut lv.particles;
+    ps.p.hits = 0x8000;
+    ps.p.on_death = 0x10;
+    for _ in 0..=4 {
+        let px = x - 10 + rng.random(0x15);
+        let py = y - rng.random(0x10);
+        ps.spawn(0x7529, py, px);
+        let a = rng.random(0x281) + 0x460;
+        ps.throw(10, 0x70, a);
+    }
+    ps.p.on_death = 0;
+    ps.p.hits = 0;
+    crate::particles::smoke4_at(ps, y - 7, x);
+    ps.p.delay = 0;
+    crate::actors::burning_floor(ps, world, 5, y + 0x18, x);
 }
 
 /// FUN_1040_6941(y, x): forty pairs of bits sprayed both ways (callback 0x26c8).
@@ -1189,7 +1280,7 @@ pub fn explode_tile(
             break;
         }
     }
-    lv.set_cell(world, cell, cell_index, fx);
+    lv.set_cell(world, cell, cell_index, rng, fx);
     // The effect of the tile before the last step (the original's tile when it didn't step).
     let id = world.cell_function(before, 4);
     let (ey, ex) = ((y & !15) + 7, (x & !15) + 7);

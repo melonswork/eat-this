@@ -98,7 +98,7 @@ impl Level {
                     let w = env.world.main().width;
                     let cell = (((y + 1) as u16 >> 4) as i32 * w + (x as u16 >> 4) as i32) as u16;
                     let tile = env.world.main().cells[cell as usize];
-                    self.set_cell(env.world, tile.wrapping_add(1), cell, env.fx);
+                    self.set_cell(env.world, tile.wrapping_add(1), cell, env.rng, env.fx);
                 }
                 let o = self.o(id);
                 o.set(2, (x - half) - 0x10);
