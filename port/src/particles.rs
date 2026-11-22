@@ -128,6 +128,8 @@ pub struct Particles {
     pub now: u32,
     /// 1170:45b6: cleared by a death effect that keeps its particle alive.
     keep_dying: bool,
+    /// FUN_1050_2bcf's arguments (water line, previous y, y, x), run once the mover is done.
+    splash: Option<(i32, i32, i32, i32)>,
     /// 1170:45b8: the side of the wall hit, 0/1 horizontal (1: moving right), 2 up, 3 down.
     pub hit_side: i32,
     /// 1170:25aa / 25ac: what FUN_1050_568b last found.
@@ -951,6 +953,24 @@ impl Level {
 
     /// The mover at +0x4a.
     fn move_particle(&mut self, i: usize, cam: (i32, i32), w: &World, rng: &mut PascalRandom) {
+        self.move_particle_body(i, cam, w, rng);
+        // FUN_1050_2bcf: a particle crossing its sector's water line splashes.
+        if let Some((line, prev, y, x)) = self.particles.splash.take() {
+            if prev - 4 < line && line <= y - 4 {
+                let p = rng.random(0x50);
+                crate::sound::pitch(p + 0xd0);
+                crate::sound::play_at_vol(0x6f, 0xaa, line, x);
+                let ps = &mut self.particles;
+                ps.p.callback = 0x1d33;
+                ps.p.colour = 0x34;
+                ps.spawn_seq(0x6d00, 2, 0x12, line - 1, x, 1);
+                ps.p.colour = 0;
+                ps.p.callback = 0;
+            }
+        }
+    }
+
+    fn move_particle_body(&mut self, i: usize, cam: (i32, i32), w: &World, rng: &mut PascalRandom) {
         let p = &mut self.particles.list[i];
         if p.m.uw(0x4a) == MOVE_AGE {
             p.m.set(0x24, p.m.w(0x24) + 1);
@@ -1005,7 +1025,7 @@ impl Level {
                 m.set(0xa, m.w(6) - v.l(4).wrapping_mul(t) / 0x40000 + fall);
                 v.set(8, t + 1);
                 if m.w(0x4e) != 0x7fff {
-                    eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+                    self.particles.splash = Some((m.w(0x4e), m.w(0xe), m.w(0xa), m.w(8)));
                 }
                 if off_screen(m, -0x200) {
                     m.set(0x24, m.w(0x22));
@@ -1027,7 +1047,7 @@ impl Level {
                 }
                 m.set(0x24, m.w(0x24) + 1);
                 if m.w(0x4e) != 0x7fff {
-                    eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+                    self.particles.splash = Some((m.w(0x4e), m.w(0xe), m.w(0xa), m.w(8)));
                 }
                 // Rolling down a slope: on it with no vertical speed, it speeds up downhill
                 // (by half its speed, at least 1/2 px), at most 16 px per frame; else it bounces.
@@ -1076,7 +1096,7 @@ impl Level {
                 }
                 m.set(0x24, m.w(0x24) + 1);
                 if m.w(0x4e) != 0x7fff {
-                    eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+                    self.particles.splash = Some((m.w(0x4e), m.w(0xe), m.w(0xa), m.w(8)));
                 }
                 let (x, y) = (m.w(8), m.w(0xa));
                 let mut steep = false;
@@ -2505,7 +2525,7 @@ impl Level {
         }
         m.set(0x24, m.w(0x24) + 1);
         if m.w(0x4e) != 0x7fff {
-            eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+            self.particles.splash = Some((m.w(0x4e), m.w(0xe), m.w(0xa), m.w(8)));
         }
         let (x, y) = (m.w(8), m.w(0xa));
         let mut steep = false;

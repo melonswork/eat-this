@@ -1055,7 +1055,41 @@ impl Hero {
         if self.slope != -1 {
             let flags = slope_word(self.slope, 0x14);
             if flags & 2 != 0 {
-                eprintln!("warning: slippery slopes (HeroUpdate, row flag 2) not ported");
+                // Slippery: slides downhill, shedding dust (every 16 frames a 1-in-4 chance with
+                // flag 8, else whenever the previous state was > 0).
+                let (dir, angle) = if self.slope & 0x80 == 0 { (-1, 0xb40) } else { (1, 0) };
+                dx += dir;
+                if !walking {
+                    // HeroAccelerate(limit 8, dir)
+                    self.vx += dir;
+                    if self.vx.abs() > 8 {
+                        self.vx = self.vx.signum() * 8;
+                    }
+                    friction = false;
+                }
+                let dust = if flags & 8 != 0 && ps.now % 0x10 == 0 && rng.random(4) == 0 {
+                    true
+                } else {
+                    self.prev_state >= 1
+                };
+                if dust {
+                    ps.p.group = 0;
+                    ps.p.hits = 0x8000;
+                    ps.p.on_death = 0x10;
+                    let s = rng.random(2);
+                    ps.spawn(s + 0x755c, self.y - 1, self.x);
+                    ps.bounce(9, 0x10, angle);
+                    if rng.random(2) == 0 {
+                        ps.p.delay = 5;
+                        let s = rng.random(2);
+                        ps.spawn(s + 0x755c, self.y, self.x);
+                        ps.bounce(9, 0x10, angle);
+                    }
+                    ps.p.on_death = 0;
+                    ps.p.hits = 0;
+                    ps.p.group = 1;
+                    ps.p.delay = 0;
+                }
             }
             if flags & 1 != 0 {
                 if !walking {
@@ -1355,7 +1389,7 @@ impl Hero {
         let posed = self.end_of_frame(walking, blocked, step_h, rng);
         self.lim = (-0x7fff, 0x7fff);
         self.gun_end(posed, &input, rng, ps.now);
-        self.pick_up(w);
+        self.pick_up(w, lv, rng);
         self.take_hits(ps, rng);
     }
 
@@ -2205,26 +2239,46 @@ impl Hero {
     /// The start of FUN_1088_55f0: pick-ups (function 30000 in plane 2) under the hero's two
     /// columns (x-4, x+4) from his feet to his head (FUN_1088_5551). Each is cleared and its
     /// effect (function 4) runs at the tile's centre; main applies both.
-    fn pick_up(&mut self, w: &World) {
+    fn pick_up(&mut self, w: &World, lv: &Level, rng: &mut PascalRandom) {
         let rows = (self.height + 7) >> 4;
         let (feet, head) = (self.y - 4, (self.y - self.height) + 5);
         let mut y = feet;
         for r in (0..=rows).rev() {
             for x in [self.x - 4, self.x + 4] {
-                if (8000..8100).contains(&w.tile_function_at(y, x)) {
-                    eprintln!("warning: FUN_1088_55bd (tile functions 8000..8099) not ported");
-                }
                 let Some(cell) = w.cell_at(2, y, x) else {
+                    self.harmful_tile(w.tile_function_at(y, x), rng);
                     continue;
                 };
                 let t = (x >> 4, y >> 4);
-                if self.pickups.iter().any(|p| p.0 == t) || w.cell_function(cell, 0) != PICKUP {
-                    continue;
+                if !self.pickups.iter().any(|p| p.0 == t) && w.cell_function(cell, 0) == PICKUP {
+                    let (fx, f3) = (w.cell_function(cell, 4), w.cell_function(cell, 3));
+                    self.pickups.push((t, fx, f3, (y & !15) + 7, (x & !15) + 7));
                 }
-                let (fx, f3) = (w.cell_function(cell, 4), w.cell_function(cell, 3));
-                self.pickups.push((t, fx, f3, (y & !15) + 7, (x & !15) + 7));
+                self.harmful_tile(w.tile_function_at(y, x), rng);
             }
             y = if r != 1 { y - 0x10 } else { head };
+        }
+        // The platforms the hero's column meets (FUN_1078_0198), last first: their planes'
+        // tiles under x from the feet up.
+        for p in lv.platforms.iter().rev().flatten() {
+            if self.x < p.x || feet < p.y || p.x + p.width <= self.x || p.y + p.height <= head {
+                continue;
+            }
+            let x = self.x - p.x;
+            let mut y = feet - p.y;
+            for r in (0..=rows).rev() {
+                self.harmful_tile(w.tile_function_in(p.plane, y, x), rng);
+                y = if r != 1 { y - 0x10 } else { head - p.y };
+            }
+        }
+    }
+
+    /// FUN_1088_55bd: tile function 8000 hurts (FUN_1088_3c32(100)); when that hurt him, sound
+    /// 0x16 and a sideways shake.
+    fn harmful_tile(&mut self, f: u16, rng: &mut PascalRandom) {
+        if f == 8000 && self.hit(100, 1, rng) == 1 {
+            sound::play_at(0x16, self.y, self.x);
+            self.side_shakes.push((0x24, 0xe));
         }
     }
 

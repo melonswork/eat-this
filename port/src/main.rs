@@ -1756,6 +1756,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     world::load_game_ds(&o.data.join("../ETLAUNCH.EXE"))?;
     let _ = sprites::DIR.set(o.data.join("SPRITES"));
     let world = load_world(&o.data, &map_path)?;
+    if std::env::var_os("ET_SCAN").is_some() {
+        // Cells of rarely used features: slope rows with flags (function 2 of a slope tile) and
+        // tile functions 8000..8099.
+        for ty in 0..world.main().height {
+            for tx in 0..world.main().width {
+                let (y, x) = (ty * 16 + 8, tx * 16 + 8);
+                if world.solidity_at(y, x) & 0x20 != 0 {
+                    let cell = world.cell_at(world::MAIN_PLANE, y, x).unwrap_or(0);
+                    let row = (world.cell_function(cell, 2) & 0xff7f) as usize;
+                    let o = row * 0x16 + 0x14;
+                    let f = u16::from_le_bytes([world::SLOPES[o], world::SLOPES[o + 1]]);
+                    if f & !1 != 0 {
+                        println!("SLOPE row {row} flags {f:#x} at ({tx},{ty}) px ({x},{y})");
+                    }
+                }
+                let t = world.tile_function_at(y, x);
+                if (8000..8100).contains(&t) {
+                    println!("TILEFN {t} at ({tx},{ty}) px ({x},{y})");
+                }
+            }
+        }
+    }
     if std::env::var_os("ET_PICKUPS").is_some() {
         println!("START {:?}", world.map.start);
         println!("NEXT {:?}", next_level(&o.data, &map_path));
