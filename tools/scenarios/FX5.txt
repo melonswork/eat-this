@@ -1,0 +1,17 @@
+# Tile effect 79 (FUN_1040_538f: a back-plane tile of function 60300 steps on, four leaves flutter
+# down, sound 0x51): FOREST02's tree-house window at (1392..1423, 416..431), main tiles 0x1e4 (mask 4:
+# blasts only). The start moved onto the balcony with a weapon-3 pick-up copied there: rockets at it.
+level MAPS/FOREST02.MAP
+start 1470 476
+cell 2 91 29 0xd06
+mouse 60 80
+20
+1 left
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150

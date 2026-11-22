@@ -786,6 +786,8 @@ impl Game {
             hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
         };
         self.level.update_particles(1, &mut pf);
+        // What their effects made (objects through EnemyFactory, nested blasts) happens now.
+        self.flush_spawns(fx);
         // The level's foreground procedure ((*DAT_1170_4c36)()) runs last: the grinder in GRINDER.
         let h = &self.hero;
         let hero = (h.x, h.y, h.crouch_level(), false);

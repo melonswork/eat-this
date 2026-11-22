@@ -1,0 +1,17 @@
+# Tile effect 80 (FUN_1040_3d9e: bits fly, a steam emitter 0x141e kind 1 takes its place through
+# FUN_1068_17f8 -> EnemyFactory, shake, 0x4a): CITY02's pipe at (896..911, 1328..1343), tile 0xfdd
+# (mask 4: blasts only). The start moved right of it with a weapon-3 pick-up copied there: rockets.
+level MAPS/CITY02.MAP
+start 960 1343
+cell 2 60 83 0xd06
+mouse 20 110
+20
+1 left
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+200
