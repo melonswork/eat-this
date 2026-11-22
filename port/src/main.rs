@@ -1088,8 +1088,13 @@ impl Graphics {
         // The level frame counter as the original's draw sees it: frames completed before this one.
         let frame = g.frame.saturating_sub(1);
         let st = &g.level.storm;
-        self.background.draw(fb, (cam_x, cam_y), frame, st.sky_flash > 0 && st.kind == 1);
-        if self.background.proc_ == 5 {
+        // The background proc: the script's, or the one script command 0x15 switched to.
+        let bp = g.level.procs.filter(|_| std::env::var("ET_NOPROCS").is_err()).map_or(self.background.proc_, |p| p.0);
+        self.background.draw(bp, fb, (cam_x, cam_y), frame, st.sky_flash > 0 && st.kind == 1);
+        if matches!(bp, 7 | 8 | 9 | 12..=15) {
+            self.svn_background(bp, fb, g, (cam_x, cam_y), frame);
+        }
+        if bp == 5 {
             if let Some((qx, qy)) = g.level.quad {
                 // FUN_1090_178e: OBJECTS 0x2716's quad (FUN_10d0_01e4, colour 1b14) under the
                 // skyline's decor: from (qx, qy) 0xa0 wide, down to its 8/9-parallax far edge.
@@ -1106,8 +1111,8 @@ impl Graphics {
         if self.bg_only {
             return;
         }
-        if self.background.proc_ == 4 {
-            // FUN_1090_1629 (detail 3, as in demos): extra map 9 at a quarter of the camera, then
+        if bp == 4 || (bp == 10 && cam_y <= 0x290) {
+            // FUN_1090_1629 (10: FUN_1090_1742 above its line) (detail 3, as in demos): extra map 9 at a quarter of the camera, then
             // extra map 8 at half of it, both repeated across and down (FUN_1088_a401).
             for (k, div) in [(1, 4), (0, 2)] {
                 if let Some(Some(pl)) = self.extra.get(k) {
@@ -1115,8 +1120,11 @@ impl Graphics {
                 }
             }
         }
+        if bp == 10 {
+            self.svn_background(bp, fb, g, (cam_x, cam_y), frame);
+        }
         if let Some(Some(pl)) = self.extra.first() {
-            match self.background.proc_ {
+            match bp {
                 // FUN_1090_147b: extra map 8 at a third of the camera, repeated across (a371).
                 3 => self.layer(fb, g, pl, 1, (cam_x / 3, cam_y / 3), frame),
                 // FUN_1090_1a06: at half the camera's height, 24 px in, repeated down (a3b9).
@@ -1126,7 +1134,7 @@ impl Graphics {
         }
         // The sector's background decor (list +0x1e, FUN_1068_09bf from the background proc).
         let sector = g.level.sector.unwrap_or(0);
-        if matches!(self.background.proc_, 1 | 16) {
+        if matches!(bp, 1 | 11 | 15 | 16) {
             self.start_extras(fb, g, sector, (cam_x, cam_y), frame);
         }
         self.decor(fb, g, sector, false, (cam_x, cam_y), frame);
@@ -1198,6 +1206,154 @@ impl Graphics {
             }
         }
         self.hud(fb, g, frame);
+    }
+
+    /// Background procs 12..15 (table 1170:189e; the episode-3 sets SVNBAC02..05).
+    fn svn_background(&self, bp: u32, fb: &mut [u8], g: &Game, cam: (i32, i32), frame: u32) {
+        let sector = g.level.sector.unwrap_or(0);
+        let top = g.world.sectors.get(sector).map_or(0, |s| s.cam.1);
+        let dy = cam.1 - top;
+        let st = &g.level.storm;
+        let flash = st.sky_flash > 0 && st.kind == 1;
+        let sky = -(((frame >> 3) as i32) % W);
+        let fr = frame as i32;
+        let mut p = self.painter(fb, frame);
+        // The skyline of procs 12 and 14: 14 buildings (x, y, sprite) at 1170:18fe, repeated
+        // every 0x280 pixels.
+        const SKYLINE: [(i32, i32, i32); 14] = [
+            (13, 4, 0x3202), (47, 4, 0x3202), (99, 4, 0x3209), (132, 13, 0x3207), (161, 4, 0x3207),
+            (200, 0, 0x3209), (232, 0, 0x3202), (306, 0, 0x3203), (333, 0, 0x3204), (415, 0, 0x3205),
+            (450, 0, 0x320a), (503, 0, 0x3203), (528, 0, 0x3208), (590, 0, 0x3206),
+        ];
+        let skyline = |p: &mut render::Painter, base: i32, y: i32| {
+            for &(x, dy, s) in SKYLINE.iter().rev() {
+                p.sprite(s, (x + base) % 0x280 - 0x20, y + dy);
+            }
+        };
+        // FUN_1090_15da: a 320x200 sprite four times, from (x, y).
+        let tile4 = |p: &mut render::Painter, s: i32, x: i32, y: i32| {
+            for (dx, dy) in [(0, 0), (W, 0), (0, H), (W, H)] {
+                p.sprite(s, x + dx, y + dy);
+            }
+        };
+        match bp {
+            7 => {
+                // FUN_1090_1d4f: 0x3300 tiled at half the camera.
+                p.mode = 0x20;
+                tile4(&mut p, 0x3300, -(cam.0 >> 1) % W, -((cam.1 >> 1) % H));
+            }
+            8 => {
+                // FUN_1090_11ce: the city (bg.rs), then 0x3300 at half the camera (detail 3).
+                p.mode = 4;
+                p.sprite(0x3300, (0x193 - cam.0) / 2, (0x656 - cam.1) / 2);
+            }
+            9 | 10 => {
+                // FUN_1090_16e8: 0x3800 tiled at half the camera. 10 (FUN_1090_1742): the forest
+                // (proc 4: bg.rs and its layers, drawn before this) above the line 0x290 - camY,
+                // this below it.
+                let line = 0x290 - cam.1;
+                if bp == 10 {
+                    if line > 0xc8 {
+                        return;
+                    }
+                    if line > 0 {
+                        p.fb[(line * W) as usize..].fill(0);
+                        p.clip.1 = line;
+                    }
+                }
+                p.mode = 0x20;
+                tile4(&mut p, 0x3800, -((cam.0 >> 1) % W), -((cam.1 >> 1) % H));
+            }
+            12 => {
+                // FUN_1090_0dd0 (BUTCHERY, STONES, RADIO_AC, CITY_NET): the sky (0x3201) drifting
+                // a pixel per 16 frames above the tree line y2, the buildings at 1/10 of the
+                // camera (one of them, 0x3214, topples after script command 0x1b), the tree line
+                // (0x3200, 64 wide) at 1/6.
+                let y2 = 0x79 - dy / 0x24;
+                p.clip.3 = y2;
+                p.mode = 0x20;
+                let x = -((fr / 16) % W);
+                p.sprite(0x3201, x, 0x79);
+                p.sprite(0x3201, x + W, 0x79);
+                p.mode = 4;
+                let base = 0x500 - ((cam.0 + 0x640) / 10) % 0x500;
+                let y4 = 0x79 - dy / 0x48;
+                let t = g.level.skyline_fall.map_or(-1, |s| 4 * frame.saturating_sub(s) as i32);
+                if t < 0x5a0 {
+                    let (s, lx, ly) = if t >= 0 {
+                        let a = 0x5a0 - trig::sin(t + 0x5a0) * 0x5a0 / 0x4000;
+                        let s = 0x3215 + ((fr / 16) & 1);
+                        (s, base + 0x50 - trig::sin(a + 0x5a0) * 0x50 / 0x4000, y4 - trig::sin(a) * 0x50 / 0x4000)
+                    } else {
+                        (0x3214, base, y4)
+                    };
+                    p.sprite(s, (SKYLINE[5].0 + lx) % 0x280 - 0x20, ly);
+                }
+                skyline(&mut p, base, y4);
+                p.clip = render::SCREEN;
+                let x6 = (cam.0 / 6) % 0x40;
+                for k in (0..=5).rev() {
+                    p.sprite(0x3200, k * 0x40 - x6, y2);
+                }
+            }
+            14 => {
+                // FUN_1090_1026 (FALL): a still view 0x20..0x11f wide: the sky, the skyline (at
+                // 1/0x200 of the height), then two rows of 64-pixel tiles (0x3200 above y3, 0x320e).
+                let y2 = 0x79 - dy / 0x100;
+                let y3 = 0xc6 - dy / 0x80;
+                p.clip = (0x20, 0, 0x11f, y2);
+                p.mode = 0x20;
+                p.sprite(0x3201, sky, 0x79);
+                p.sprite(0x3201, sky + W, 0x79);
+                p.mode = 4;
+                skyline(&mut p, 0x500 - ((cam.0 + 0x640) / 10) % 0x500, 0x79 - dy / 0x200);
+                p.clip.3 = y3;
+                for k in (0..=4).rev() {
+                    p.sprite(0x3200, k * 0x40 + 0x20, y2);
+                }
+                p.clip.3 = H - 1;
+                for k in (0..=4).rev() {
+                    p.sprite(0x320e, k * 0x40 + 0x20, y3);
+                }
+            }
+            _ => {
+                // FUN_1090_0bbe (13, CITY_I06) and FUN_1090_1d8f (15, GRANNY): the sky (lit
+                // during a lightning flash), 13 a window frame over colour 0xa8, the picture's
+                // rows from 0x7c (0x7b) scrolling faster with each row, then the skyline and its
+                // reflection (0x3202, translucent) at 1/14 (1/16) of the camera.
+                let (div, first, k) = if bp == 13 { (0xe, 0x7c, 0xf8) } else { (0x10, 0x7b, 0xf6) };
+                if flash {
+                    p.mode = 0x2c;
+                    p.mix = render::Mix::Light;
+                    p.colour = 0x80;
+                } else {
+                    p.mode = 0x20;
+                }
+                p.sprite(0x3201, sky, 0);
+                p.sprite(0x3201, sky + W, 0);
+                p.mix = render::Mix::Level;
+                if bp == 13 {
+                    p.mode = 0x14;
+                    p.key = 0xa8;
+                    p.sprite(0x3203, 0, 0);
+                }
+                let h = ((cam.0 + 0x640) / div) % W;
+                if let Some(pic) = &self.background.picture {
+                    let a = i64::from(cam.0) + i64::from(frame / 3);
+                    let mut acc = a * k / div as i64;
+                    for y in first..H as usize {
+                        bg::copy_row(p.fb, pic, y, (acc / k % i64::from(W)).rem_euclid(i64::from(W)) as usize);
+                        acc += a;
+                    }
+                }
+                p.mode = 4;
+                p.sprite(0x3200, -h, 0);
+                p.sprite(0x3200, W - h, 0);
+                p.mode = 0x30;
+                p.sprite(0x3202, -h, 0);
+                p.sprite(0x3202, W - h, 0);
+            }
+        }
     }
 
     /// FUN_1090_0ace's (and 0a8c's, proc 1) middle part: the bridge (FUN_1090_0292, sectors with +0x1c >= 0: OBJECTS

@@ -1,0 +1,7 @@
+# Background proc check: CITY_I06's backdrop while the hero walks right and jumps.
+level MAPS/CITY_I06.MAP
+30
+120 right
+20 right up
+60 right
+30

@@ -1,0 +1,7 @@
+# Background procs switched by script command 0x15: CITY03 starts under proc 15 (GRANNY's sky).
+level MAPS/CITY03.MAP
+30
+120 right
+20 right up
+60 right
+30
