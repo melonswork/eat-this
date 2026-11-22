@@ -127,6 +127,8 @@ pub struct Level {
     /// 1170:4dc2: restarts of this level (GameFrame 4e60 = 10 counts them; a start from the menu
     /// or a level end resets it). Effect 93 only clears its tile on the first two tries.
     pub tries: i32,
+    /// 1170:25ae: the strength of the last tile blast whose effect ran (FUN_1050_5a33).
+    pub blast_strength: i32,
     /// Script buffers as the game keeps them (1170:513c): w[0] = word count, w[1] = type, ...
     pub scripts: Vec<Vec<u16>>,
     pub platforms: Vec<Option<Platform>>,
@@ -211,6 +213,7 @@ impl Level {
             .map(|r| Grinder::from_record(r));
         Level {
             tries: 0,
+            blast_strength: 0,
             scripts,
             platforms: Vec::new(),
             sector: None,

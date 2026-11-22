@@ -1,0 +1,19 @@
+# Tile effect 45 (FUN_1040_48b8: the function-60300 cells above and below step on by 1, with a
+# strength-4 blast or one time in four the cell by its function 4, smoke, a spark later, a shake,
+# 0x49): GRANNY's door post at (3696..3711, 496..543), tiles 0x11/0x25 (mask 7). The start moved
+# right of it: pistol shots.
+level MAPS/GRANNY.MAP
+start 3770 560
+mouse 20 120
+20
+1 left
+3 lmb
+15
+3 lmb
+15
+3 lmb
+15
+3 lmb
+15
+3 lmb
+200
