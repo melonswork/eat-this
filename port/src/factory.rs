@@ -72,7 +72,7 @@ impl Level {
     pub fn add_to(&mut self, sector: usize, l: usize, o: Obj) -> usize {
         let id = self.objects.len();
         if std::env::var_os("ET_KINDS").is_some() {
-            eprintln!("KIND {:#x} vmt {:#x}", o.kind, o.vmt());
+            eprintln!("KIND {:#x} vmt {:#x} at ({}, {})", o.kind, o.vmt(), o.w(0xe), o.w(0x10));
         }
         self.objects.push(Some(o));
         self.lists[sector][l].push(id);
@@ -801,12 +801,19 @@ impl Level {
                         if std::env::var("ET_PLAT").is_ok() {
                             eprintln!("PLATOBJ made {:?}", p);
                         }
+                        if std::env::var_os("ET_SCAN").is_some() {
+                            println!("SWINGPLAT mode {:#x} alt {:#x} lever {:?} speed {} at ({}, {})", p.mode, p.mode_alt, p.lever, p.speed, p.x, p.y);
+                        }
                         self.plat_objs.push(p);
                     }
                 }
                 100 => {
                     let w = &*world;
                     self.plat_objs.push(crate::platobj::PlatObj::path(&rec, |y, x| w.sector_at(y, x)));
+                    if std::env::var_os("ET_SCAN").is_some() {
+                        let p = self.plat_objs.last().unwrap();
+                        println!("PATHPLAT mode {:#x} alt {:#x} lever {:?} speed {} at ({}, {}) points {:?}", p.mode, p.mode_alt, p.lever, p.speed, p.x, p.y, p.points);
+                    }
                 }
                 k if (100..=199).contains(&k) => {
                     eprintln!("warning: OBJECTS type {k} (FUN_1060_0166) not ported")

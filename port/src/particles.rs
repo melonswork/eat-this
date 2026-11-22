@@ -807,7 +807,7 @@ impl Particles {
             }
             let (mut l, mut t, mut r, mut b) = (m.w(0x2c) - sx, m.w(0x2e) - sy, m.w(0x30) - sx, m.w(0x32) - sy);
             if std::env::var("ET_HIT").is_ok() && m.w(0x34) == 7 {
-                eprintln!("BLAST rel {l},{t},{r},{b} flags {:x} dmg {} boxes {:?}", m.w(0x3a), m.w(0x38), boxes);
+                eprintln!("BLAST {} rel {l},{t},{r},{b} flags {:x} dmg {} boxes {:?}", self.now, m.w(0x3a), m.w(0x38), boxes);
             }
             if hflip != 0 {
                 (l, r) = (-r, -l);
@@ -1741,6 +1741,7 @@ impl Level {
                 }
             }
             0x1d33 => {} // FUN_1050_1d33: a splash, drawn clipped at the water line
+            0x24f1 => {} // FUN_1050_24f1: drawn only (draw mode 0x10 past half its life)
             other => eprintln!("warning: particle procedure 1050:{other:04x} not ported"),
         }
     }

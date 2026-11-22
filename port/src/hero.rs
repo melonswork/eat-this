@@ -1433,7 +1433,7 @@ impl Hero {
                         } else if p.kind == 0 {
                             crate::platobj::update_path(p, &mut side, w);
                         } else {
-                            crate::platobj::update(p, &mut side, ps.now);
+                            crate::platobj::update(p, &mut side, ps.now, w);
                         }
                     }
                 }
@@ -1678,7 +1678,7 @@ impl Hero {
             }
             let d = ps.hit_test_sprite((self.frame, self.x, self.y, 1, 0), 0x3a2);
             if d > 0 {
-                self.vehicle_hit(d, rng);
+                self.vehicle_hit(d, rng, ps, water);
                 if ps.hit_index >= 0 {
                     let m = &ps.list[ps.hit_index as usize].m;
                     let a = crate::trig::atan2(m.w(0xa) - self.y, m.w(8) - self.x);
@@ -1716,16 +1716,16 @@ impl Hero {
     }
 
     /// FUN_1088_4a81: the vehicle takes damage.
-    fn vehicle_hit(&mut self, damage: i32, _rng: &mut PascalRandom) {
+    fn vehicle_hit(&mut self, damage: i32, rng: &mut PascalRandom, ps: &mut crate::particles::Particles, water: i32) {
         if self.hurt < 1 {
             let left = self.health - damage;
             if left < 1 {
-                eprintln!("warning: the vehicle's destruction (FUN_1088_4a34) not ported");
                 self.hurt = 0x7fff;
                 self.anim = 0x15e;
                 self.state = DEAD;
                 self.turn = NO_TURN;
                 self.health = left;
+                self.vehicle_wreck(rng, ps, water);
             } else {
                 if self.health > 0x8e && left < 0x8f {
                     self.messages.push((-12, false));
@@ -1735,6 +1735,73 @@ impl Hero {
                 self.hurt_blink = 0x52;
             }
         }
+    }
+
+    /// FUN_1088_4a34: the vehicle blows up: a column of bubbles (FUN_1068_2c56), the pieces
+    /// (FUN_1088_46e9) and a blast (FUN_1040_613b).
+    fn vehicle_wreck(&mut self, rng: &mut PascalRandom, ps: &mut crate::particles::Particles, water: i32) {
+        sound::play_at(0x3b, self.y, self.x);
+        self.shakes.push((0x30, 0x16));
+        let (y, x) = (self.y - 0x14, self.x);
+        ps.p.group = 0;
+        for k in 0..=0x18 {
+            ps.p.on_spawn = if k % 0xc == 0 { rng.random(2) + 0x7570 } else { 0 };
+            ps.p.delay = (k * k) / 6;
+            let bx = x - 0x10 + rng.random(0x21);
+            let by = y - rng.random(3);
+            let sprite = rng.random(3) + 0x64b;
+            Self::bubble(ps, water, sprite, by, bx);
+        }
+        ps.p.on_spawn = 0;
+        ps.p.delay = 0;
+        ps.p.group = 1;
+        // FUN_1088_46e9: bits thrown both ways, wider the faster, then puffs.
+        sound::play_at(0x21, y, x);
+        let left = |r: &mut PascalRandom, spread: i32| (r.random(0x80) + 0x960) - spread;
+        let right = |r: &mut PascalRandom, spread: i32| ((0x1860 - r.random(0x80)) + spread) % 0x1680;
+        ps.p.hits = 0x8000;
+        ps.p.callback = 0x24f1;
+        for i in 1..=0x20 {
+            let (speed, spread) = ((i << 6) / 0x20 + 1, (i * 0x3c0) / 0x20);
+            ps.p.delay = rng.random(8);
+            let s = (rng.random(4) == 0) as i32 + 0x5307;
+            ps.spawn_seq(s, 1, 100, y, x, 0);
+            let a = left(rng, spread);
+            ps.throw(0x58, speed, a);
+            ps.p.delay = rng.random(8);
+            let s = (rng.random(4) == 0) as i32 * 2 + 0x5306;
+            ps.spawn_seq(s, 1, 100, y, x, 0);
+            let a = right(rng, spread);
+            ps.throw(0x58, speed, a);
+        }
+        for i in 1..=4 {
+            let (speed, spread) = ((i * 0x30) / 4 + 1, (i * 0x3c0) / 4);
+            for side in 0..2 {
+                ps.p.delay = rng.random(8) + 8;
+                let s = rng.random(5) + 0x530f;
+                ps.spawn_seq(s, 1, 0xaa, y, x, 0);
+                let a = if side == 0 { left(rng, spread) } else { right(rng, spread) };
+                ps.throw(0x5b, speed, a);
+            }
+        }
+        ps.p.callback = 0;
+        ps.p.on_death = 0;
+        for i in 1..=8 {
+            let (speed, spread) = ((i << 5) / 8 + 1, (i * 0x3c0) / 8);
+            for side in 0..2 {
+                ps.p.delay = rng.random(8) + 8;
+                ps.spawn_seq(0x5300, 4, 5, y, x, 1);
+                let a = if side == 0 { left(rng, spread) } else { right(rng, spread) };
+                ps.throw(0x58, speed, a);
+            }
+        }
+        ps.p.hits = 0;
+        for (d, dy, dx) in [(0x1e, 6, 1), (0x19, 0xc, 4), (0x14, -5, -5), (0xf, 5, 0)] {
+            ps.p.delay = d;
+            ps.spawn_seq(0x5300, 4, 5, y + dy, x + dx, 1); // FUN_1040_62b7
+        }
+        ps.p.delay = 0;
+        ps.spawn_seq(0x7000, 3, 0x18, self.y - 0xe, self.x, 1); // FUN_1040_613b
     }
 
     /// Script command 0x1c: the START intro throws him out of the ship.

@@ -1763,6 +1763,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _ = sprites::DIR.set(o.data.join("SPRITES"));
     let world = load_world(&o.data, &map_path)?;
     if std::env::var_os("ET_SCAN").is_some() {
+        println!("MAP width {} height {}", world.main().width, world.main().height);
+        if let Ok(v) = std::env::var("ET_CELL") {
+            let c: i32 = v.parse().unwrap_or(0);
+            let w = world.main().width;
+            let t = world.main().cells[c as usize];
+            let f = |n| world.cell_function(t, n) as i16;
+            println!("CELL {c} = ({},{}) tile {t:#x} f0 {} f1 {:#x} f2 {} f3 {} f4 {}", c % w, c / w, f(0), f(1), f(2), f(3), f(4));
+        }
         for (i, sc) in world.sectors.iter().enumerate() {
             if sc.water[1] != 0x7fff {
                 println!("WATER sector {i} line {} cam {:?}", sc.water[1], sc.cam);
