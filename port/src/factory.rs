@@ -109,6 +109,13 @@ impl Level {
 
     /// EnemyFactory (1070:d6be). Returns false for types it doesn't make.
     pub fn factory(&mut self, world: &mut World, cx: &mut Ctx, kind: u16, r: &Rec) -> bool {
+        // 4eb2 (DAT_1170_0f2a is 1 in game): these constructors count their enemy, the alien only
+        // from a short record (667a < 7), the carrier its riders (+0x2a).
+        match kind {
+            0x1428 if r.count >= 7 => {}
+            0x1428 | 0x1432 | 0x145a | 0x14d2 | 0x13e2 | 0x13ec | 0x13f6 | 0x140a | 0x146e | 0x1482 => self.enemies_made += 1,
+            _ => {}
+        }
         let rng = &mut *cx.rng;
         match kind {
             0x1428 => {
@@ -443,6 +450,7 @@ impl Level {
                         world.planes[2].as_mut().unwrap().cells[cell] = 0;
                     }
                 }
+                self.enemies_made += riders.len() as i32;
                 let o = self.obj(id);
                 o.set(0x2a, riders.len() as i32);
                 for (k, rd) in riders.iter().enumerate() {

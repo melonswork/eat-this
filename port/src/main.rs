@@ -230,7 +230,9 @@ impl Game {
         let mut totals = frontend::level_totals(&world);
         // LevelInit: icons and OBJECTS records become objects (their constructors draw Random).
         level.spawn_all(&mut world, hero.x, &mut rng);
-        totals.kills += level.objects.iter().flatten().filter(|o| frontend::COUNTED_KINDS.contains(&o.kind)).count() as i32;
+        // FUN_1088_d4b2: HeroReset sets 0f2a = 1, the level setup (LevelLoad, LevelInit) counts,
+        // then 0f2a = 2: enemies made later don't count.
+        totals.kills += level.enemies_made;
         // LevelFirstFrame (1088:b4db): enter the start sector (its scripts run), face its far side.
         let mut fx = Effects::default();
         let sector = world.sector_at(hero.y, hero.x);
@@ -367,6 +369,11 @@ impl Game {
         self.level.flush_spawns(&mut self.world, &mut cx, fx);
     }
 
+    /// 4eb2 / 4eae / 4eaa as the HUD and the stats screen read them.
+    fn totals(&self) -> level::Tally {
+        self.totals
+    }
+
     /// A letter key went down in live play (FUN_1088_2845: A..Z appended, the buffer kept to 40),
     /// then the cheat test (FUN_1088_28c9: "ET" + word anywhere in it, the buffer cleared on a
     /// hit). Only SCAN (the automap) is ported.
@@ -386,6 +393,10 @@ impl Game {
 
     /// One game frame. `keys` is ignored while a demo plays.
     fn step(&mut self, keys: [i8; 9]) {
+        if std::env::var_os("ET_TOTALS").is_some() {
+            let t = self.totals();
+            eprintln!("TOTALS {} kills {} secrets {} bios {}", self.frame, t.kills, t.secrets, t.bios);
+        }
         sound::begin_frame(self.frame + 1);
         // FUN_1088_4b64 clears 4e50 after drawing the pointer.
         self.level.particles.pointer = 0;
@@ -1573,7 +1584,7 @@ impl Graphics {
             clip: render::SCREEN,
         };
         let got = level::TALLY.with(|t| t.get());
-        draw::hud(&mut p, &g.hero, g.level.particles.pointer, self.hud_level, got, g.totals);
+        draw::hud(&mut p, &g.hero, g.level.particles.pointer, self.hud_level, got, g.totals());
         if g.automap || std::env::var_os("ET_AUTOMAP").is_some() {
             let sector = g.level.sector.unwrap_or(0);
             let rect = g.world.sectors.get(sector).map_or((0, 0, 0, 0), |s| s.cam);

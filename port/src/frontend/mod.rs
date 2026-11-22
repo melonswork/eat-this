@@ -40,8 +40,6 @@ struct Running {
     game: Game,
     gfx: Graphics,
     map: PathBuf,
-    /// 1170:4eaa, 4eae, 4eb2: bios spheres, hidden areas and enemies the level has.
-    totals: Tally,
 }
 
 pub struct FrontEnd {
@@ -391,7 +389,7 @@ impl FrontEnd {
             }
             Id::Stats => {
                 // FUN_1080_1a6a: the counters start after 40 frames, lower for each one missing.
-                let totals = self.level.as_ref().map(|r| r.totals).unwrap_or_default();
+                let totals = self.level.as_ref().map(|r| r.game.totals()).unwrap_or_default();
                 let m = self.menu(Id::Stats);
                 if m.b == 0x7fff {
                     m.b = -40;
@@ -483,12 +481,10 @@ impl FrontEnd {
             .rfind(|(k, _)| k.eq_ignore_ascii_case("PlayRecord"))
             .and_then(|(_, v)| find_ci(map.parent()?, v))
             .and_then(|p| crate::demo::Demo::load(&p).ok());
-        let mut totals = level_totals(&world);
         level::tally(|t| *t = Tally::default());
         let game = Game::new(world, demo);
-        totals.kills += game.level.objects.iter().flatten().filter(|o| COUNTED_KINDS.contains(&o.kind)).count() as i32;
         crate::level_music(map);
-        self.level = Some(Running { game, gfx, map: map.to_path_buf(), totals });
+        self.level = Some(Running { game, gfx, map: map.to_path_buf() });
         self.menu(Id::Stats).b = 0x7fff;
         self.level_state = 2;
         self.in_game = true;
@@ -928,7 +924,7 @@ impl FrontEnd {
         let (end_msg, totals) = match &self.level {
             Some(r) => {
                 let pairs = script_pairs(&script_of(&r.map));
-                (localized(&pairs, "EndMessage", self.settings.language).unwrap_or_default(), r.totals)
+                (localized(&pairs, "EndMessage", self.settings.language).unwrap_or_default(), r.game.totals())
             }
             None => (String::new(), Tally::default()),
         };
@@ -1016,8 +1012,6 @@ pub fn level_totals(world: &crate::world::World) -> Tally {
     t
 }
 
-/// The enemy kinds whose constructors count themselves (1170:4eb2) during LevelInit.
-pub const COUNTED_KINDS: [u16; 10] = [0x1428, 0x1432, 0x145a, 0x14d2, 0x13e2, 0x13ec, 0x13f6, 0x140a, 0x146e, 0x1482];
 
 // ---- the window ------------------------------------------------------------------------------
 

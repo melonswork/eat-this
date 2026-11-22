@@ -152,6 +152,9 @@ pub struct Level {
     /// Script command 0x1b (4ef6 = 0): the frame the skyline building of background proc 12
     /// started falling; its draw (FUN_1090_0dd0) counts 4ef6 up by 4 a frame from there.
     pub skyline_fall: Option<u32>,
+    /// EnemyFactory's part of 1170:4eb2 (the kill total): enemies constructed so far (only the
+    /// level setup's count, while 0f2a = 1).
+    pub enemies_made: i32,
     /// Script command 0x15: the background and foreground procs (1170:189e / 18e2 indices) in
     /// place of the script's until the hero changes sector (FUN_1088_1280 restores 4c2a..4c30).
     /// Only the renderer follows it: the procs' simulation parts (storm, collapse) are not switched.
@@ -230,6 +233,7 @@ impl Level {
             water: 0x7fff,
             now: 0,
             skyline_fall: None,
+            enemies_made: 0,
             procs: None,
             hero_x: 0,
             cam: (0, 0),
