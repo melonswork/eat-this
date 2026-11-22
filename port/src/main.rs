@@ -1100,6 +1100,22 @@ impl Graphics {
         // The background proc: the script's, or the one script command 0x15 switched to.
         let bp = g.level.procs.filter(|_| std::env::var("ET_NOPROCS").is_err()).map_or(self.background.proc_, |p| p.0);
         self.background.draw(bp, fb, (cam_x, cam_y), frame, st.sky_flash > 0 && st.kind == 1);
+        if matches!(bp, 1 | 8 | 11 | 16) {
+            // The end of FUN_1090_0797: the little movie screen on a building of the skyline
+            // (MOVIE.SPR, slot 0x7d, loaded for every level by FUN_1088_c98f; 4d9c = its count),
+            // a frame per 4, at the skyline's speed.
+            let n = self.bank.count(0x7d);
+            if n > 0 {
+                let h = ((cam_x + 0x640) / 16) % W;
+                let s = 0x7d00 + ((frame / 4) % n as u32) as i32;
+                let mut p = self.painter(fb, frame);
+                p.mode = 0x20;
+                p.sprite(s, 0xf9 - h, 0x68);
+                if 0xf9 - h < 0 {
+                    p.sprite(s, 0x239 - h, 0x68);
+                }
+            }
+        }
         if matches!(bp, 7 | 8 | 9 | 12..=15) {
             self.svn_background(bp, fb, g, (cam_x, cam_y), frame);
         }

@@ -102,7 +102,7 @@ fn slot_name(slot: u16, draw: bool) -> Option<String> {
 /// which skip the palette fitting (FUN_10f0_1a99): their pixels are raw indices, mostly into
 /// the mix tables.
 pub fn raw(slot: u16) -> bool {
-    matches!(slot, 0x1b | 0x73 | 0x75 | 0x7c)
+    matches!(slot, 0x1b | 0x73 | 0x75 | 0x7c | 0x7d)
         || (slot >= 0x32
             && LEVEL_RAW.read().unwrap().get(slot as usize - 0x32).copied().unwrap_or(false))
 }
