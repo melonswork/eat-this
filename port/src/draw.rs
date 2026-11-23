@@ -333,7 +333,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
             looks(p, o);
         }
         // FUN_1070_1b00: the gunship, rotor then gun, both lit by a hit (rotor 1 px lower, gun
-        // 1 px higher); darkened while it falls (mode 0x24, colour 1b14 = 0).
+        // 1 px higher); darkened while it falls (mode 0x24, colour 1b14).
         0x13e2 => {
             let flash = o.w(0x34) > 0;
             for (i, l) in o.looks.iter().enumerate() {
@@ -342,7 +342,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
                     p.colour = p.flash;
                 } else {
                     p.mode = l.mode;
-                    p.colour = 0;
+                    p.colour = p.black;
                 }
                 let dy = if flash { if i == 0 { 1 } else { -1 } } else { 0 };
                 p.at(l.sprite, l.x, l.y + dy);

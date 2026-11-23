@@ -1291,6 +1291,7 @@ impl Graphics {
             mix: render::Mix::Level,
             frame,
             flash: self.vga[7],
+            black: self.vga[0],
             clip: render::SCREEN,
         };
         if ship != (0, 0) {
@@ -1601,6 +1602,7 @@ impl Graphics {
             mix: render::Mix::Level,
             frame,
             flash: self.vga[7],
+            black: self.vga[0],
             clip: render::SCREEN,
         }
     }
@@ -1624,6 +1626,7 @@ impl Graphics {
             mix: render::Mix::Level,
             frame,
             flash: self.vga[7],
+            black: self.vga[0],
             clip: render::SCREEN,
         };
         let got = level::TALLY.with(|t| t.get());

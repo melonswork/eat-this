@@ -117,7 +117,7 @@ impl Level {
                 looks.push(Obj::look(sprite, x, y));
             }
             if falling {
-                // Mode 0x24 with colour 1170:1b14 (0 at level start): darkened while it falls.
+                // Mode 0x24 with colour 1170:1b14 (the draw takes it): darkened while it falls.
                 for l in &mut looks {
                     l.mode = 0x24;
                 }

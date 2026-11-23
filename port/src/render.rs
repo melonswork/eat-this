@@ -129,8 +129,10 @@ pub struct Painter<'a> {
     pub mix: Mix,
     /// The level frame counter as the draw code sees it (DAT_1170_617e).
     pub frame: u32,
-    /// The hit flash colour, 1170:1b1b.
+    /// The hit flash colour, 1170:1b1b (VGA colour 7 of the level).
     pub flash: u8,
+    /// 1170:1b14 (VGA colour 0 of the level).
+    pub black: u8,
     /// 1170:1aca..1ad0: the clip rectangle (left, top, right, bottom), inclusive.
     pub clip: (i32, i32, i32, i32),
 }
