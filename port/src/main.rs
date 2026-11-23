@@ -1309,9 +1309,10 @@ impl Graphics {
         draw::particles(&mut p, &g.level, &g.world, 1);
         if let Some(gr) = &g.level.grinder {
             // GrinderUpdate (GRINDER's foreground proc): eight sets of teeth across the screen.
-            let s = 0x3200 + (((gr.anim() as u16) >> 9) % 8) as i32;
+            let (anim, y) = gr.drawn();
+            let s = 0x3200 + (((anim as u16) >> 9) % 8) as i32;
             for k in 0..8 {
-                p.sprite(s, 0x20 + k * 0x20, gr.y - cam_y);
+                p.sprite(s, 0x20 + k * 0x20, y - cam_y);
             }
         }
         // The level's foreground proc: the water, the sector's foreground decor (list +0x2a).

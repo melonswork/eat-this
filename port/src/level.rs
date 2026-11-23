@@ -975,6 +975,8 @@ pub struct Grinder {
     pub cam_offset: i32,         // 4ee6: the camera sits this far above it
     anim: i32,                   // 4ef0
     pub platform: Option<usize>, // 4ee4
+    /// (4ef0, 4ee0) as GrinderUpdate draws the teeth: before its own update.
+    drawn: (i32, i32),
 }
 
 /// Grinder food (TILES.TXT has no name for it; GrinderUpdate tests it).
@@ -996,6 +998,7 @@ impl Grinder {
             cam_offset: r[5] as i32,
             anim: 0x400,
             platform: None,
+            drawn: (0x400, y),
         }
     }
 }
@@ -1067,6 +1070,7 @@ impl Level {
             return false;
         };
         let (hero_x, hero_y, hero_crouch, _) = hero;
+        g.drawn = (g.anim, g.y);
         if g.speed < 0 {
             if Self::lever_state(world, g.trigger) > 0 {
                 g.speed = 2;
@@ -1139,9 +1143,9 @@ impl Level {
 }
 
 impl Grinder {
-    /// 1170:4ef0, the teeth's animation counter (for the draw pass).
-    pub fn anim(&self) -> i32 {
-        self.anim
+    /// 1170:4ef0 and 4ee0 as the teeth are drawn (GrinderUpdate draws them first).
+    pub fn drawn(&self) -> (i32, i32) {
+        self.drawn
     }
 
     /// FUN_1090_1a70.
