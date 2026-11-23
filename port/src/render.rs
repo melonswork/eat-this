@@ -10,7 +10,8 @@
 //! | 1ae0 | effect |
 //! |------|--------|
 //! | 0    | copy, only over pixels <= 1ae2 (the background range: foreground tiles stay in front) |
-//! | 4, 0x20 | plain copy |
+//! | 4    | plain copy (colour 0 skipped) |
+//! | 0x20 | opaque copy of each row's span (colour 0 inside it written) |
 //! | 8    | fill with colour 1ae3, behind the foreground |
 //! | 0xc, 0x18 | through the 256-byte table 1170:678c (not ported: plain copy / skipped) |
 //! | 0x10 | MIX[src][dst], behind the foreground (translucent) |
@@ -310,6 +311,13 @@ impl<'a> Painter<'a> {
                 continue;
             }
             let srow = if self.vflip { h - 1 - row } else { row };
+            // Mode 0x20 (10f0:24fd) copies the row's whole span, colour 0 inside it included.
+            let span = if mode == 0x20 {
+                let r = &s.pixels[(srow * w) as usize..((srow + 1) * w) as usize];
+                r.iter().position(|&c| c != 0).map(|a| (a as i32, r.iter().rposition(|&c| c != 0).unwrap_or(a) as i32))
+            } else {
+                None
+            };
             for col in 0..w {
                 let sx = left + col;
                 if sx < c0 || sx > c2 {
@@ -321,7 +329,8 @@ impl<'a> Painter<'a> {
                 let dst = self.fb[at];
                 let behind = dst <= fg;
                 let out = match mode {
-                    4 | 0x20 | 0xc => (src != 0).then_some(src),
+                    0x20 => span.is_some_and(|(a, b)| (a..=b).contains(&scol)).then_some(src),
+                    4 | 0xc => (src != 0).then_some(src),
                     0x18 => None,
                     8 => (src != 0 && behind).then_some(colour),
                     0x10 => (src != 0 && behind)

@@ -53,6 +53,32 @@ impl Background {
         );
     }
 
+    /// Draw mode 0x20 (run handler 10f0:24fd): an opaque copy of each row's span (its first to
+    /// its last opaque pixel), colour 0 inside it included.
+    fn sprite_opaque(&self, slot: usize, n: usize, fb: &mut [u8], x: i32, y: i32) {
+        let Some(Some(g)) = self.groups.get(slot) else {
+            return;
+        };
+        let Some(Some(s)) = g.sprites.get(n) else {
+            return;
+        };
+        for sy in 0..s.height {
+            let py = y + s.hotspot.1 + sy;
+            if !(0..H).contains(&py) {
+                continue;
+            }
+            let row = &s.pixels[(sy * s.width) as usize..((sy + 1) * s.width) as usize];
+            let Some(first) = row.iter().position(|&c| c != 0) else { continue };
+            let last = row.iter().rposition(|&c| c != 0).unwrap_or(first);
+            for sx in first..=last {
+                let px = x + s.hotspot.0 + sx as i32;
+                if (0..W).contains(&px) {
+                    fb[(py * W + px) as usize] = row[sx];
+                }
+            }
+        }
+    }
+
     /// Draw mode 0x30: each pixel is blended with what is under it through the PalMix table.
     fn sprite_mixed(&self, slot: usize, n: usize, fb: &mut [u8], x: i32, y: i32) {
         let (Some(mix), Some(Some(g))) = (&self.mix, self.groups.get(slot)) else {
@@ -173,10 +199,11 @@ impl Background {
     fn sea(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
         let mut y = 0x4b - cam.1 / 6;
         let x0 = -((cam.0 / 6) % W);
+        // Modes: 0x3202 and 0x3200 0x20 (opaque), 0x3201 4 (colour 0 skipped).
         if y > 0 {
-            let c = -((frame / 3) as i32 % W);
-            self.sprite(0, 2, fb, c, y);
-            self.sprite(0, 2, fb, c + W, y);
+            let c = -((frame >> 3) as i32 % W); // 1168:1083: a shift
+            self.sprite_opaque(0, 2, fb, c, y);
+            self.sprite_opaque(0, 2, fb, c + W, y);
             self.sprite(0, 1, fb, x0, y);
             self.sprite(0, 1, fb, x0 + W, y);
         }
@@ -184,7 +211,7 @@ impl Background {
             y %= 200;
         }
         for (dx, dy) in [(0, 0), (W, 0), (0, H), (W, H)] {
-            self.sprite(0, 0, fb, x0 + dx, y + dy);
+            self.sprite_opaque(0, 0, fb, x0 + dx, y + dy);
         }
     }
 
