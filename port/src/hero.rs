@@ -626,7 +626,7 @@ impl Hero {
         if self.ground > 0 && self.vy >= 0 && self.state >= 0 {
             self.vy = ON_GROUND_VY;
             if self.state > 0 {
-                self.land(w, rng);
+                self.land(w, ps, lv.wind, rng);
             }
         }
 
@@ -1179,7 +1179,7 @@ impl Hero {
                 self.shakes.push((8, 4));
                 sound::play_at(0x24, self.y, self.x);
                 let n = rng.random(6) + 1;
-                spawn_dust(w, n, self.y, self.x, rng);
+                spawn_dust(w, ps, lv.wind, 10, n, self.y, self.x, rng);
             }
         }
         if self.state == PIPE_HANG {
@@ -2396,11 +2396,11 @@ impl Hero {
     }
 
     /// The landing block at the top of HeroUpdate.
-    fn land(&mut self, w: &World, rng: &mut PascalRandom) {
+    fn land(&mut self, w: &World, ps: &mut crate::particles::Particles, wind: i32, rng: &mut PascalRandom) {
         let d = self.fall;
         if d > 0x1f {
             let n = rng.random((d / 16 + 1).min(8) as u16);
-            spawn_dust(w, n, self.y, self.x, rng);
+            spawn_dust(w, ps, wind, 10, n, self.y, self.x, rng);
         }
         if d >= FATAL_FALL || self.prev_state == KNOCKED_BACK || self.launch > 0 {
             self.state = KNOCKED_DOWN;
@@ -3158,23 +3158,24 @@ impl Hero {
     }
 }
 
-/// SpawnDust (1040:1e04): `count` leaf particles, five Random() calls each, on "Send leaves" tiles.
-/// SpawnDust for the other modules.
-pub fn spawn_dust_pub(w: &World, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
-    spawn_dust(w, count, y, x, rng);
-}
-
-fn spawn_dust(w: &World, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
+/// SpawnDust(x, y, count, speed) (1040:1e04): `count` leaves blown up from a "Send leaves" tile
+/// (drifting, `wind` = 4f0e), five Random() calls each.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_dust(w: &World, ps: &mut crate::particles::Particles, wind: i32, speed: i32, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
     if w.tile_function_at(y, x) != LEAVES {
         return;
     }
     for _ in 0..count {
-        rng.random(5);
-        rng.random(0x501);
-        rng.random(2);
-        rng.random(0x11);
-        rng.random(10);
+        ps.p.hits = 0x8000;
+        ps.p.delay = rng.random(5);
+        let r = rng.random(0x501);
+        let sprite = rng.random(2) + 0x3319;
+        ps.spawn(sprite, y, x - 0x10 + r * 0x20 / 0x500);
+        let v = speed + rng.random(0x11);
+        let g = rng.random(10) + 0x2a;
+        ps.drift(g, v, (wind + 0x820 - r).rem_euclid(0x1680));
     }
+    (ps.p.hits, ps.p.delay) = (0, 0);
 }
 
 /// FUN_1088_5082(door, y, x): an exit's function 2 (main plane, else plane 2), -1 for none or

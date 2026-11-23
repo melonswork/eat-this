@@ -1981,7 +1981,7 @@ impl Level {
                 m.set(0x42, 0x2148);
                 self.explode_area(f.world, 0x60, 4, y + 0x20, x + 0x20, y - 0x20, x - 0x20, f.rng, f.fx);
                 let n = f.rng.random(4);
-                crate::hero::spawn_dust_pub(f.world, n, y - 7, x, f.rng);
+                crate::hero::spawn_dust(f.world, &mut self.particles, self.wind, 0x10, n, y - 7, x, f.rng);
             }
             81 => {
                 // FUN_1040_07e0: sparks thrown back from the bullet's line.
@@ -2493,7 +2493,7 @@ impl Level {
         ps.p.hits = 0;
         ps.p.group = 1;
         let n = f.rng.random(4) + 1;
-        crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
+        crate::hero::spawn_dust(f.world, &mut self.particles, self.wind, 0x10, n, y, x, f.rng);
     }
 
     /// FUN_1040_1ec6: the shell goes off: a flash, four bits of casing, shake and dust.
@@ -2538,7 +2538,7 @@ impl Level {
         sound::play_at(0x26, y, x);
         f.fx.shakes.push((0x2a, 0x12));
         let n = f.rng.random(7) + 2;
-        crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
+        crate::hero::spawn_dust(f.world, &mut self.particles, self.wind, 0x10, n, y, x, f.rng);
     }
 
     /// Effect 78, FUN_1040_0cf8: a spark of the charge's blast bounces (and then only hits walls).
@@ -2845,7 +2845,7 @@ impl Level {
         ps.p.hits = 0;
         ps.p.group = 1;
         let n = f.rng.random(6) + 1;
-        crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
+        crate::hero::spawn_dust(f.world, &mut self.particles, self.wind, 0x10, n, y, x, f.rng);
     }
 
     /// The explosion half of effect 77, FUN_1040_188c: a fireball, a big blast, three chunks and
@@ -2907,7 +2907,7 @@ impl Level {
         ps.p.hits = 0;
         ps.p.group = 1;
         let n = f.rng.random(5) + 1;
-        crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
+        crate::hero::spawn_dust(f.world, &mut self.particles, self.wind, 0x10, n, y, x, f.rng);
     }
 
     /// FUN_1040_3eb4(y, x): five chips thrown up, a sound (0x51) and a shake.
@@ -2978,7 +2978,7 @@ impl Level {
         m.set(0x42, 0x2148);
         self.explode_area(f.world, 0x60, 4, y + 0x20, x + 0x20, y - 0x20, x - 0x20, f.rng, f.fx);
         let n = f.rng.random(4);
-        crate::hero::spawn_dust_pub(f.world, n, y - 7, x, f.rng);
+        crate::hero::spawn_dust(f.world, &mut self.particles, self.wind, 0x10, n, y - 7, x, f.rng);
     }
 
     /// FUN_1050_5b61(strength, mask, bottom, right, top, left): blow up every explodable tile

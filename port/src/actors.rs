@@ -559,7 +559,7 @@ impl Level {
             ps.blast(2, 0xc0, 7, 0x1e, 0x3e, -0x3e, -0x3e, y, x);
             ps.p.delay = 0;
             let n = env.rng.random(6);
-            crate::hero::spawn_dust_pub(env.world, n, y, x, env.rng);
+            crate::hero::spawn_dust(env.world, &mut self.particles, self.wind, 0x10, n, y, x, env.rng);
         }
         self.falling_critter(y, x, env);
         self.remove_current(id);
