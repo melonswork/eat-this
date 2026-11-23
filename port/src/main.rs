@@ -1264,17 +1264,23 @@ impl Graphics {
         }
         self.decor(fb, g, sector, false, (cam_x, cam_y), frame);
         // The map planes, then the platforms (their own planes, at their positions).
-        let mut layers: Vec<(usize, i32, i32)> = vec![(0, 0, 0), (MAIN_PLANE, 0, 0)];
-        layers.extend(
-            g.level
-                .platforms
-                .iter()
-                .flatten()
-                .map(|p| (p.plane, p.x, p.y)),
-        );
-        for (plane, ox, oy) in layers {
+        for plane in [0, MAIN_PLANE] {
             if let Some(pl) = g.world.planes[plane].as_ref() {
-                draw_plane(fb, &g.world, &self.tables, pl, ox - cam_x, oy - cam_y, frame, FULL);
+                draw_plane(fb, &g.world, &self.tables, pl, -cam_x, -cam_y, frame, FULL);
+            }
+        }
+        // FUN_1078_0abd / 0968: each platform clipped to its rectangle w21..w24 (none drawn
+        // outside it).
+        for p in g.level.platforms.iter().flatten() {
+            let (x1, y1) = (p.x - cam_x, p.y - cam_y);
+            let (x2, y2) = (x1 + p.width - 1, y1 + p.height - 1);
+            let (b0, b1, b2, b3) = (p.bounds.0 - cam_x, p.bounds.1 - cam_y, p.bounds.2 - cam_x, p.bounds.3 - cam_y);
+            if !(b0 <= x2 && b1 <= y2 && x1 <= b2 && y1 <= b3) {
+                continue;
+            }
+            let clip = (b0.max(x1), b1.max(y1), b2.min(x2), b3.min(y2));
+            if let Some(pl) = g.world.planes[p.plane].as_ref() {
+                draw_plane(fb, &g.world, &self.tables, pl, x1, y1, frame, clip);
             }
         }
         draw::set_shake(g.camera.shake_amount());
