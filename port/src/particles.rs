@@ -1261,6 +1261,7 @@ impl Level {
                 m.set(0x10, hx);
                 m.set(0x12, y);
             }
+            if std::env::var_os("ET_DEBUG").is_some() { eprintln!("DBG platform hit pi {} at ({},{}) prev ({},{}) p ({},{}) prev ({},{}) w {}", pi, x, y, px, py, p.x, p.y, p.prev_x, p.prev_y, p.width); }
             m.set(0x3e, -1);
             return true;
         }

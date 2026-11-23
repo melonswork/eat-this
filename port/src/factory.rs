@@ -203,7 +203,13 @@ impl Level {
                 o.set(8, o.w(0x10) + 0x30);
                 let (y, x) = (o.w(0x10), o.w(0xe));
                 let id = self.add_actor(world, o, y, x);
-                // DAT_1170_0f2a is 1 after HeroReset: just counts the enemy.
+                // DAT_1170_0f2a is 1 during the level's setup (it counts the enemy), 2 once it
+                // runs: one spawned then growls.
+                if self.in_play {
+                    let o = self.obj(id);
+                    crate::alien::voice(o, 0xa5, o.w(0x10) - 0x18, o.w(0xe));
+                    o.set_b(0x45, 1);
+                }
                 self.take_bonus(world, id);
             }
             0x145a => {
