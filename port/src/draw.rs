@@ -820,7 +820,8 @@ pub fn doors(p: &mut Painter, level: &Level) {
         (0x3412, 32, 0x0454, 0, 0),
         (0x3405, 32, 0x0665, 0, 0),
     ];
-    for d in &level.doors_drawn {
+    for d in if std::env::var_os("ET_DOORNOW").is_some() { &level.doors } else { &level.doors_drawn } {
+        if std::env::var_os("ET_DOORDRAW").is_some() { eprintln!("DOOR kind {} at ({}, {}) progress {} open {}", d.kind, d.x, d.y, d.progress, d.open); }
         let Some(&(base, full, proc_, top, bot)) = T.get(d.kind) else { continue };
         let (x, y) = (d.x * 16 - p.cam.0, d.y * 16 - p.cam.1);
         let prog = d.progress;
@@ -893,7 +894,7 @@ pub fn doors(p: &mut Painter, level: &Level) {
             _ => {
                 // FUN_10a8_0665: a lid up, two leaves sideways, a light.
                 p.clip.1 = y.max(save.1);
-                p.sprite(base, x, y - swing(0x20));
+                p.sprite(base, x, y - swing(0x26));
                 p.clip = save;
                 p.clip.0 = (x + 1).max(save.0);
                 p.sprite(base + 1, x - (0x20 - prog), y);
