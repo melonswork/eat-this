@@ -100,6 +100,13 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             tumble(p);
             sprite += n & 1;
         }
+        // FUN_1050_12f6: the grenade tumbles with its throw's clock (velocity record +8).
+        0x12f6 => {
+            let t = part.v.w(8);
+            if t >= 5 {
+                sprite = 0x195a + ((t / 3 + m.w(0x14) - 0x5a) & 7);
+            }
+        }
         0x13c3 => {
             tumble(p);
             sprite = m.w(0x14) + (n & 3);
