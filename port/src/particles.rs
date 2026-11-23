@@ -113,6 +113,9 @@ pub struct Particle {
     pub m: Obj,
     /// The motion record at +0x46 (its layout depends on the mover).
     pub v: Obj,
+    /// FUN_1050_4ca5 drew it in this frame's update (not one spawned after its group's update,
+    /// nor one that hit something): only the draw reads it.
+    pub drawn: bool,
 }
 
 #[derive(Default)]
@@ -160,6 +163,7 @@ impl Default for Particle {
         Particle {
             m: Obj::new(0, 0, 0x50),
             v: Obj::new(0, 0, 0x20),
+            drawn: false,
         }
     }
 }
@@ -218,6 +222,7 @@ impl Particles {
         let particle = Particle {
             m,
             v: Obj::new(0, 0, 0x20),
+            drawn: false,
         };
         if p.delay != 0 {
             let due = self.now.wrapping_add(p.delay as u32);
@@ -244,6 +249,32 @@ impl Particles {
 
     pub fn spawn_seq(&mut self, sprite: i32, steps: i32, frames: i32, y: i32, x: i32, animate: i32) -> usize {
         self.new_particle(sprite, y, x, Some((steps, frames, animate)))
+    }
+
+    /// Particle `i` drawn as it is now (FUN_1050_4acb: one that bounced or ended).
+    fn draw_now(&mut self, i: usize) {
+        if let Some(p) = self.list.get(i) {
+            let p = p.clone();
+            self.ended.push((p.m.w(0), i, p));
+        }
+    }
+
+    /// Particle `i` drawn without its callback, with sprite `sprite` (the death effects that
+    /// draw what bounces themselves, through 1170:1b54).
+    fn draw_bounce(&mut self, i: usize, sprite: i32) {
+        let mut p = self.list[i].clone();
+        p.m.set(0x14, sprite);
+        p.m.set(0x16, sprite);
+        p.m.set(0x42, 0);
+        p.m.set(0x44, 0);
+        self.ended.push((p.m.w(0), i, p));
+    }
+
+    /// Particle `i` drawn by its callback as if it had just bounced (motion clock 0).
+    fn draw_rolling(&mut self, i: usize) {
+        let mut p = self.list[i].clone();
+        p.v.set(8, 0);
+        self.ended.push((p.m.w(0), i, p));
     }
 
     pub fn last_mut(&mut self) -> &mut Particle {
@@ -513,6 +544,7 @@ impl Particles {
         let particle = Particle {
             m,
             v: Obj::new(0, 0, 0x20),
+            drawn: false,
         };
         if p.delay != 0 {
             let due = self.now.wrapping_add(p.delay as u32);
@@ -946,6 +978,7 @@ impl Level {
                 continue;
             }
             self.particles.current = i;
+            self.particles.list[i].drawn = false;
             {
                 let m = &mut self.particles.list[i].m;
                 m.set(0xc, m.w(8));
@@ -957,6 +990,7 @@ impl Level {
                 self.particle_callback(i, f);
                 let m = &self.particles.list[i].m;
                 if m.w(0x24) < m.w(0x22) {
+                    self.particles.list[i].drawn = true;
                     i += 1;
                     continue;
                 }
@@ -964,22 +998,18 @@ impl Level {
             // LAB_1050_5128: the end of its life.
             let m = &self.particles.list[i].m;
             let (death, flags, state) = (m.w(0x2a), m.w(0x3a), m.w(0x3e));
+            let (hy, hx) = (m.w(0x12), m.w(0x10));
             if !hit {
-                let p = self.particles.list[i].clone();
-                self.particles.ended.push((group, i, p));
+                self.particles.draw_now(i);
             }
             if death == 0 || (flags & 4 != 0 && (state < -9 || state == 0)) {
                 self.particles.remove(i);
             } else {
                 self.particles.keep_dying = true;
-                let (hy, hx) = (m.w(0x12), m.w(0x10));
                 self.particle_effect(death, hy, hx, f);
                 if self.particles.keep_dying {
                     self.particles.remove(i);
                 } else {
-                    if !hit {
-                        self.particles.ended.pop(); // still in the list: drawn there
-                    }
                     i += 1;
                 }
             }
@@ -2109,7 +2139,8 @@ impl Level {
                     m.set(8, m.w(0x10));
                     m.set(0xa, m.w(0x12));
                 }
-                self.particle_callback(i, f);
+                self.particle_callback(i, f); // FUN_1050_4acb
+                self.particles.draw_now(i);
                 let side = self.particles.hit_side;
                 let (py, px) = {
                     let m = &self.particles.list[i].m;
@@ -2143,7 +2174,8 @@ impl Level {
                     m.set(8, m.w(0x10));
                     m.set(0xa, m.w(0x12));
                 }
-                self.particle_callback(i, f);
+                self.particle_callback(i, f); // FUN_1050_4acb
+                self.particles.draw_now(i);
                 let side = self.particles.hit_side;
                 let p = &mut self.particles.list[i];
                 if side < 2 {
@@ -2276,6 +2308,7 @@ impl Level {
             m.set(0xa, m.w(0x12));
         }
         self.particle_callback(i, f); // FUN_1050_4acb
+        self.particles.draw_now(i);
         let side = self.particles.hit_side;
         let p = &mut self.particles.list[i];
         let (m, v) = (&mut p.m, &mut p.v);
@@ -2313,13 +2346,17 @@ impl Level {
         let i = self.particles.current;
         let side = self.particles.hit_side;
         let p = &mut self.particles.list[i];
-        let (m, v) = (&mut p.m, &mut p.v);
+        let m = &mut p.m;
         if m.w(0x3e) == -10 {
             return;
         }
         if m.w(0x24) < m.w(0x22) {
             m.set(8, m.w(0x10));
             m.set(0xa, m.w(0x12));
+            let sprite = m.w(0x16);
+            self.particles.draw_bounce(i, sprite);
+            let p = &mut self.particles.list[i];
+            let (m, v) = (&mut p.m, &mut p.v);
             if side < 2 {
                 if v.l(4) == 0 {
                     self.shell7_blast(f);
@@ -2370,7 +2407,7 @@ impl Level {
         let i = self.particles.current;
         let side = self.particles.hit_side;
         let p = &mut self.particles.list[i];
-        let (m, v) = (&mut p.m, &mut p.v);
+        let m = &mut p.m;
         if m.w(0x3e) == -10 {
             return;
         }
@@ -2378,6 +2415,9 @@ impl Level {
             m.set(8, m.w(0x10));
             m.set(0xa, m.w(0x12));
             m.set(0x16, ((m.uw(0x24) >> 3) & 3) as i32 + 0x1900);
+            self.particles.draw_rolling(i);
+            let p = &mut self.particles.list[i];
+            let (m, v) = (&mut p.m, &mut p.v);
             if side < 2 {
                 m.set(0x3e, 0);
                 m.set(4, m.w(0x10) - (m.w(4) - m.w(0x10)));
@@ -2510,6 +2550,7 @@ impl Level {
             m.set(0xa, m.w(0x12));
         }
         self.particle_callback(i, f); // FUN_1050_4acb
+        self.particles.draw_now(i);
         let side = self.particles.hit_side;
         let p = &mut self.particles.list[i];
         let (m, v) = (&mut p.m, &mut p.v);
@@ -2668,12 +2709,15 @@ impl Level {
         let i = self.particles.current;
         let side = self.particles.hit_side;
         let p = &mut self.particles.list[i];
-        let (m, v) = (&mut p.m, &mut p.v);
+        let m = &mut p.m;
         if m.w(0x3e) == -10 || m.w(0x24) >= m.w(0x22) {
             return;
         }
         m.set(0xa, m.w(0x12));
         m.set(0x16, (m.w(0x24) / 6) % 6 + 0x5215);
+        self.particles.draw_rolling(i);
+        let p = &mut self.particles.list[i];
+        let (m, v) = (&mut p.m, &mut p.v);
         if side < 2 {
             if m.w(6) <= m.w(0xa) || v.l(4) == 0 {
                 return;
@@ -2719,6 +2763,20 @@ impl Level {
         if m.w(0x24) < m.w(0x22) {
             m.set(8, m.w(0x10));
             m.set(0xa, m.w(0x12));
+            // The sprite of its last callback (12f6 / 11e6), a step of its clock ago.
+            let (base, t) = (m.w(0x14), v.w(8) - 1);
+            let sprite = if mine {
+                m.w(0x16)
+            } else if base == 0x1818 {
+                0x1818 - ((m.uw(0x24) >> 3) & 1) as i32
+            } else if t < 5 {
+                base
+            } else {
+                0x195a + ((t / 3 + base - 0x5a) & 7)
+            };
+            self.particles.draw_bounce(i, sprite);
+            let p = &mut self.particles.list[i];
+            let (m, v) = (&mut p.m, &mut p.v);
             if side < 2 {
                 m.set(0x3e, 0);
                 m.set(4, m.w(0x10) - (m.w(4) - m.w(0x10)));

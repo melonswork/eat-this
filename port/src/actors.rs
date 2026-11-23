@@ -319,6 +319,11 @@ impl Level {
             }
             unbounded(o);
         }
+        // Drawn here, before it ticks and falls.
+        let now = self.now;
+        let o = self.o(id);
+        let s = if o.w(0x20) == 0 { 0x4c00 + ((now >> 3) & 1) as i32 } else { 0x4c02 - ((o.w(0x22) >> 3) & 1) };
+        o.looks = vec![crate::objects::Obj::look(s, x, y)];
         if o.w(0x20) == 0 {
             o.set(2, x - 0x50);
             o.set(6, x + 0x50);

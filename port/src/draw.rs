@@ -19,6 +19,11 @@ fn per(p: &Painter, d: u32) -> i32 {
     (p.frame / d) as i32
 }
 
+/// The frame counter shifted right (1168:1083, a long shift: not a division).
+fn shr(p: &Painter, n: u32) -> i32 {
+    (p.frame >> n) as i32
+}
+
 /// FUN_1050_4ca5's drawing for `group`: the record's flips (+0x18, +0x1a) and mode (+0x20),
 /// its sprite +0x16 at (+8, +0xa), or its per-frame procedure's own drawing.
 pub fn particles(p: &mut Painter, level: &Level, world: &crate::world::World, group: i32) {
@@ -31,7 +36,7 @@ pub fn particles(p: &mut Painter, level: &Level, world: &crate::world::World, gr
             p.reset();
             k += 1;
         }
-        if part.m.w(0) != group {
+        if part.m.w(0) != group || !part.drawn {
             continue;
         }
         particle(p, part, world, level);
@@ -560,7 +565,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
                         }
                         p.at((u & 3) + 0x5825, x, y);
                     } else {
-                        p.at(0x580f + (per(p, 3) & 1), x, y);
+                        p.at(0x580f + (shr(p, 3) & 1), x, y);
                         p.at_mode(0x10, 0x580c - (o.uw(0x2e) >> 4) as i32, x, y);
                     }
                 }
@@ -568,13 +573,15 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
             if o.w(0x2c) < 1 {
                 p.flame(800, 0x2d0, p.frame, x, y - 7);
             }
-            let s = if s == 0x5823 { 0x5823 + (per(p, 3) & 1) } else { s };
+            let s = if s == 0x5823 { 0x5823 + (shr(p, 3) & 1) } else { s };
             p.at_flash(o.w(0x26) > 0, s, x, y);
         }
         // FUN_1070_02b3: a mine, blinking faster once it ticks.
         0x13d8 => {
-            if o.w(0x20) == 0 {
-                p.at(0x4c00 + (per(p, 3) & 1), x, y);
+            if !o.looks.is_empty() {
+                looks(p, o);
+            } else if o.w(0x20) == 0 {
+                p.at(0x4c00 + (shr(p, 3) & 1), x, y);
             } else {
                 p.at(0x4c02 - ((o.w(0x22) >> 3) & 1), x, y);
             }
@@ -679,7 +686,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
             p.at(0x3303, x, y);
         }
         // FUN_1070_06f6: a sentry.
-        crate::sentry::KIND => p.at_flash(o.w(0x22) > 0, 0x5212 + (per(p, 4) & 1), x, y),
+        crate::sentry::KIND => p.at_flash(o.w(0x22) > 0, 0x5212 + (shr(p, 4) & 1), x, y),
         _ if std::env::var("ET_DRAW").is_ok() => {
             eprintln!("draw: kind {:#x} at ({x},{y}) not drawn", o.kind)
         }
@@ -700,7 +707,7 @@ pub fn hero_and_drone(p: &mut Painter, hero: &crate::hero::Hero, drone: &crate::
     if drone.active > 0 {
         let y = drone.bob_y();
         p.at(((drone.angle + 0xb4) / 0x168) % 0x10 + 0x900, drone.x, y);
-        p.at(0x910 + (per(p, 4) & 1), drone.x, y);
+        p.at(0x910 + (shr(p, 4) & 1), drone.x, y);
     }
     if hero.frame == 0x7fff {
         return;
@@ -762,13 +769,13 @@ pub fn pickup(p: &mut Painter, k: i32, x: i32, y: i32) {
     let sy = y - ((SHAKE.with(|c| c.get()) as u16) >> 1) as i32;
     match k {
         0 => p.sprite(0x2200 + (f3 & 7), x, sy),
-        1 => shine(p, 0x2208 + ((f3 & 7) < 3) as i32, x, y),
+        1 => shine(p, 0x2208 + ((shr(p, 3) & 7) < 3) as i32, x, y),
         2 => {
-            p.sprite((per(p, 2) & 0xf) + 0x900, x + 7, y + 7);
-            p.sprite((per(p, 4) & 1) + 0x910, x + 7, y + 7);
+            p.sprite((shr(p, 2) & 0xf) + 0x900, x + 7, y + 7);
+            p.sprite((shr(p, 4) & 1) + 0x910, x + 7, y + 7);
         }
         3 => shine(p, 0x2214, x, y),
-        4 => shine(p, 0x220a + f3 % 6, x, y),
+        4 => shine(p, 0x220a + shr(p, 3) % 6, x, y),
         5..=12 => shine(p, 0x2216 + (k - 5), x, y),
         13..=15 => shine(p, 0x2228 + (k - 13), x, y),
         16 => p.sprite(0x2233 - (f3 & 7), x, sy),

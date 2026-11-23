@@ -167,9 +167,7 @@ impl<'a> Painter<'a> {
         if id < 0 || id == 0x7fff {
             return;
         }
-        if std::env::var("ET_DRAWLOG").is_ok() {
-            eprintln!("sprite {id:#06x} at ({x},{y}) mode {:#x} flip {}", self.mode, self.hflip);
-        }
+        self.log("sprite", id, x, y, "");
         let bank = self.bank;
         bank.with(id, |s| self.put(s, x, y));
     }
@@ -196,12 +194,20 @@ impl<'a> Painter<'a> {
         self.mode = 0;
     }
 
+    /// ET_DRAWLOG=1: what is drawn, as `tools/dumpframe.py --draws` lists it.
+    fn log(&self, what: &str, id: i32, x: i32, y: i32, more: &str) {
+        if std::env::var_os("ET_DRAWLOG").is_some() {
+            eprintln!("{what} {id:#06x} at ({x}, {y}) mode {:#x} colour {:#x} flips {}{}{more}", self.mode, self.colour, self.hflip as u8, self.vflip as u8);
+        }
+    }
+
     /// `FUN_10f0_302b(ystep, xstep, id, y, x)`: sprite `id` scaled, reading `xstep` / `ystep`
     /// source pixels (8.8 fixed point, 0x100 = 1:1) per screen pixel, anchor at screen (x, y).
     pub fn scaled(&mut self, id: i32, x: i32, y: i32, xstep: i32, ystep: i32) {
         if id < 0 || id == 0x7fff || xstep <= 0 || ystep <= 0 {
             return;
         }
+        self.log("scaled", id, x, y, &format!(" steps {xstep:#x} {ystep:#x}"));
         let bank = self.bank;
         bank.with(id, |s| {
             let w = (s.width * 0x100) / xstep;
@@ -258,6 +264,7 @@ impl<'a> Painter<'a> {
         if id < 0 || id == 0x7fff {
             return;
         }
+        self.log("half", id, x, y, "");
         let bank = self.bank;
         bank.with(id, |s| {
             let (w, h) = (s.width >> 1, s.height >> 1);
