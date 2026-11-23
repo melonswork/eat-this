@@ -14,9 +14,6 @@ use crate::objects::{Look, Obj, list};
 use crate::particles::Particle;
 use crate::render::{Mix, Painter};
 
-/// The hit flash colour 1170:1b1b (its value at level start).
-pub const FLASH: u8 = 7;
-
 /// The level frame counter divided by `d` (the long divisions the draw code does with 617e).
 fn per(p: &Painter, d: u32) -> i32 {
     (p.frame / d) as i32
@@ -25,21 +22,55 @@ fn per(p: &Painter, d: u32) -> i32 {
 /// FUN_1050_4ca5's drawing for `group`: the record's flips (+0x18, +0x1a) and mode (+0x20),
 /// its sprite +0x16 at (+8, +0xa), or its per-frame procedure's own drawing.
 pub fn particles(p: &mut Painter, level: &Level, world: &crate::world::World, group: i32) {
-    for part in &level.particles.list {
+    // Those that ended this frame were drawn at their place in the list.
+    let ended: Vec<&(i32, usize, Particle)> = level.particles.ended.iter().filter(|e| e.0 == group).collect();
+    let mut k = 0;
+    for (j, part) in level.particles.list.iter().enumerate() {
+        while k < ended.len() && ended[k].1 <= j {
+            particle(p, &ended[k].2, world, level);
+            p.reset();
+            k += 1;
+        }
         if part.m.w(0) != group {
             continue;
         }
-        particle(p, part, world);
+        particle(p, part, world, level);
+        p.reset();
+    }
+    for e in &ended[k..] {
+        particle(p, &e.2, world, level);
         p.reset();
     }
 }
 
-fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
+fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level: &Level) {
     let m = &part.m;
     let (x, y) = (m.w(8), m.w(0xa));
-    p.hflip = m.b(0x18) != 0;
-    p.vflip = m.b(0x1a) != 0;
+    if std::env::var_os("ET_PARTDRAW").is_some() { eprintln!("PART cb {:#x}:{:#x} sprite {:#x} mode {:#x} at ({}, {}) colour {:#x} life {} age {}", m.uw(0x44), m.uw(0x42), m.w(0x16), m.w(0x20), x - p.cam.0, y - p.cam.1, m.w(0x1e), m.w(0x22), m.w(0x24)); }
+    // The callbacks that draw through FUN_10f0_2670 itself rather than the flip table 1170:1b54
+    // ignore the record's flips.
+    let plain = matches!(
+        m.uw(0x42),
+        0x126 | 0x30f | 0x2d2 | 0x1cef | 0x2299 | 0x2459 | 0x2497 | 0x232e | 0x236b | 0x21c5 | 0x1d33 | 0x1c92 | 0x20ed
+            | 0x23b7 | 0x24f1 | 0x253f | 0x274f | 0x4ff | 0x1e16
+    );
+    p.hflip = m.b(0x18) != 0 && !plain;
+    p.vflip = m.b(0x1a) != 0 && !plain;
     p.mode = m.w(0x20);
+    if m.w(0x14) < 0 {
+        // An animation row (FUN_1040_6bd4) may set the flips and the mode for the draw.
+        let e = (0x918 + m.w(0x14) * 0xe) as usize;
+        let (hf, vf, mode) = (crate::world::ds_word(e + 8), crate::world::ds_word(e + 0xa), crate::world::ds_word(e + 0xc));
+        if hf != -1 {
+            p.hflip = hf & 0xff != 0;
+        }
+        if vf != -1 {
+            p.vflip = vf & 0xff != 0;
+        }
+        if mode != -1 {
+            p.mode = mode;
+        }
+    }
     let age = m.w(0x24);
     let step = m.w(0x26).max(1);
     let n = age / step;
@@ -53,7 +84,14 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
     };
     match m.uw(0x42) {
         0x126 => sprite = 0x5638 + ((age + m.w(0x40)) & 1),
-        0x1a3 | 0x30f => p.mode = 0x10,
+        0x1a3 => p.mode = 0x10,
+        0x30f => {
+            // FUN_1050_030f (a bubble): translucent, wobbling 3 px with a sine of its age.
+            p.mode = 0x10;
+            let a = (((age << 7) as i16) as i32 % 0x1680).rem_euclid(0x1680);
+            p.at(sprite, x + (crate::trig::sin(a) * 3) / 0x4000, y);
+            return;
+        }
         0x229 | 0x17f4 => {
             tumble(p);
             sprite += n & 3;
@@ -94,6 +132,63 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
             p.at(0x1906 + ((m.uw(0x24) >> 5) & 1) as i32, x, y - (body & 1));
             return;
         }
+        0x1656 => {
+            // FUN_1050_1656 (a critter): running (0x5215 + age / 6 % 6) while the motion
+            // record's +8 is under 5, else 0x5218.
+            sprite = if part.v.w(8) < 5 { 0x5215 + (age / 6) % 6 } else { 0x5218 };
+        }
+        0x1e16 => {
+            // FUN_1050_1e16 (a block sinking, effect 33; motion record: top-left cell, x, y,
+            // columns - 1, rows - 1): its tiles where they were, cut at the particle's y; lights
+            // (0x1b06, mode 0x28) along that line; flames (mode 0x10, y step age * 0x1000 / life
+            // + 0x300) on it.
+            let v = &part.v;
+            let (base, bx, by, cols, rows) = (v.w(0), v.w(2), v.w(4), v.w(6), v.w(8));
+            let save = p.clip;
+            p.clip.3 = p.clip.3.min(y - p.cam.1);
+            for e in 0..=rows.max(-1) {
+                for c in 0..=cols.max(-1) {
+                    tile_at(p, world, base + e * 0x14 + c, bx + c * 16 - p.cam.0, by + e * 16 - p.cam.1);
+                }
+            }
+            p.clip = save;
+            p.clip.1 = p.clip.1.max(by - p.cam.1);
+            p.mode = 0x28;
+            for c in 0..=cols.max(-1) {
+                p.at(0x1b06, x + c * 16, y);
+            }
+            p.clip = save;
+            p.mode = 0x10;
+            let step = (age * 0x1000) / m.w(0x22).max(1) + 0x300;
+            for c in 0..=cols.max(-1) {
+                p.flame(step, 0x200, age as u32, x + 8 + c * 16, y);
+            }
+            return;
+        }
+        // FUN_1050_0121 is empty; the fire crawlers (14bd) only spawn flames.
+        0x121 | 0x14bd => return,
+        0x26c8 => {
+            // FUN_1050_26c8 (sprayed bits): a pixel blinking between VGA colours 9 and 1, through
+            // MIX in its last 0x1e frames (FUN_10f0_083c / FUN_1050_2662).
+            let c = if age % 4 < 2 { p.vga[9] } else { p.vga[1] };
+            let (sx, sy) = (x - p.cam.0, y - p.cam.1);
+            let (c0, c1, c2, c3) = p.clip;
+            if c0 <= sx && sx <= c2 && c1 <= sy && sy <= c3 {
+                let at = (sy * crate::W + sx) as usize;
+                p.fb[at] = if age < m.w(0x22) - 0x1e {
+                    c
+                } else {
+                    p.tables.mix.as_deref().map_or(c, |t| t[c as usize * 256 + p.fb[at] as usize])
+                };
+            }
+            return;
+        }
+        0x11e6 => {
+            // FUN_1050_11e6 (the grenade): while the motion record's +8 is under 5, 0x1818 or
+            // 0x1817 by 8 frames, else one of 8 by +8 / 3.
+            let k = part.v.w(8);
+            sprite = if k < 5 { 0x1818 - ((m.uw(0x24) >> 3) & 1) as i32 } else { 0x1818 + (k / 3 & 7) };
+        }
         0x2299 => sprite += (age / 4) % 2,
         0x2459 | 0x2497 | 0x2946 => sprite += (age >> 2) & 1,
         0x232e => {
@@ -101,11 +196,25 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
             p.sprite(sprite, x - (p.cam.0 >> 1), y - (p.cam.1 >> 1));
             return;
         }
+        0x1d33 => {
+            // FUN_1050_1d33 (a splash): tint row 4 (6996 = the tint table 4c26), cut at the
+            // hero's sector's water line (4656 +0x16).
+            p.colour = 4;
+            let line = world.sectors.get(level.sector.unwrap_or(0)).map_or(0x7fff, |s| s.water[1]);
+            p.clip.3 = p.clip.3.min(line - p.cam.1 - 1);
+        }
         0x236b => {
+            // FUN_1050_236b (6996, mode 0x34's TINT, = the tint table 4c26).
             p.mode = 0x34;
             p.colour = 2;
         }
-        0x21c5 => sprite = m.w(0x14),
+        0x21c5 => {
+            // FUN_1050_21c5 (a wall block growing back): frame (0xa0 * sin(age * 0x5a0 / life)
+            // / 0x4000) % 16 of its sequence.
+            let life = m.w(0x22).max(1);
+            let a = ((age as i64 * 0x5a0) / life as i64).rem_euclid(0x1680) as i32;
+            sprite = m.w(0x14) + ((crate::trig::sin(a) * 0xa0) / 0x4000) % 0x10;
+        }
         // Burning ground (napalm and the like): a flame scaled by +0x1e / +0x1c, cut at the
         // ground; over its last 0x120 frames the steps grow by k * k >> 5 (2/3 of it across),
         // k = age - life + 0x120: it shrinks away.
@@ -166,7 +275,8 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
             return;
         }
         0x2192 => {
-            p.scaled_at(0x200, 0x200, sprite, x, y);
+            // FUN_1050_2192: half size through FUN_10f0_2d8e.
+            p.half(sprite, x - p.cam.0, y - p.cam.1);
             return;
         }
         0x2588 => {
@@ -185,6 +295,42 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
         _ => {}
     }
     p.at(sprite, x, y);
+}
+
+/// FUN_10f0_445a: map cell `cell` (group << 8 | tile) at screen (x, y) by its draw kind (0 skips
+/// colour 0, 2 opaque, 6 MIX[tile][screen], 8 LIGHT[tile][screen]), clipped.
+fn tile_at(p: &mut Painter, world: &crate::world::World, cell: i32, x: i32, y: i32) {
+    let (gi, t) = ((cell >> 8) as usize, (cell & 0xff) as usize);
+    let Some(Some(g)) = world.groups.get(gi) else { return };
+    if t >= g.len() {
+        return;
+    }
+    let kind = g.infos[t * 16];
+    if kind == 4 || kind == 0xff {
+        return;
+    }
+    let table = match kind {
+        6 => p.tables.mix.as_deref(),
+        8 => p.tables.light.as_deref(),
+        _ => None,
+    };
+    let px = g.tile(t);
+    let (c0, c1, c2, c3) = p.clip;
+    for yy in 0..16 {
+        for xx in 0..16 {
+            let (sx, sy) = (x + xx, y + yy);
+            if sx < c0 || sx > c2 || sy < c1 || sy > c3 {
+                continue;
+            }
+            let c = px[(yy * 16 + xx) as usize];
+            let at = (sy * crate::W + sx) as usize;
+            if let Some(tb) = table {
+                p.fb[at] = tb.get(c as usize * 256 + p.fb[at] as usize).copied().unwrap_or(c);
+            } else if c != 0 || kind == 2 {
+                p.fb[at] = c;
+            }
+        }
+    }
 }
 
 /// The hero's sector's decals (list +0x5a, FUN_1070_fb30).
@@ -282,7 +428,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
         }
         crate::wallgun::KIND => crate::wallgun::draw(p, o),
         crate::weight::KIND => crate::weight::draw(p, o),
-        crate::weight::SLAB => crate::weight::draw_slab(p, o),
+        crate::weight::SLAB => looks(p, o),
         crate::burnwreck::KIND => crate::burnwreck::draw(p, o),
         // FUN_1070_cb38: the granny, sprite +0x3a mirrored by her facing (1170:1b54).
         crate::tank::KIND => crate::tank::draw(p, o),
@@ -305,7 +451,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
             looks(p, o);
         }
         // FUN_1070_1b00: the gunship, rotor then gun, both lit by a hit (rotor 1 px lower, gun
-        // 1 px higher); darkened while it falls (mode 0x24, colour 1b14 = 0).
+        // 1 px higher); darkened while it falls (mode 0x24, colour 1b14).
         0x13e2 => {
             let flash = o.w(0x34) > 0;
             for (i, l) in o.looks.iter().enumerate() {
@@ -314,7 +460,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
                     p.colour = p.flash;
                 } else {
                     p.mode = l.mode;
-                    p.colour = 0;
+                    p.colour = p.black;
                 }
                 let dy = if flash { if i == 0 { 1 } else { -1 } } else { 0 };
                 p.at(l.sprite, l.x, l.y + dy);
@@ -375,8 +521,21 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
         // jet (+0x2c > 0) and, armed, its gun.
         0x145a => {
             let s = o.w(0x32);
+            let mut y = y;
+            let mut lift = 0;
+            if o.w(0x24) == 1 && o.w(0x2a) % 0x100 < 0x40 {
+                // Firing (+0x2a % 0x100 < 0x40): the muzzle light, scaled down over each
+                // 16-frame burst, and the gun's recoil lifts it a pixel late in the burst.
+                let k = (o.w(0x2a) % 0x100) % 0x10;
+                lift = (k > 0xc) as i32;
+                let st = k * -0x70 + 0x790;
+                p.mode = 0x28;
+                p.scaled_at(st, st, 0x1b04, x + 0xe, y - 0xc);
+                p.mode = 0;
+            }
             if o.w(0x2c) > 0 {
                 p.at(((o.uw(0x28) / 3) % 2) as i32 + 0x5800, x, y);
+                y -= lift;
                 if o.w(10) > 0 {
                     if s == 0x5823 {
                         let u = per(p, 6);
@@ -404,9 +563,13 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
                 p.at(0x4c02 - ((o.w(0x22) >> 3) & 1), x, y);
             }
         }
-        // FUN_1070_90f1: a crate (or a box of another kind: sprite table 1170:0e4a).
+        // FUN_1070_90f1: a crate (or a box of another kind: sprite table 1170:0e4a); kind 0 burns.
         0x143c => {
             let k = o.w(10);
+            if k == 0 {
+                // The burning barrel's flame (FUN_1040_6315, +0x24 = its y step).
+                p.flame(o.w(0x24), 0x262, p.frame, x, y - 0xb);
+            }
             let mut s = crate_sprite(k);
             if k == 5 && (p.frame & 0xf) < 8 {
                 s += 1;
@@ -418,7 +581,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
         0x1432 if o.w(0x28) == -0x140 => crate::deaths::draw_statue(p, o, 0x5d00),
         0x1428 => {
             p.hflip = o.w(0x20) < 0;
-            if o.w(0x28) == -500 && o.w(0x2e) > 7 {
+            if o.w(0x28) == -0x14 && o.w(0x2e) > 7 {
                 p.hflip = !p.hflip;
             }
             p.at_flash(o.w(0x2a) > 0, o.w(0x34), x, y);
@@ -508,10 +671,9 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
     }
 }
 
-/// The word at 1170:0e4a + kind * 6 (the box kinds' sprites).
+/// The word at 1170:0e4a + kind * 6 (the box kinds' sprites, 13 of them).
 fn crate_sprite(kind: i32) -> i32 {
-    const T: [i32; 8] = [0x752c, 0x752d, 0x752e, 0x5201, 0x5202, 0x5203, 0x330e, 0x330f];
-    T.get(kind as usize).copied().unwrap_or(0x752c)
+    crate::world::ds_word(0xe4a + (kind.max(0) * 6) as usize)
 }
 
 /// FUN_1088_9d34's drawing: the drone (its sprite turns with its angle, plus a blinking light),
@@ -663,7 +825,7 @@ pub fn platform_objects(p: &mut Painter, level: &Level) {
                     if let Some(&(px, py)) = o.points.first() {
                         let a = o.angle.rem_euclid(0x1680);
                         let (c, sn) = (crate::trig::cos(a), crate::trig::sin(a));
-                        for k in 0..o.radius {
+                        for k in o.first_link..o.radius {
                             p.at(link, px + (c * h * k) / 0x4000, py - (sn * h * k) / 0x4000);
                         }
                     }
@@ -724,7 +886,8 @@ pub fn doors(p: &mut Painter, level: &Level) {
         (0x3412, 32, 0x0454, 0, 0),
         (0x3405, 32, 0x0665, 0, 0),
     ];
-    for d in &level.doors {
+    for d in if std::env::var_os("ET_DOORNOW").is_some() { &level.doors } else { &level.doors_drawn } {
+        if std::env::var_os("ET_DOORDRAW").is_some() { eprintln!("DOOR kind {} at ({}, {}) progress {} open {}", d.kind, d.x, d.y, d.progress, d.open); }
         let Some(&(base, full, proc_, top, bot)) = T.get(d.kind) else { continue };
         let (x, y) = (d.x * 16 - p.cam.0, d.y * 16 - p.cam.1);
         let prog = d.progress;
@@ -761,8 +924,10 @@ pub fn doors(p: &mut Painter, level: &Level) {
                 p.sprite(base + 1, x + u, y);
                 p.clip = save;
                 if proc_ == 0x02ce {
+                    // The shutter drops by 0x40 * sin(progress * 0x5a0 / 32).
                     p.clip.1 = y.max(save.1);
-                    p.sprite(base + 2, x, y - 0x40 + swing(0x40));
+                    let a = (((prog * 0x5a0) as u16) >> 5) as i32;
+                    p.sprite(base + 2, x, y - 0x40 + (0x40 * crate::trig::sin(a % 0x1680)) / 0x4000);
                 }
             }
             0x0454 => {
@@ -795,7 +960,7 @@ pub fn doors(p: &mut Painter, level: &Level) {
             _ => {
                 // FUN_10a8_0665: a lid up, two leaves sideways, a light.
                 p.clip.1 = y.max(save.1);
-                p.sprite(base, x, y - swing(0x20));
+                p.sprite(base, x, y - swing(0x26));
                 p.clip = save;
                 p.clip.0 = (x + 1).max(save.0);
                 p.sprite(base + 1, x - (0x20 - prog), y);
@@ -1030,7 +1195,8 @@ fn status_bar(p: &mut Painter, hero: &crate::hero::Hero) {
 /// water line (`Level::water`, waves included) every screen row is tinted through PalMixSea,
 /// the row picked by a 128-pixel SEATILE texture (slot 0x7c) plus a strength that fades over
 /// the 32 rows under the surface (0x30 on the surface row itself) (FUN_1090_0002). The rows
-/// sway with a sine of their height and drift with the sector's current (+0x1a).
+/// sway with a sine of their height (<< 6) and drift by the frame counter shifted right by the
+/// sector's +0x1a.
 pub fn water(p: &mut Painter, level: &Level, world: &crate::world::World) {
     let Some(sea) = p.tables.sea.as_deref() else { return };
     let sector = level.sector.unwrap_or(0);
@@ -1045,10 +1211,11 @@ pub fn water(p: &mut Painter, level: &Level, world: &crate::world::World) {
     if start > 199 {
         return;
     }
-    let drift = ((cx - frame.wrapping_mul(sec.water[3])) & 0x7f) + 0x80;
-    let rise = if sec.water[0] == 1 { 0 } else { (cy - frame / 2) & 0x7f };
+    // 1168:1083 / 109c are long shifts: the current (+0x1a) is a shift count.
+    let drift = ((cx - ((p.frame as u32) >> (sec.water[3] & 0x1f)) as i32) & 0x7f) + 0x80;
+    let rise = if sec.water[0] == 1 { 0 } else { (cy - (frame >> 2)) & 0x7f };
     for y in start..=199 {
-        let a = ((y + cy) * 6 + frame * 0x10).rem_euclid(0x1680);
+        let a = ((((y + cy) as i64) << 6) + frame as i64 * 0x10).rem_euclid(0x1680) as i32;
         let x0 = -((crate::trig::sin(a) / 0xaaa + drift) & 0x7f);
         let mut row = (rise + y) & 0x7f;
         let strength = if y == surface {

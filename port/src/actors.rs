@@ -494,7 +494,8 @@ impl Level {
             ps.p.on_death = 0;
             ps.p.hits = 0;
             ps.p.group = 1;
-            // FUN_1040_637a: smoke sprites (no Random()).
+            // FUN_1040_637a: the fire left burning (no Random()).
+            crate::alien::smoke_sprite(ps, y, x);
             env.fx.shakes.push((0x18, 0xe));
             crate::sound::play_at(0x4a, y, x);
         } else {

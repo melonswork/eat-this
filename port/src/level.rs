@@ -144,6 +144,8 @@ pub struct Level {
     pub teleports: Vec<Vec<i16>>,
     /// The moving doors (1170:53d2).
     pub doors: Vec<crate::doors::Door>,
+    /// The doors as FUN_10a8_0dab draws them: before it moves them (only the draw reads it).
+    pub doors_drawn: Vec<crate::doors::Door>,
     /// A door started moving this frame (1170:465e = 3).
     pub door_noise: bool,
     /// FUN_10a0_009b's event queue: (due frame, cell, tile, plane), a later one after an equal due.
@@ -236,6 +238,7 @@ impl Level {
             lists: vec![Default::default(); world.sectors.len()],
             teleports: Vec::new(),
             doors: Vec::new(),
+            doors_drawn: Vec::new(),
             door_noise: false,
             pasted: Vec::new(),
             tile_events: Vec::new(),
@@ -978,6 +981,8 @@ pub struct Grinder {
     pub cam_offset: i32,         // 4ee6: the camera sits this far above it
     anim: i32,                   // 4ef0
     pub platform: Option<usize>, // 4ee4
+    /// (4ef0, 4ee0) as GrinderUpdate draws the teeth: before its own update.
+    drawn: (i32, i32),
 }
 
 /// Grinder food (TILES.TXT has no name for it; GrinderUpdate tests it).
@@ -999,6 +1004,7 @@ impl Grinder {
             cam_offset: r[5] as i32,
             anim: 0x400,
             platform: None,
+            drawn: (0x400, y),
         }
     }
 }
@@ -1054,6 +1060,13 @@ impl Level {
                 self.set_cell(world, new, (r * w + c) as u16, rng, fx);
             }
         }
+        // Plane 2's cell at the block's last corner = 0x316: a hidden area found (4eac), once.
+        if let Some(cell) = world.planes[2].as_mut().and_then(|p| p.cells.get_mut((bottom * w + right) as usize)) {
+            if *cell == 0x316 {
+                *cell = 0;
+                fx.secrets += 1;
+            }
+        }
     }
 
     /// GrinderUpdate (1090:1a91), the parts that change the game: trigger, climb, platform,
@@ -1070,6 +1083,7 @@ impl Level {
             return false;
         };
         let (hero_x, hero_y, hero_crouch, _) = hero;
+        g.drawn = (g.anim, g.y);
         if g.speed < 0 {
             if Self::lever_state(world, g.trigger) > 0 {
                 g.speed = 2;
@@ -1142,9 +1156,9 @@ impl Level {
 }
 
 impl Grinder {
-    /// 1170:4ef0, the teeth's animation counter (for the draw pass).
-    pub fn anim(&self) -> i32 {
-        self.anim
+    /// 1170:4ef0 and 4ee0 as the teeth are drawn (GrinderUpdate draws them first).
+    pub fn drawn(&self) -> (i32, i32) {
+        self.drawn
     }
 
     /// FUN_1090_1a70.

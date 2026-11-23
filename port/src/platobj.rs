@@ -24,6 +24,8 @@ pub struct PlatObj {
     pub mode_alt: i32,   // +0x26
     pub count: i32,      // +0x2d
     pub radius: i32,     // +0x2e
+    /// +0x23: the first chain link drawn (1 when the pivot's tile function is 7000).
+    pub first_link: i32,
     pub lever: (i32, i32), // +0x2c, +0x2a
     pub points: Vec<(i32, i32)>,
     pub bbox: (i32, i32, i32, i32),
@@ -72,6 +74,7 @@ impl PlatObj {
             mode_alt: ds_word(0xa6a + byte(2) as usize * 4),
             count: 0,
             radius: 0,
+            first_link: 0,
             lever: (0, 0),
             points: Vec::new(),
             bbox: (0, 0, 0, 0),
@@ -153,6 +156,7 @@ impl PlatObj {
             mode_alt: ds_word(0xa6a + byte(2) as usize * 4),
             count: points.len() as i32,
             radius: start,
+            first_link: 0,
             lever: (lever, if lever != 0 { word(4) } else { 0 }),
             points,
             bbox: (0, 0, 0, 0),
@@ -213,6 +217,7 @@ impl PlatObj {
             mode_alt: 0,
             count: 0,
             radius: 0,
+            first_link: 0,
             lever: (0, 0),
             points: Vec::new(),
             bbox: (0, 0, 0, 0),

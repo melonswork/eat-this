@@ -82,7 +82,7 @@ struct Options {
     demo: Option<PathBuf>,
     headless: bool,
     scale: u32,
-    shot: Option<(u32, PathBuf)>,
+    shot: Option<(Vec<u32>, PathBuf)>,
     trace: Option<(u32, u32)>,
     dump: Option<PathBuf>,
     camera: Option<(i32, i32)>,
@@ -130,10 +130,15 @@ fn options() -> Result<Options, String> {
                 o.camera = Some((x, value()?.parse().map_err(|e| format!("--camera X Y: {e}"))?));
             }
             "--shot" => {
-                let frame = value()?.parse().map_err(|e| format!("--shot FRAME FILE.ppm: {e}"))?;
-                o.shot = Some((frame, value()?.into()));
+                // FRAME[,FRAME...]: with several frames, `%d` in FILE becomes each frame number.
+                let frames = value()?
+                    .split(',')
+                    .map(|f| f.parse())
+                    .collect::<Result<Vec<u32>, _>>()
+                    .map_err(|e| format!("--shot FRAME[,FRAME...] FILE.ppm: {e}"))?;
+                o.shot = Some((frames, value()?.into()));
             }
-            "-h" | "--help" => return Err("usage: eatthis [--data BIN] [--map FILE.MAP | --demo DIR.DMO] [--headless] [--scale N] [--shot FRAME FILE.ppm] [--wav FILE.wav] [--mute]".into()),
+            "-h" | "--help" => return Err("usage: eatthis [--data BIN] [--map FILE.MAP | --demo DIR.DMO] [--headless] [--scale N] [--shot FRAME[,FRAME...] FILE.ppm (%d = frame)] [--wav FILE.wav] [--mute]".into()),
             _ => return Err(format!("unknown argument {a}")),
         }
     }
@@ -282,6 +287,7 @@ impl Game {
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
         let hero_at = (g.hero.x, g.hero.y);
         g.level.doors_near_hero(&mut g.world, hero_at, true);
+        g.background_proc();
         let mut cx = factory::Ctx { hero_x: g.hero.x, rng: &mut g.rng };
         g.level.update_doors(&mut g.world, hero_at, true, &mut cx);
         let mut noise = g.camera.shake_started() as i32;
@@ -299,6 +305,8 @@ impl Game {
         for &(a, b) in &fx.side_shakes {
             g.camera.shake_sideways(a, b);
         }
+        // LevelFirstFrame draws the HUD too (FUN_1088_4b64 -> 2501): the bar's first pixel.
+        g.hero.status_bar();
         for &(a, b) in &fx.shakes {
             g.camera.shake(a, b);
         }
@@ -645,28 +653,7 @@ impl Game {
         }
         self.level.cam = (self.camera.x, self.camera.y);
         storm::bridge_sound(&self.world, self.level.sector.unwrap_or(0), self.level.cam, self.level.particles.now);
-        // The level's background proc (*4c32): GRANNY's collapse (FUN_1088_a481) and its debris
-        // (FUN_1050_4ca5(2)).
-        if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
-            let cam = (self.camera.x, self.camera.y);
-            for (a, b) in self.level.collapse_frame(&self.world, &mut self.rng, cam) {
-                self.camera.shake(a, b);
-            }
-            if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
-                let mut fx2 = Effects::default();
-                let mut pf = particles::Frame {
-                    world: &mut self.world,
-                    rng: &mut self.rng,
-                    fx: &mut fx2,
-                    camera: cam,
-                    hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
-                };
-                self.level.update_particles(2, &mut pf);
-                for (a, b) in std::mem::take(&mut fx2.shakes) {
-                    self.camera.shake(a, b);
-                }
-            }
-        }
+        self.background_proc();
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, false, &mut cx);
         self.hero.hide_in_exit();
@@ -872,6 +859,31 @@ impl Game {
         }
     }
 
+    /// The level's background proc (*4c32, also run by LevelFirstFrame): GRANNY's collapse
+    /// (FUN_1088_a481) and its debris (FUN_1050_4ca5(2)).
+    fn background_proc(&mut self) {
+        if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
+            let cam = (self.camera.x, self.camera.y);
+            for (a, b) in self.level.collapse_frame(&self.world, &mut self.rng, cam) {
+                self.camera.shake(a, b);
+            }
+            if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
+                let mut fx2 = Effects::default();
+                let mut pf = particles::Frame {
+                    world: &mut self.world,
+                    rng: &mut self.rng,
+                    fx: &mut fx2,
+                    camera: cam,
+                    hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
+                };
+                self.level.update_particles(2, &mut pf);
+                for (a, b) in std::mem::take(&mut fx2.shakes) {
+                    self.camera.shake(a, b);
+                }
+            }
+        }
+    }
+
     /// FUN_1088_517a: through the exit to the other end of its teleport record, then
     /// LevelFirstFrame(0) there.
     fn teleport(&mut self) {
@@ -898,6 +910,7 @@ impl Game {
         sound::stop_loops(); // FUN_10e0_03d5
         let hero_at = (self.hero.x, self.hero.y);
         self.level.doors_near_hero(&mut self.world, hero_at, true);
+        self.background_proc();
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, true, &mut cx);
         if std::mem::take(&mut self.level.door_noise) {
@@ -1002,8 +1015,6 @@ struct Graphics {
     /// 1170:512a: the level colour nearest to RGB (0x10, 0x14, 0x19) (FUN_10f0_6039): the rain
     /// is PalMix[512a][pixel].
     rain_colour: u8,
-    /// 1170:1b14: the level colour nearest to black.
-    black: u8,
     /// 1170:1b14..1b23: the level colours nearest to the 16 VGA colours (table 1170:1b24), among
     /// colours 1..=ForegroundColors (LevelLoad, after FUN_10f0_183d).
     vga: [u8; 16],
@@ -1139,11 +1150,6 @@ impl Graphics {
             show_hud: true,
             hud_level: 2,
             storm_palette,
-            // 1170:1b14: the level colour nearest to black (FUN_10f0_6039(0, 0, 0)).
-            black: (0..256).min_by_key(|&i| {
-                let c = colors6[i];
-                (((c[0] as i64).pow(2) + (c[1] as i64).pow(2)).pow(2) + (c[2] as i64).pow(4), i)
-            }).unwrap_or(0) as u8,
             vga: {
                 const VGA: [[i64; 3]; 16] = [
                     [0, 0, 0], [0, 0, 42], [0, 42, 0], [0, 42, 42], [42, 0, 0], [42, 0, 42], [42, 21, 0], [42, 42, 42],
@@ -1185,6 +1191,9 @@ impl Graphics {
     fn draw(&self, g: &Game, fb: &mut [u8]) {
         fb.fill(0);
         let (cam_x, cam_y) = self.camera.unwrap_or((g.camera.x, g.camera.y));
+        if std::env::var("ET_CAM").is_ok() {
+            eprintln!("DRAWCAM {} {cam_x} {cam_y}", g.frame);
+        }
         // The level frame counter as the original's draw sees it: frames completed before this one.
         let frame = g.frame.saturating_sub(1);
         let st = &g.level.storm;
@@ -1220,7 +1229,7 @@ impl Graphics {
                     let fx = (qx << 3) / 9 - (cam_x << 3) / 9;
                     let fy = (qy << 3) / 9 - (cam_y << 3) / 9;
                     let pts = [(x0, y0), (x0 + 0xa0, y0), (fx - 0x20, fy + 99), (fx - 0x50, fy + 0x5b)];
-                    render::fill_polygon(fb, &pts, self.black);
+                    render::fill_polygon(fb, &pts, self.vga[0]);
                 }
             }
         }
@@ -1259,17 +1268,23 @@ impl Graphics {
         }
         self.decor(fb, g, sector, false, (cam_x, cam_y), frame);
         // The map planes, then the platforms (their own planes, at their positions).
-        let mut layers: Vec<(usize, i32, i32)> = vec![(0, 0, 0), (MAIN_PLANE, 0, 0)];
-        layers.extend(
-            g.level
-                .platforms
-                .iter()
-                .flatten()
-                .map(|p| (p.plane, p.x, p.y)),
-        );
-        for (plane, ox, oy) in layers {
+        for plane in [0, MAIN_PLANE] {
             if let Some(pl) = g.world.planes[plane].as_ref() {
-                draw_plane(fb, &g.world, pl, ox - cam_x, oy - cam_y, frame, FULL);
+                draw_plane(fb, &g.world, &self.tables, pl, -cam_x, -cam_y, frame, FULL);
+            }
+        }
+        // FUN_1078_0abd / 0968: each platform clipped to its rectangle w21..w24 (none drawn
+        // outside it).
+        for p in g.level.platforms.iter().flatten() {
+            let (x1, y1) = (p.x - cam_x, p.y - cam_y);
+            let (x2, y2) = (x1 + p.width - 1, y1 + p.height - 1);
+            let (b0, b1, b2, b3) = (p.bounds.0 - cam_x, p.bounds.1 - cam_y, p.bounds.2 - cam_x, p.bounds.3 - cam_y);
+            if !(b0 <= x2 && b1 <= y2 && x1 <= b2 && y1 <= b3) {
+                continue;
+            }
+            let clip = (b0.max(x1), b1.max(y1), b2.min(x2), b3.min(y2));
+            if let Some(pl) = g.world.planes[p.plane].as_ref() {
+                draw_plane(fb, &g.world, &self.tables, pl, x1, y1, frame, clip);
             }
         }
         draw::set_shake(g.camera.shake_amount());
@@ -1287,7 +1302,9 @@ impl Graphics {
             vflip: false,
             mix: render::Mix::Level,
             frame,
-            flash: draw::FLASH,
+            flash: self.vga[7],
+            black: self.vga[0],
+            vga: self.vga,
             clip: render::SCREEN,
         };
         if ship != (0, 0) {
@@ -1306,9 +1323,10 @@ impl Graphics {
         draw::particles(&mut p, &g.level, &g.world, 1);
         if let Some(gr) = &g.level.grinder {
             // GrinderUpdate (GRINDER's foreground proc): eight sets of teeth across the screen.
-            let s = 0x3200 + (((gr.anim() as u16) >> 9) % 8) as i32;
+            let (anim, y) = gr.drawn();
+            let s = 0x3200 + (((anim as u16) >> 9) % 8) as i32;
             for k in 0..8 {
-                p.sprite(s, 0x20 + k * 0x20, gr.y - cam_y);
+                p.sprite(s, 0x20 + k * 0x20, y - cam_y);
             }
         }
         // The level's foreground proc: the water, the sector's foreground decor (list +0x2a).
@@ -1317,7 +1335,9 @@ impl Graphics {
         if g.level.storm.level > 0 {
             // FUN_1090_0567 (START's foreground): the front drops, and a lightning flash of kind
             // 0 tints the whole screen (tint row 3) three frames in six.
+            // Two layers: drops 0x1e.. at 4 px a frame, then 0x3c.. at 5.
             self.rain(fb, g, 0x1e, frame);
+            self.rain(fb, g, 0x3c, frame);
             let st = &g.level.storm;
             if st.flash > 0 && st.kind == 0 && st.flash % 6 < 3 {
                 let row = &self.tables.tint[3 * 256..4 * 256];
@@ -1353,7 +1373,7 @@ impl Graphics {
         }
         let clip = (x0.max(0), y0.max(0), right.min(W - 1), bottom.min(H - 1));
         if a == 0 {
-            draw_plane(fb, &g.world, pl, x0 - 0xa0, y0 - 0x80, frame, clip);
+            draw_plane(fb, &g.world, &self.tables, pl, x0 - 0xa0, y0 - 0x80, frame, clip);
             return;
         }
         let Some(group) = g.world.groups.get(8).and_then(|g| g.as_ref()) else { return };
@@ -1571,7 +1591,7 @@ impl Graphics {
         let Some(mix) = self.tables.mix.as_deref() else { return };
         let row = self.rain_colour as usize * 256;
         for &d in storm::rain_drops()[first..first + n].iter().rev() {
-            let (x, y) = storm::drop_at(d, frame);
+            let (x, y) = storm::drop_at(d, frame, match first { 0 => 3, 0x1e => 4, _ => 5 });
             for k in 0..4 {
                 let (px, py) = (x - k, y - 3 + k);
                 if (0..W).contains(&px) && (0..H).contains(&py) {
@@ -1596,7 +1616,9 @@ impl Graphics {
             vflip: false,
             mix: render::Mix::Level,
             frame,
-            flash: draw::FLASH,
+            flash: self.vga[7],
+            black: self.vga[0],
+            vga: self.vga,
             clip: render::SCREEN,
         }
     }
@@ -1619,7 +1641,9 @@ impl Graphics {
             vflip: false,
             mix: render::Mix::Level,
             frame,
-            flash: draw::FLASH,
+            flash: self.vga[7],
+            black: self.vga[0],
+            vga: self.vga,
             clip: render::SCREEN,
         };
         let got = level::TALLY.with(|t| t.get());
@@ -1687,7 +1711,7 @@ impl Graphics {
             for &x in &xs {
                 // Clipped to the plane's own rectangle.
                 let clip = (-x, -y, -x + pw - 1, -y + ph - 1);
-                draw_plane(fb, &g.world, pl, -x, -y, frame, clip);
+                draw_plane(fb, &g.world, &self.tables, pl, -x, -y, frame, clip);
             }
         }
     }
@@ -1709,7 +1733,11 @@ const FULL: (i32, i32, i32, i32) = (0, 0, W - 1, H - 1);
 
 /// Tiles of `pl` with its top-left corner at screen (ox, oy), within `clip`. Cells with the
 /// sign bit and icon groups are not drawn; animated tiles follow `frame`.
-fn draw_plane(fb: &mut [u8], world: &World, pl: &world::Plane, ox: i32, oy: i32, frame: u32, clip: (i32, i32, i32, i32)) {
+/// FUN_10f0_513c: a tile plane. The tile record's draw kind (byte 0, of the cell before its
+/// animation) picks the run handler (table 1170:1d52): 0 skips colour 0, 2 is opaque, 6 puts
+/// MIX[tile][screen] (PalMix, 1b0c) and 8 LIGHT[tile][screen] (PalMixLight, 1b10) for every
+/// pixel.
+fn draw_plane(fb: &mut [u8], world: &World, tables: &render::Tables, pl: &world::Plane, ox: i32, oy: i32, frame: u32, clip: (i32, i32, i32, i32)) {
     let map = &world.map;
     let (cx1, cy1) = (clip.0.max(0), clip.1.max(0));
     let (cx2, cy2) = (clip.2.min(W - 1), clip.3.min(H - 1));
@@ -1739,7 +1767,17 @@ fn draw_plane(fb: &mut [u8], world: &World, pl: &world::Plane, ox: i32, oy: i32,
             if hidden || (cell & 0xff) as usize >= group.len() {
                 continue;
             }
-            let t = tileanim::tile(&group.infos[(cell & 0xff) as usize * 16..][..16], (cell & 0xff) as u8, frame);
+            let info = &group.infos[(cell & 0xff) as usize * 16..][..16];
+            let t = tileanim::tile(info, (cell & 0xff) as u8, frame);
+            let table = match info[0] {
+                6 => tables.mix.as_deref(),
+                8 => tables.light.as_deref(),
+                _ => None,
+            };
+            let opaque = info[0] == 2;
+            if std::env::var_os("ET_TILEAT").is_some_and(|v| { let v = v.to_string_lossy().to_string(); let mut it = v.split(',').map(|n| n.parse::<i32>().unwrap()); let (qx, qy) = (it.next().unwrap(), it.next().unwrap()); qx >= sx && qx < sx + TILE && qy >= sy && qy < sy + TILE }) {
+                eprintln!("TILEAT cell {cell:#x} t {t} info {:?} plane w {} h {} main w {} origin ({ox},{oy})", info, pl.width, pl.height, world.main().width);
+            }
             let px = group.tile(t as usize);
             for y in 0..TILE {
                 let yy = sy + y;
@@ -1748,9 +1786,15 @@ fn draw_plane(fb: &mut [u8], world: &World, pl: &world::Plane, ox: i32, oy: i32,
                 }
                 for x in 0..TILE {
                     let xx = sx + x;
+                    if xx < cx1 || xx > cx2 {
+                        continue;
+                    }
                     let c = px[(y * TILE + x) as usize];
-                    if c != 0 && xx >= cx1 && xx <= cx2 {
-                        fb[(yy * W + xx) as usize] = c;
+                    let at = (yy * W + xx) as usize;
+                    if let Some(t) = table {
+                        fb[at] = t.get(c as usize * 256 + fb[at] as usize).copied().unwrap_or(c);
+                    } else if c != 0 || opaque {
+                        fb[at] = c;
                     }
                 }
             }
@@ -2045,18 +2089,31 @@ fn run_window(
     Ok(())
 }
 
-/// Runs `frames` frames without a window and writes the last one as a binary PPM.
-fn screenshot(mut game: Game, gfx: &Graphics, frames: u32, path: &Path) -> std::io::Result<()> {
-    for _ in 0..frames {
-        game.step([-1; 9]);
+/// Runs the game without a window and writes frame `frames[i]` as a binary PPM (`%d` in `path`
+/// becomes the frame number).
+fn screenshot(mut game: Game, gfx: &Graphics, frames: &[u32], path: &Path) -> std::io::Result<()> {
+    let mut sorted = frames.to_vec();
+    sorted.sort();
+    let mut at = 0;
+    for f in sorted {
+        while at < f {
+            game.step([-1; 9]);
+            at += 1;
+        }
+        let p = PathBuf::from(path.to_string_lossy().replace("%d", &f.to_string()));
+        shot_frame(&game, gfx, &p)?;
     }
+    Ok(())
+}
+
+fn shot_frame(game: &Game, gfx: &Graphics, path: &Path) -> std::io::Result<()> {
     let mut fb = vec![0u8; (W * H) as usize];
-    gfx.draw(&game, &mut fb);
+    gfx.draw(game, &mut fb);
     if path.extension().is_some_and(|e| e == "bin") {
         return std::fs::write(path, &fb); // the raw indexed frame, for comparing with tools/dumpframe.py
     }
     let mut rgb = vec![0u8; (W * H * 3) as usize];
-    gfx.present(&game, &fb, &mut rgb);
+    gfx.present(game, &fb, &mut rgb);
     let mut out = format!("P6\n{W} {H}\n255\n").into_bytes();
     out.extend(&rgb);
     std::fs::write(path, out)
@@ -2254,7 +2311,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     gfx.camera = o.camera;
     gfx.bg_only = o.bg_only;
     if let Some((frames, path)) = &o.shot {
-        return Ok(screenshot(game, &gfx, *frames, path)?);
+        return Ok(screenshot(game, &gfx, frames, path)?);
     }
     let (data, camera, bg_only) = (o.data.clone(), o.camera, o.bg_only);
     run_window(game, gfx, o.scale, o.mute, data.clone(), map_path, move |path: &Path| {

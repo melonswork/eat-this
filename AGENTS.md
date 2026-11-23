@@ -289,11 +289,26 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
 - HeroClothes= in a script: the hero is PPHEROA/A2/A3 and slot 3 PPDOORA (`sprites::set_clothes`).
 - Fixed 2026-11-22: burning ground FUN_1050_1b90 (flame pulsing with |sin|), weapon 9's balls' lights
   (FUN_1050_16cc), bios spheres / pick-up 16 drawn 45be/2 higher during a vertical shake.
-- Still different: the HUD message blip's sound; platform objects of unported kinds sit at their start;
-  FORPLANE's skull barrel (crate sprite 0x752c) has the right shape but other colours (SVN's fitting?);
-  small flame-shape differences of FUN_1040_6315 flames (LEVEL3_1 6000); FOREST03's top windows (LEVEL2_2 300,
-  same with proc 4 or 10); CITY03's burning barrel flame; START's big explosion cloud (LEVEL1_1 1000); the
-  other typed cheats; MOVIE cheat's movie2.spr.
+- Fixed 2026-11-23 (branch claude/render-gaps2, all scenario demos compared with dumpframe): water tint
+  (rise frame >> 2, drift frame >> +0x1a: 1168:1083 is a SHIFT, 109c shl), short 0x2718 records read past their end,
+  LevelFirstFrame runs the background proc (collapse) and the HUD update, particles drawn on the frame they end,
+  doors and the falling sign drawn with their state before the update, tile draw kinds (513c: 2 opaque, 6 MIX,
+  8 LIGHT), mode 0x20 = opaque span copy, 302b top = ((hot_y-1)*256)/ystep+1, half-size 2d8e, 1b1b/1b14 = VGA
+  colours 7/0, crates from table 0e4a (13 kinds), grinder teeth, grenades, critters, splashes, robot muzzle light,
+  barrel flame/fire, wall regrow frames, door kind 3 shutter, swing chain first link, hidden areas of sensitive
+  levers. `--shot F1,F2 file_%d.ppm`, `dumpframe.py --peek @PTR+ADD:LEN`, `ET_TILEAT=x,y`, `ET_PARTDRAW=1`.
+- Fixed 2026-11-23 (second pass): small alien's turn flip (state -0x14), particle callbacks that draw through
+  10f0:2670 directly ignore the record's flips (1b54 is the flip table), negative particle sprites = animation rows
+  of 1170:0918 (FUN_1040_6bd4, evaluated with 617e = age; the tank's fireballs), sprayed bits 26c8 (VGA pixels),
+  bubbles' wobble, platforms clipped to w21..w24 (FUN_1078_0968), door kind 7's lid 0x26, START's rain layers
+  (0x1e.. at 617e*4, 0x3c.. at 617e*5; the splash test uses the *4 layer), smoke 2192 half size, sinking blocks 1e16
+  (`draw::tile_at` = FUN_10f0_445a). `--shot` frames, the Painter's `vga` array, `ET_DOORDRAW`/`ET_DOORNOW`.
+- Still different: FOREST03's top windows (LEVEL2_2 300: the original also has opaque kind-2 tile 0x1ba in its main
+  plane there, yet shows the forest); FX2 (CITY_I01) shows the movie 99 frames ahead of (617e/4) % 198 though the
+  CD demos and CITY02 match; TANKGRAB1's red bits (callback 23b7, same code: their motion differs somewhere);
+  small leftovers (<= 150 px) in PATHPLAT1 1083, START 3000, WEAPON3 235, TANK1/TANK2, CARRIER1/SPLASH1 early
+  (girder over the carrier's hull), LEVEL1_2 1600/6600, FOREST04 20300; doors' emerging aliens (0dab, mode 0x24
+  sprites 0x570a/0x5b4c) not drawn; the other typed cheats; MOVIE cheat's movie2.spr.
   Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`,
   `ET_MSG=1` the messages shown, `ET_HEALTH=1` the health each frame, `ET_NOPROCS=1` ignores command 0x15,
   `ET_AUTOMAP=1`, `ET_TOTALS=1`; `--bg-only` stops where dumpframe's .bg does (first FUN_1068_09bf), but the

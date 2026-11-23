@@ -224,6 +224,9 @@ impl Level {
     pub(crate) fn slab(&mut self, id: usize, env: &mut Env) {
         let h = env.h;
         let (x, y, t) = (self.o(id).w(0xe), self.o(id).w(0x10), self.o(id).w(0x16));
+        // The draw comes first (the position before this update), not while it hangs.
+        let o = self.o(id);
+        o.looks = if t > -2 { vec![crate::objects::Obj::look((y - o.w(0x14)) / 0x14 + 0x3300, x, y)] } else { Vec::new() };
         if t == -2 {
             if y <= h.y && h.y <= y + 0x60 && ((h.x - x) - 0x40).abs() < 0x10 {
                 clear_joined(env.world, 60300, y, x);
@@ -280,12 +283,6 @@ fn clear_joined(world: &mut crate::world::World, f: u16, y: i32, x: i32) {
         world.main_mut().cells[((cy >> 4) * width + (cx as u16 >> 4) as i32) as usize] = 0;
         stack.extend([(cx - 0x10, cy), (cx + 0x10, cy), (cx, cy - 0x10), (cx, cy + 0x10)]);
     }
-}
-
-/// FUN_1068_1f3c's draw: the slab, its sprite by how far it has fallen.
-pub fn draw_slab(p: &mut crate::render::Painter, o: &crate::objects::Obj) {
-    let (x, y) = (o.w(0xe), o.w(0x10));
-    p.at((y - o.w(0x14)) / 0x14 + 0x3300, x, y);
 }
 
 /// FUN_1040_677d: a press lands: thirteen bits fly up.

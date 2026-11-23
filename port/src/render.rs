@@ -10,7 +10,8 @@
 //! | 1ae0 | effect |
 //! |------|--------|
 //! | 0    | copy, only over pixels <= 1ae2 (the background range: foreground tiles stay in front) |
-//! | 4, 0x20 | plain copy |
+//! | 4    | plain copy (colour 0 skipped) |
+//! | 0x20 | opaque copy of each row's span (colour 0 inside it written) |
 //! | 8    | fill with colour 1ae3, behind the foreground |
 //! | 0xc, 0x18 | through the 256-byte table 1170:678c (not ported: plain copy / skipped) |
 //! | 0x10 | MIX[src][dst], behind the foreground (translucent) |
@@ -129,8 +130,12 @@ pub struct Painter<'a> {
     pub mix: Mix,
     /// The level frame counter as the draw code sees it (DAT_1170_617e).
     pub frame: u32,
-    /// The hit flash colour, 1170:1b1b.
+    /// The hit flash colour, 1170:1b1b (VGA colour 7 of the level).
     pub flash: u8,
+    /// 1170:1b14 (VGA colour 0 of the level).
+    pub black: u8,
+    /// 1170:1b14..1b23: the level's colours nearest to the 16 VGA colours.
+    pub vga: [u8; 16],
     /// 1170:1aca..1ad0: the clip rectangle (left, top, right, bottom), inclusive.
     pub clip: (i32, i32, i32, i32),
 }
@@ -215,7 +220,8 @@ impl<'a> Painter<'a> {
             let scaled = crate::data::Sprite {
                 width: w,
                 height: h,
-                hotspot: ((s.hotspot.0 * 0x100) / xstep, (s.hotspot.1 * 0x100) / ystep + 1),
+                // 10f0:3080: the top is ((hot_y - 1) * 0x100) / ystep + 1.
+                hotspot: ((s.hotspot.0 * 0x100) / xstep, ((s.hotspot.1 - 1) * 0x100) / ystep + 1),
                 pixels: px,
                 extra: Vec::new(),
             };
@@ -238,11 +244,49 @@ impl<'a> Painter<'a> {
     pub fn flame(&mut self, ystep: i32, xstep: i32, t: u32, x: i32, y: i32) {
         let id = ((t / 3) % 0x10) as i32 + 0x6a00;
         let (x, y) = (x - self.cam.0, y - self.cam.1);
-        if xstep == 0x100 && ystep == 0x100 {
-            self.sprite(id, x, y);
+        if xstep == 0x200 && ystep == 0x200 {
+            self.half(id, x, y);
         } else {
             self.scaled(id, x, y, xstep, ystep);
         }
+    }
+
+    /// FUN_10f0_2d8e: sprite `id` at half size (every other row from the first, every other
+    /// pixel from each row's first opaque one, the hotspot halved toward zero), anchor at
+    /// screen (x, y).
+    pub fn half(&mut self, id: i32, x: i32, y: i32) {
+        if id < 0 || id == 0x7fff {
+            return;
+        }
+        let bank = self.bank;
+        bank.with(id, |s| {
+            let (w, h) = (s.width >> 1, s.height >> 1);
+            if w <= 0 || h <= 0 {
+                return;
+            }
+            let mut px = vec![0u8; (w * h) as usize];
+            for yy in 0..h {
+                // The row's span (its first opaque pixel, its opaque width): screen pixel
+                // start / 2 + k shows source pixel start + 2k.
+                let row = &s.pixels[(yy * 2 * s.width) as usize..((yy * 2 + 1) * s.width) as usize];
+                let Some(start) = row.iter().position(|&c| c != 0) else { continue };
+                let end = row.iter().rposition(|&c| c != 0).unwrap_or(start) + 1;
+                for k in 0..((end - start) >> 1) {
+                    let xx = (start >> 1) + k;
+                    if (xx as i32) < w {
+                        px[(yy * w) as usize + xx] = row[start + 2 * k];
+                    }
+                }
+            }
+            let half = crate::data::Sprite {
+                width: w,
+                height: h,
+                hotspot: (s.hotspot.0 / 2, s.hotspot.1 / 2),
+                pixels: px,
+                extra: Vec::new(),
+            };
+            self.put(&half, x, y);
+        });
     }
 
     fn put(&mut self, s: &crate::data::Sprite, x: i32, y: i32) {
@@ -269,6 +313,13 @@ impl<'a> Painter<'a> {
                 continue;
             }
             let srow = if self.vflip { h - 1 - row } else { row };
+            // Mode 0x20 (10f0:24fd) copies the row's whole span, colour 0 inside it included.
+            let span = if mode == 0x20 {
+                let r = &s.pixels[(srow * w) as usize..((srow + 1) * w) as usize];
+                r.iter().position(|&c| c != 0).map(|a| (a as i32, r.iter().rposition(|&c| c != 0).unwrap_or(a) as i32))
+            } else {
+                None
+            };
             for col in 0..w {
                 let sx = left + col;
                 if sx < c0 || sx > c2 {
@@ -280,7 +331,8 @@ impl<'a> Painter<'a> {
                 let dst = self.fb[at];
                 let behind = dst <= fg;
                 let out = match mode {
-                    4 | 0x20 | 0xc => (src != 0).then_some(src),
+                    0x20 => span.is_some_and(|(a, b)| (a..=b).contains(&scol)).then_some(src),
+                    4 | 0xc => (src != 0).then_some(src),
                     0x18 => None,
                     8 => (src != 0 && behind).then_some(colour),
                     0x10 => (src != 0 && behind)

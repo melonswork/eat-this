@@ -31,9 +31,10 @@ pub fn rain_drops() -> &'static [(i32, i32)] {
 }
 
 /// Where drop `d` is on the screen when the level frame counter is `now` (before the -3 of
-/// FUN_1090_0390, which draws it from 3 rows above, going down-left).
-pub fn drop_at(d: (i32, i32), now: u32) -> (i32, i32) {
-    let t = (now as u16).wrapping_mul(3);
+/// FUN_1090_0390, which draws it from 3 rows above, going down-left): the drops behind the
+/// tiles (FUN_1090_0418) move `speed` 3 px a frame, those in front (FUN_1090_0567) 4.
+pub fn drop_at(d: (i32, i32), now: u32, speed: u16) -> (i32, i32) {
+    let t = (now as u16).wrapping_mul(speed);
     ((0x148u16.wrapping_sub(t) as i32 + d.0) % 0x148, (t as i32 + d.1) % 0xd0)
 }
 
@@ -46,7 +47,7 @@ impl Level {
             return;
         }
         for k in (0x1e..0x1e + n as usize).rev() {
-            let (sx, sy) = drop_at(rain_drops()[k], self.now);
+            let (sx, sy) = drop_at(rain_drops()[k], self.now, 4);
             let (x, y) = (sx + cam.0 - 4, sy + cam.1);
             if world.solidity_at(y, x) & 0x201 != 0 && world.solidity_at(y - 4, x) & 0x201 == 0 {
                 self.particles.p.colour = 0x10;
