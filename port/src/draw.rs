@@ -368,7 +368,21 @@ pub fn decals(p: &mut Painter, level: &Level) {
                 p.at(o.w(0x20), o.w(0xe), o.w(0x10) - 1);
             }
             crate::decals::SPLAT => {
-                p.at_mode(0x10, o.w(0xe), o.w(0xa), o.w(0xc));
+                // FUN_1058_0301: a fresh one runs down the wall (y step 0x200 - age / 2 until
+                // 0x100); 0x5322 also its drops 0x5328, slower.
+                let age = p.frame.wrapping_sub(o.l(0x10) as u32);
+                p.mode = 0x10;
+                let mut run = |id: i32, step: i64| {
+                    if step <= 0x100 {
+                        p.at(id, o.w(0xa), o.w(0xc));
+                    } else {
+                        p.scaled_at(step as i32, 0x100, id, o.w(0xa), o.w(0xc));
+                    }
+                };
+                run(o.w(0xe), 0x200 - i64::from(age >> 1));
+                if o.w(0xe) == 0x5322 {
+                    run(0x5328, 0x200 - i64::from(age >> 2));
+                }
             }
             _ => {}
         }

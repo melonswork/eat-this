@@ -3175,7 +3175,9 @@ fn blast_damage(m: &Obj, bottom: i32, right: i32, top: i32, left: i32) -> i32 {
     let d = if px < left {
         vertical(((left - px) * 0x40) / (x2 - px))
     } else if right < px {
-        vertical(((px - right) * 0x40) / (px - x1))
+        // (The original divides by the distance to the RIGHT edge: negative, so more than the
+        // full damage.)
+        vertical(((px - right) * 0x40) / (px - x2))
     } else if py < top {
         ((top - py) * 0x40) / (y2 - py)
     } else if bottom < py {
