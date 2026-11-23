@@ -1272,7 +1272,7 @@ impl Graphics {
         );
         for (plane, ox, oy) in layers {
             if let Some(pl) = g.world.planes[plane].as_ref() {
-                draw_plane(fb, &g.world, pl, ox - cam_x, oy - cam_y, frame, FULL);
+                draw_plane(fb, &g.world, &self.tables, pl, ox - cam_x, oy - cam_y, frame, FULL);
             }
         }
         draw::set_shake(g.camera.shake_amount());
@@ -1358,7 +1358,7 @@ impl Graphics {
         }
         let clip = (x0.max(0), y0.max(0), right.min(W - 1), bottom.min(H - 1));
         if a == 0 {
-            draw_plane(fb, &g.world, pl, x0 - 0xa0, y0 - 0x80, frame, clip);
+            draw_plane(fb, &g.world, &self.tables, pl, x0 - 0xa0, y0 - 0x80, frame, clip);
             return;
         }
         let Some(group) = g.world.groups.get(8).and_then(|g| g.as_ref()) else { return };
@@ -1694,7 +1694,7 @@ impl Graphics {
             for &x in &xs {
                 // Clipped to the plane's own rectangle.
                 let clip = (-x, -y, -x + pw - 1, -y + ph - 1);
-                draw_plane(fb, &g.world, pl, -x, -y, frame, clip);
+                draw_plane(fb, &g.world, &self.tables, pl, -x, -y, frame, clip);
             }
         }
     }
@@ -1716,7 +1716,11 @@ const FULL: (i32, i32, i32, i32) = (0, 0, W - 1, H - 1);
 
 /// Tiles of `pl` with its top-left corner at screen (ox, oy), within `clip`. Cells with the
 /// sign bit and icon groups are not drawn; animated tiles follow `frame`.
-fn draw_plane(fb: &mut [u8], world: &World, pl: &world::Plane, ox: i32, oy: i32, frame: u32, clip: (i32, i32, i32, i32)) {
+/// FUN_10f0_513c: a tile plane. The tile record's draw kind (byte 0, of the cell before its
+/// animation) picks the run handler (table 1170:1d52): 0 skips colour 0, 2 is opaque, 6 puts
+/// MIX[tile][screen] (PalMix, 1b0c) and 8 LIGHT[tile][screen] (PalMixLight, 1b10) for every
+/// pixel.
+fn draw_plane(fb: &mut [u8], world: &World, tables: &render::Tables, pl: &world::Plane, ox: i32, oy: i32, frame: u32, clip: (i32, i32, i32, i32)) {
     let map = &world.map;
     let (cx1, cy1) = (clip.0.max(0), clip.1.max(0));
     let (cx2, cy2) = (clip.2.min(W - 1), clip.3.min(H - 1));
@@ -1746,7 +1750,14 @@ fn draw_plane(fb: &mut [u8], world: &World, pl: &world::Plane, ox: i32, oy: i32,
             if hidden || (cell & 0xff) as usize >= group.len() {
                 continue;
             }
-            let t = tileanim::tile(&group.infos[(cell & 0xff) as usize * 16..][..16], (cell & 0xff) as u8, frame);
+            let info = &group.infos[(cell & 0xff) as usize * 16..][..16];
+            let t = tileanim::tile(info, (cell & 0xff) as u8, frame);
+            let table = match info[0] {
+                6 => tables.mix.as_deref(),
+                8 => tables.light.as_deref(),
+                _ => None,
+            };
+            let opaque = info[0] == 2;
             let px = group.tile(t as usize);
             for y in 0..TILE {
                 let yy = sy + y;
@@ -1755,9 +1766,15 @@ fn draw_plane(fb: &mut [u8], world: &World, pl: &world::Plane, ox: i32, oy: i32,
                 }
                 for x in 0..TILE {
                     let xx = sx + x;
+                    if xx < cx1 || xx > cx2 {
+                        continue;
+                    }
                     let c = px[(y * TILE + x) as usize];
-                    if c != 0 && xx >= cx1 && xx <= cx2 {
-                        fb[(yy * W + xx) as usize] = c;
+                    let at = (yy * W + xx) as usize;
+                    if let Some(t) = table {
+                        fb[at] = t.get(c as usize * 256 + fb[at] as usize).copied().unwrap_or(c);
+                    } else if c != 0 || opaque {
+                        fb[at] = c;
                     }
                 }
             }
