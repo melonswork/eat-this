@@ -3066,10 +3066,27 @@ fn spawn_effect(id: i32, y: i32, x: i32) {
 /// FUN_1050_00a7: the frame to draw. Animations (negative sprites) aren't ported.
 fn sprite_frame(m: &mut Obj) {
     let mut s = m.w(0x14);
+    if s < 0 {
+        s = anim_sprite(s, m.w(0x24));
+    }
     if m.w(2) == 1 && m.w(0x26) != 0 {
         s += m.w(0x24) / m.w(0x26);
     }
     m.set(0x16, s);
+}
+
+/// FUN_1040_6bd4 (with 617e = the particle's age, FUN_1050_00a7): a negative sprite number is an
+/// animation, row `id` of the table at 1170:0918 (0xe bytes: first sprite, frames (1 = still),
+/// frames per step, ping-pong flag, then flip / vflip / mode overrides, -1 = keep).
+pub fn anim_sprite(id: i32, age: i32) -> i32 {
+    use crate::world::ds_word;
+    let e = (0x918 + id * 0xe) as usize;
+    let (first, n, div, pingpong) = (ds_word(e), ds_word(e + 2), ds_word(e + 4), ds_word(e + 6));
+    if n == 1 || n <= 0 || div <= 0 {
+        return first;
+    }
+    let t = age / div;
+    first + if pingpong == 0 { t % n } else if n > 1 { (n - 1) - (t % (2 * n - 2) - (n - 1)).abs() } else { 0 }
 }
 
 /// FUN_1050_4b17(particle, bottom, right, top, left): a blast's damage to a box, full at the

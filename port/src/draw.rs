@@ -46,13 +46,27 @@ pub fn particles(p: &mut Painter, level: &Level, world: &crate::world::World, gr
 fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level: &Level) {
     let m = &part.m;
     let (x, y) = (m.w(8), m.w(0xa));
-    if std::env::var_os("ET_PARTDRAW").is_some() { eprintln!("PART cb {:#x} sprite {:#x} mode {:#x} at ({}, {})", m.uw(0x42), m.w(0x16), m.w(0x20), x - p.cam.0, y - p.cam.1); }
+    if std::env::var_os("ET_PARTDRAW").is_some() { eprintln!("PART cb {:#x}:{:#x} sprite {:#x} mode {:#x} at ({}, {}) colour {:#x} life {} age {}", m.uw(0x44), m.uw(0x42), m.w(0x16), m.w(0x20), x - p.cam.0, y - p.cam.1, m.w(0x1e), m.w(0x22), m.w(0x24)); }
     // The callbacks that draw through FUN_10f0_2670 itself rather than the flip table 1170:1b54
     // ignore the record's flips.
     let plain = matches!(m.uw(0x42), 0x126 | 0x30f | 0x2d2 | 0x1cef | 0x2299 | 0x2459 | 0x2497 | 0x232e | 0x236b | 0x21c5 | 0x1d33);
     p.hflip = m.b(0x18) != 0 && !plain;
     p.vflip = m.b(0x1a) != 0 && !plain;
     p.mode = m.w(0x20);
+    if m.w(0x14) < 0 {
+        // An animation row (FUN_1040_6bd4) may set the flips and the mode for the draw.
+        let e = (0x918 + m.w(0x14) * 0xe) as usize;
+        let (hf, vf, mode) = (crate::world::ds_word(e + 8), crate::world::ds_word(e + 0xa), crate::world::ds_word(e + 0xc));
+        if hf != -1 {
+            p.hflip = hf & 0xff != 0;
+        }
+        if vf != -1 {
+            p.vflip = vf & 0xff != 0;
+        }
+        if mode != -1 {
+            p.mode = mode;
+        }
+    }
     let age = m.w(0x24);
     let step = m.w(0x26).max(1);
     let n = age / step;
