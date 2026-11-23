@@ -286,6 +286,7 @@ impl Game {
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
         let hero_at = (g.hero.x, g.hero.y);
         g.level.doors_near_hero(&mut g.world, hero_at, true);
+        g.background_proc();
         let mut cx = factory::Ctx { hero_x: g.hero.x, rng: &mut g.rng };
         g.level.update_doors(&mut g.world, hero_at, true, &mut cx);
         let mut noise = g.camera.shake_started() as i32;
@@ -646,28 +647,7 @@ impl Game {
         }
         self.level.cam = (self.camera.x, self.camera.y);
         storm::bridge_sound(&self.world, self.level.sector.unwrap_or(0), self.level.cam, self.level.particles.now);
-        // The level's background proc (*4c32): GRANNY's collapse (FUN_1088_a481) and its debris
-        // (FUN_1050_4ca5(2)).
-        if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
-            let cam = (self.camera.x, self.camera.y);
-            for (a, b) in self.level.collapse_frame(&self.world, &mut self.rng, cam) {
-                self.camera.shake(a, b);
-            }
-            if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
-                let mut fx2 = Effects::default();
-                let mut pf = particles::Frame {
-                    world: &mut self.world,
-                    rng: &mut self.rng,
-                    fx: &mut fx2,
-                    camera: cam,
-                    hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
-                };
-                self.level.update_particles(2, &mut pf);
-                for (a, b) in std::mem::take(&mut fx2.shakes) {
-                    self.camera.shake(a, b);
-                }
-            }
-        }
+        self.background_proc();
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, false, &mut cx);
         self.hero.hide_in_exit();
@@ -873,6 +853,31 @@ impl Game {
         }
     }
 
+    /// The level's background proc (*4c32, also run by LevelFirstFrame): GRANNY's collapse
+    /// (FUN_1088_a481) and its debris (FUN_1050_4ca5(2)).
+    fn background_proc(&mut self) {
+        if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
+            let cam = (self.camera.x, self.camera.y);
+            for (a, b) in self.level.collapse_frame(&self.world, &mut self.rng, cam) {
+                self.camera.shake(a, b);
+            }
+            if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
+                let mut fx2 = Effects::default();
+                let mut pf = particles::Frame {
+                    world: &mut self.world,
+                    rng: &mut self.rng,
+                    fx: &mut fx2,
+                    camera: cam,
+                    hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
+                };
+                self.level.update_particles(2, &mut pf);
+                for (a, b) in std::mem::take(&mut fx2.shakes) {
+                    self.camera.shake(a, b);
+                }
+            }
+        }
+    }
+
     /// FUN_1088_517a: through the exit to the other end of its teleport record, then
     /// LevelFirstFrame(0) there.
     fn teleport(&mut self) {
@@ -899,6 +904,7 @@ impl Game {
         sound::stop_loops(); // FUN_10e0_03d5
         let hero_at = (self.hero.x, self.hero.y);
         self.level.doors_near_hero(&mut self.world, hero_at, true);
+        self.background_proc();
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, true, &mut cx);
         if std::mem::take(&mut self.level.door_noise) {
@@ -1186,6 +1192,9 @@ impl Graphics {
     fn draw(&self, g: &Game, fb: &mut [u8]) {
         fb.fill(0);
         let (cam_x, cam_y) = self.camera.unwrap_or((g.camera.x, g.camera.y));
+        if std::env::var("ET_CAM").is_ok() {
+            eprintln!("DRAWCAM {} {cam_x} {cam_y}", g.frame);
+        }
         // The level frame counter as the original's draw sees it: frames completed before this one.
         let frame = g.frame.saturating_sub(1);
         let st = &g.level.storm;
