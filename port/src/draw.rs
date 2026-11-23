@@ -277,7 +277,10 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             p.scaled_at(k, k, sprite + (n & 7), x, y);
             return;
         }
+        // FUN_1050_253f: mode 0x30 (PalMixLight) in its last frames.
+        0x253f if age > 0x13 => p.mode = 0x30,
         0x2148 => {
+            if std::env::var_os("ET_PARTDRAW").is_some() { eprintln!("  steps {:#x} {:#x}", m.w(0x1e), m.w(0x1c)); }
             p.scaled_at(m.w(0x1e), m.w(0x1c), sprite, x, y);
             return;
         }
