@@ -247,7 +247,8 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             return;
         }
         0x2192 => {
-            p.scaled_at(0x200, 0x200, sprite, x, y);
+            // FUN_1050_2192: half size through FUN_10f0_2d8e.
+            p.half(sprite, x - p.cam.0, y - p.cam.1);
             return;
         }
         0x2588 => {
