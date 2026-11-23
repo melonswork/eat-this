@@ -134,7 +134,13 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             p.mode = 0x34;
             p.colour = 2;
         }
-        0x21c5 => sprite = m.w(0x14),
+        0x21c5 => {
+            // FUN_1050_21c5 (a wall block growing back): frame (0xa0 * sin(age * 0x5a0 / life)
+            // / 0x4000) % 16 of its sequence.
+            let life = m.w(0x22).max(1);
+            let a = ((age as i64 * 0x5a0) / life as i64).rem_euclid(0x1680) as i32;
+            sprite = m.w(0x14) + ((crate::trig::sin(a) * 0xa0) / 0x4000) % 0x10;
+        }
         // Burning ground (napalm and the like): a flame scaled by +0x1e / +0x1c, cut at the
         // ground; over its last 0x120 frames the steps grow by k * k >> 5 (2/3 of it across),
         // k = age - life + 0x120: it shrinks away.
