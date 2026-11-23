@@ -805,8 +805,10 @@ pub fn doors(p: &mut Painter, level: &Level) {
                 p.sprite(base + 1, x + u, y);
                 p.clip = save;
                 if proc_ == 0x02ce {
+                    // The shutter drops by 0x40 * sin(progress * 0x5a0 / 32).
                     p.clip.1 = y.max(save.1);
-                    p.sprite(base + 2, x, y - 0x40 + swing(0x40));
+                    let a = (((prog * 0x5a0) as u16) >> 5) as i32;
+                    p.sprite(base + 2, x, y - 0x40 + (0x40 * crate::trig::sin(a % 0x1680)) / 0x4000);
                 }
             }
             0x0454 => {
