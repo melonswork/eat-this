@@ -403,8 +403,21 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
         // jet (+0x2c > 0) and, armed, its gun.
         0x145a => {
             let s = o.w(0x32);
+            let mut y = y;
+            let mut lift = 0;
+            if o.w(0x24) == 1 && o.w(0x2a) % 0x100 < 0x40 {
+                // Firing (+0x2a % 0x100 < 0x40): the muzzle light, scaled down over each
+                // 16-frame burst, and the gun's recoil lifts it a pixel late in the burst.
+                let k = (o.w(0x2a) % 0x100) % 0x10;
+                lift = (k > 0xc) as i32;
+                let st = k * -0x70 + 0x790;
+                p.mode = 0x28;
+                p.scaled_at(st, st, 0x1b04, x + 0xe, y - 0xc);
+                p.mode = 0;
+            }
             if o.w(0x2c) > 0 {
                 p.at(((o.uw(0x28) / 3) % 2) as i32 + 0x5800, x, y);
+                y -= lift;
                 if o.w(10) > 0 {
                     if s == 0x5823 {
                         let u = per(p, 6);
