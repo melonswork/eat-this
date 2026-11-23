@@ -1,0 +1,18 @@
+# Tile effect 33 (FUN_1040_39a1: the block sinks out of sight: it leaves the main plane, a particle 
+# (callback 0x1e16, mover 0x3ab8) draws it going down, FUN_1088_12f9 for the cell under it): 
+# GRANNY's block at (912..927, 928..943), mask 7 (blasts; bullets pass it). The start moved right 
+# of it with a weapon-3 pick-up copied there: rockets (effects 53/54 around too).
+level MAPS/GRANNY.MAP
+start 980 970
+cell 2 61 60 0xd06
+mouse 20 80
+20
+1 left
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+200

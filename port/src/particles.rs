@@ -50,6 +50,8 @@ pub const MOVE_ROCKET: u16 = 0x3c4f;
 pub const MOVE_AGE: u16 = 0x2ac9;
 /// FUN_1050_36a9: a running critter (FUN_1050_4622).
 pub const MOVE_CRITTER: u16 = 0x36a9;
+/// FUN_1050_3acd: drifting smoke (FUN_1050_47e7).
+pub const MOVE_DRIFT: u16 = 0x3acd;
 /// FUN_1050_3d06: a throw in the half-speed background layer (no walls; gone below 0x1c8 + camY / 2).
 pub const MOVE_BG_THROW: u16 = 0x3d06;
 
@@ -128,6 +130,8 @@ pub struct Particles {
     pub now: u32,
     /// 1170:45b6: cleared by a death effect that keeps its particle alive.
     keep_dying: bool,
+    /// FUN_1050_2bcf's arguments (water line, previous y, y, x), run once the mover is done.
+    splash: Option<(i32, i32, i32, i32)>,
     /// 1170:45b8: the side of the wall hit, 0/1 horizontal (1: moving right), 2 up, 3 down.
     pub hit_side: i32,
     /// 1170:25aa / 25ac: what FUN_1050_568b last found.
@@ -290,6 +294,19 @@ impl Particles {
         p.m.set(0x3c, p.m.w(0x3c) | 0x200);
     }
 
+    /// FUN_1050_47e7(gravity, speed, angle): drifting smoke (mover FUN_1050_3acd): a throw that
+    /// sways (sin(age * 0x30) * 16 px across, its size * 8 px up).
+    pub fn drift(&mut self, gravity: i32, speed: i32, angle: i32) {
+        let p = self.last_mut();
+        p.m.set(0x4a, MOVE_DRIFT as i32);
+        p.m.set(0x4c, 0xc);
+        let v = &mut p.v;
+        v.set_l(0, trig::cos(angle) * speed);
+        v.set_l(4, trig::sin(angle) * speed);
+        v.set(8, 0);
+        v.set(0xa, gravity);
+    }
+
     /// FUN_1050_4999(gravity, speed, angle): a throw in the background layer (GRANNY's collapse).
     pub fn bg_throw(&mut self, gravity: i32, speed: i32, angle: i32) {
         let bounce = self.p.bounce;
@@ -321,7 +338,6 @@ impl Particles {
         let s = 0x195a + rng.random(2) * 4;
         self.spawn_seq(s, 1, 0x78, y, x, 0);
         self.bounce(7, speed, angle);
-        // FUN_1050_44ae: the water line of its sector (none in the levels ported so far).
         self.p.draw = 0;
         self.p.on_death = 0;
         self.p.callback = 0;
@@ -371,6 +387,12 @@ impl Particles {
         self.p.flags = 0x84;
         self.p.hits = 0;
         self.p.group = 1;
+    }
+
+    /// FUN_1050_44ae: the water line of the sector where the last particle started (callers look
+    /// it up: `World::sector_at` of the spawn point, `Sector::water[1]`).
+    pub fn set_water(&mut self, water: i32) {
+        self.last_mut().m.set(0x4e, water);
     }
 
     /// FUN_1050_46d9(gravity, speed, angle): a rolling ball (FUN_1050_3044); `water` is the
@@ -800,7 +822,7 @@ impl Particles {
             }
             let (mut l, mut t, mut r, mut b) = (m.w(0x2c) - sx, m.w(0x2e) - sy, m.w(0x30) - sx, m.w(0x32) - sy);
             if std::env::var("ET_HIT").is_ok() && m.w(0x34) == 7 {
-                eprintln!("BLAST rel {l},{t},{r},{b} flags {:x} dmg {} boxes {:?}", m.w(0x3a), m.w(0x38), boxes);
+                eprintln!("BLAST {} rel {l},{t},{r},{b} flags {:x} dmg {} boxes {:?}", self.now, m.w(0x3a), m.w(0x38), boxes);
             }
             if hflip != 0 {
                 (l, r) = (-r, -l);
@@ -951,6 +973,24 @@ impl Level {
 
     /// The mover at +0x4a.
     fn move_particle(&mut self, i: usize, cam: (i32, i32), w: &World, rng: &mut PascalRandom) {
+        self.move_particle_body(i, cam, w, rng);
+        // FUN_1050_2bcf: a particle crossing its sector's water line splashes.
+        if let Some((line, prev, y, x)) = self.particles.splash.take() {
+            if prev - 4 < line && line <= y - 4 {
+                let p = rng.random(0x50);
+                crate::sound::pitch(p + 0xd0);
+                crate::sound::play_at_vol(0x6f, 0xaa, line, x);
+                let ps = &mut self.particles;
+                ps.p.callback = 0x1d33;
+                ps.p.colour = 0x34;
+                ps.spawn_seq(0x6d00, 2, 0x12, line - 1, x, 1);
+                ps.p.colour = 0;
+                ps.p.callback = 0;
+            }
+        }
+    }
+
+    fn move_particle_body(&mut self, i: usize, cam: (i32, i32), w: &World, rng: &mut PascalRandom) {
         let p = &mut self.particles.list[i];
         if p.m.uw(0x4a) == MOVE_AGE {
             p.m.set(0x24, p.m.w(0x24) + 1);
@@ -998,6 +1038,27 @@ impl Level {
                     m.set(0x3e, -10);
                 }
             }
+            MOVE_DRIFT => {
+                let t = v.w(8);
+                let sw = trig::sin(((m.w(0x24) * 0x30) % 0x1680 + 0x1680) % 0x1680);
+                let a = v.l(0).wrapping_mul(t) / 0x40000;
+                let b = (sw * 0x10) / 0x4000;
+                m.set(8, m.w(4) + b + a);
+                let c = (t * t) / v.w(0xa);
+                let d = v.l(4).wrapping_mul(t) / 0x40000;
+                let mut e = (sw * 8) / 0x4000;
+                if sw < 0 {
+                    e = -e;
+                }
+                m.set(0xa, ((m.w(6) - e) - d) + c);
+                v.set(8, t + 1);
+                if off_screen(m, -0x200) {
+                    m.set(0x24, m.w(0x22));
+                    m.set(0x3e, -10);
+                } else {
+                    m.set(0x24, m.w(0x24) + 1);
+                }
+            }
             MOVE_THROW => {
                 let t = v.w(8);
                 m.set(8, m.w(4) + v.l(0).wrapping_mul(t) / 0x40000);
@@ -1005,7 +1066,7 @@ impl Level {
                 m.set(0xa, m.w(6) - v.l(4).wrapping_mul(t) / 0x40000 + fall);
                 v.set(8, t + 1);
                 if m.w(0x4e) != 0x7fff {
-                    eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+                    self.particles.splash = Some((m.w(0x4e), m.w(0xe), m.w(0xa), m.w(8)));
                 }
                 if off_screen(m, -0x200) {
                     m.set(0x24, m.w(0x22));
@@ -1027,7 +1088,7 @@ impl Level {
                 }
                 m.set(0x24, m.w(0x24) + 1);
                 if m.w(0x4e) != 0x7fff {
-                    eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+                    self.particles.splash = Some((m.w(0x4e), m.w(0xe), m.w(0xa), m.w(8)));
                 }
                 // Rolling down a slope: on it with no vertical speed, it speeds up downhill
                 // (by half its speed, at least 1/2 px), at most 16 px per frame; else it bounces.
@@ -1076,7 +1137,7 @@ impl Level {
                 }
                 m.set(0x24, m.w(0x24) + 1);
                 if m.w(0x4e) != 0x7fff {
-                    eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+                    self.particles.splash = Some((m.w(0x4e), m.w(0xe), m.w(0xa), m.w(8)));
                 }
                 let (x, y) = (m.w(8), m.w(0xa));
                 let mut steep = false;
@@ -1211,7 +1272,7 @@ impl Level {
                         t = t.wrapping_sub(1);
                     }
                 }
-                self.set_cell(f.world, t, idx, f.fx);
+                self.set_cell(f.world, t, idx, f.rng, f.fx);
             } else if func == crate::doors::DOOR {
                 self.door_hit(f.world, strength, y, x, 0, f.fx);
             }
@@ -1279,7 +1340,7 @@ impl Level {
                     let width = f.world.main().width;
                     let idx = (y / 16) * width + x / 16;
                     f.world.main_mut().cells[idx as usize] = tile;
-                    self.cell_changed(f.world, idx - width, f.fx);
+                    self.cell_changed(f.world, idx - width, f.rng, f.fx);
                 }
             }
             0 => {}
@@ -1458,7 +1519,7 @@ impl Level {
                 let m = &mut self.particles.list[i].m;
                 m.set(0x16, if t < 5 { ((m.uw(0x24) >> 3) & 3) as i32 + 0x1900 } else { 0x1904 });
             }
-            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a | 0x232e | 0x2459 | 0x2497 | 0x236b => {} // drawing only
+            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a | 0x20ed | 0x232e | 0x2459 | 0x2497 | 0x236b => {} // drawing only
             0x2299 => {
                 // FUN_1050_2299: a burning bit trails smoke.
                 if m.w(0x24) % 4 == 3 {
@@ -1530,6 +1591,39 @@ impl Level {
                 // FUN_1050_1b90: a flame goes out without floor under it.
                 if f.world.solidity_at(m.w(0xa) + 1, m.w(8)) & 0x211 == 0 {
                     m.set(0x24, m.w(0x22));
+                }
+            }
+            0x1e16 => {
+                // FUN_1050_1e16: a block sinking out of sight (effect 33). It goes down age/steps
+                // (+0x26) px; every 0x32 frames, two times in three, a puff of smoke drifts off
+                // its top (sprite 0x5100, mover 0x3acd, the wind 1170:4f0e); at its end a cloud
+                // (FUN_1040_66fa) at its right end.
+                m.set(0xa, m.w(6) - m.w(0x24) / m.w(0x26).max(1));
+                let (x, y, age, life) = (m.w(8), m.w(0xa), m.w(0x24), m.w(0x22));
+                let cols = self.particles.list[i].v.w(6);
+                if self.particles.now % 0x32 == 0 && f.rng.random(3) < 2 {
+                    let ps = &mut self.particles;
+                    let saved = ps.p;
+                    ps.p.group = 0;
+                    ps.p.hits = 0x8000;
+                    ps.p.callback = 0x20ed;
+                    let r = f.rng.random(0x201);
+                    let off = (r * (cols * 16 + 0xf)) / 0x200;
+                    ps.spawn(0x5100, y, x + off);
+                    let a = (self.wind + 0x6a0) - r;
+                    let g = f.rng.random(0x38) + 0xe0;
+                    self.particles.drift(g, 0x10, a);
+                    let ps = &mut self.particles;
+                    ps.p = saved;
+                    ps.p.callback = 0;
+                    ps.p.hits = 0;
+                    ps.p.group = 1;
+                }
+                if age == life && cols > 0 {
+                    let ps = &mut self.particles;
+                    ps.p.colour = 0x10;
+                    ps.spawn_seq(0x6c00, 4, 0x19, y + 2, cols * 8 + x + 8, 1); // FUN_1040_66fa
+                    ps.p.colour = 0;
                 }
             }
             0x2588 => {
@@ -1703,22 +1797,27 @@ impl Level {
                 }
             }
             0x1d33 => {} // FUN_1050_1d33: a splash, drawn clipped at the water line
+            0x24f1 => {} // FUN_1050_24f1: drawn only (draw mode 0x10 past half its life)
             other => eprintln!("warning: particle procedure 1050:{other:04x} not ported"),
         }
     }
 
     /// FUN_1088_12f9 for the cell's current tile: levers run their scripts; bonus tiles
     /// (function 30000) turn into bonus objects.
-    fn cell_changed(&mut self, world: &mut World, idx: i32, fx: &mut Effects) {
+    pub(crate) fn cell_changed(&mut self, world: &mut World, idx: i32, rng: &mut PascalRandom, fx: &mut Effects) {
         let tile = world.main().cells[idx as usize];
         if tile as i16 <= 0 {
             return;
         }
         let f0 = world.cell_function(tile, 0);
         if (crate::world::func::LEVER_FIRST..=crate::world::func::LEVER_LAST).contains(&f0) {
-            self.run_scripts(world, idx as u16, fx);
+            self.run_scripts(world, idx as u16, rng, fx);
         } else if f0 == 30000 {
-            eprintln!("warning: a bonus tile uncovered (FUN_1040_6b03) not ported");
+            // FUN_1088_12f9: the PLANE-2 cell there is cleared and the tile flies out as a bonus
+            // (FUN_1040_6b03).
+            world.planes[2].as_mut().expect("plane 2").cells[idx as usize] = 0;
+            let w = world.main().width;
+            self.bonus(world, tile as i32, (idx / w) << 4, (idx % w) << 4);
         }
     }
 
@@ -1770,10 +1869,15 @@ impl Level {
             let t = world.main().cells[below];
             let next = (t as i32 + world.cell_function(t, 2) as i16 as i32) as u16;
             if (next as i16) < 0 {
-                eprintln!("warning: FUN_1088_1364 with a negative tile not ported");
+                // FUN_1088_1364 with a negative tile: a nested blast of the cell below.
+                if world.cell_function(t, 1) & 0x80 != 0 {
+                    let strength = -(next as i16 as i32) * 0x10;
+                    let b = below as i32;
+                    crate::effects::explode_tile(self, world, strength, 0xffff, (b / width) << 4, (b % width) << 4, rng, fx);
+                }
             } else {
                 world.main_mut().cells[below] = next;
-                self.cell_changed(world, below as i32, fx);
+                self.cell_changed(world, below as i32, rng, fx);
             }
             sound::play_at(0x4b, y, x);
         } else {
@@ -2492,7 +2596,7 @@ impl Level {
         }
         m.set(0x24, m.w(0x24) + 1);
         if m.w(0x4e) != 0x7fff {
-            eprintln!("warning: particle splashes (FUN_1050_2bcf) not ported");
+            self.particles.splash = Some((m.w(0x4e), m.w(0xe), m.w(0xa), m.w(8)));
         }
         let (x, y) = (m.w(8), m.w(0xa));
         let mut steep = false;
@@ -2733,9 +2837,8 @@ impl Level {
         crate::hero::spawn_dust_pub(f.world, n, y, x, f.rng);
     }
 
-    /// Effect 73, FUN_1040_3fc4(y, x): a tile bursts (FUN_1040_3eb4: five chips thrown up,
-    /// some sound), and two times in three a spark follows later.
-    pub fn tile_burst(&mut self, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+    /// FUN_1040_3eb4(y, x): five chips thrown up, a sound (0x51) and a shake.
+    pub fn chip_burst(&mut self, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
         let ps = &mut self.particles;
         ps.p.group = 0;
         ps.p.hits = 0x8000;
@@ -2760,6 +2863,13 @@ impl Level {
         let p = rng.random(0x1f);
         sound::play_at_pitch(0x51, p + 0xf1, y + 1, x + 0x10);
         fx.shakes.push((0xc, 5));
+    }
+
+    /// Effect 73, FUN_1040_3fc4(y, x): a tile bursts (FUN_1040_3eb4: five chips thrown up,
+    /// some sound), and two times in three a spark follows later.
+    pub fn tile_burst(&mut self, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
+        self.chip_burst(y, x, rng, fx);
+        let ps = &mut self.particles;
         if rng.random(3) != 0 {
             ps.p.delay = rng.random(0x28) + 0x28;
             // FUN_1040_3440: a spark (group 0, a sound when it appears).
@@ -3059,7 +3169,7 @@ fn puff_at(ps: &mut Particles, y: i32, x: i32) {
 }
 
 /// FUN_1040_6405.
-fn smoke4_at(ps: &mut Particles, y: i32, x: i32) {
+pub(crate) fn smoke4_at(ps: &mut Particles, y: i32, x: i32) {
     puff_at(ps, y, x - 4);
     ps.p.delay += 7;
     puff_at(ps, y - 5, x + 1);

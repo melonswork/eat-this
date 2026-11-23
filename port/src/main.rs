@@ -236,7 +236,7 @@ impl Game {
         // LevelFirstFrame (1088:b4db): enter the start sector (its scripts run), face its far side.
         let mut fx = Effects::default();
         let sector = world.sector_at(hero.y, hero.x);
-        level.enter_sector(&mut world, sector, &mut fx);
+        level.enter_sector(&mut world, sector, &mut rng, &mut fx);
         if let (Some(g), Some(i)) = (level.grinder.as_mut(), fx.grinder_platform) {
             g.platform = Some(i);
         }
@@ -295,6 +295,9 @@ impl Game {
             crate::effects::explode_tile(&mut g.level, &mut g.world, 0x60, 0x104, y, x, &mut g.rng, &mut fx);
         }
         g.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
+        for &(a, b) in &fx.side_shakes {
+            g.camera.shake_sideways(a, b);
+        }
         for &(a, b) in &fx.shakes {
             g.camera.shake(a, b);
         }
@@ -415,7 +418,7 @@ impl Game {
             self.camera.shake(a, b);
         }
         for cell in std::mem::take(&mut self.level.pasted) {
-            self.level.run_scripts(&mut self.world, cell, &mut fx);
+            self.level.run_scripts(&mut self.world, cell, &mut self.rng, &mut fx);
         }
         self.flush_spawns(&mut fx);
         // FUN_10a0_023f: delayed particles due this frame.
@@ -423,9 +426,12 @@ impl Game {
         self.level.particles.release_due();
         {
             let mut fx = Effects::default();
-            self.level.release_tile_events(&mut self.world, &mut fx, self.hero.x);
+            self.level.release_tile_events(&mut self.world, &mut self.rng, &mut fx, self.hero.x);
             self.flush_spawns(&mut fx);
             self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
+            for &(a, b) in &fx.side_shakes {
+                self.camera.shake_sideways(a, b);
+            }
             for &(a, b) in &fx.shakes {
                 self.camera.shake(a, b);
             }
@@ -553,6 +559,8 @@ impl Game {
         }
         if let Some((y, x, a)) = self.hero.gun.shell7 {
             self.level.particles.shell7(a, y, x);
+            let water = self.world.sectors[self.world.sector_at(y, x)].water[1];
+            self.level.particles.set_water(water);
             noise = 2;
         }
         if let Some((y, x, a)) = self.hero.gun.spread {
@@ -574,10 +582,14 @@ impl Game {
         }
         if let Some((y, x, a)) = self.hero.gun.charge {
             self.level.particles.mine(a, y, x);
+            let water = self.world.sectors[self.world.sector_at(y, x)].water[1];
+            self.level.particles.set_water(water);
             noise = 2;
         }
         if let Some((y, x, a)) = self.hero.gun.grenade {
             self.level.particles.grenade(0x40, a, y, x, &mut self.rng);
+            let water = self.world.sectors[self.world.sector_at(y, x)].water[1];
+            self.level.particles.set_water(water);
             noise = 2;
         }
         for ((tx, ty), effect, f3, y, x) in std::mem::take(&mut self.hero.pickups) {
@@ -586,19 +598,19 @@ impl Game {
             self.pick_effect(effect, f3, y, x);
         }
         for cell in std::mem::take(&mut self.hero.script_cells) {
-            self.level.run_scripts(&mut self.world, cell, &mut fx);
+            self.level.run_scripts(&mut self.world, cell, &mut self.rng, &mut fx);
         }
         for cell in std::mem::take(&mut self.hero.cell_steps) {
             let v = self.world.main().cells[cell as usize];
             let off = self.world.cell_function(v, 2);
-            self.level.set_cell(&mut self.world, v.wrapping_add(off), cell, &mut fx);
+            self.level.set_cell(&mut self.world, v.wrapping_add(off), cell, &mut self.rng, &mut fx);
         }
         for (idx, y, x, pull) in std::mem::take(&mut self.hero.levers) {
             self.level.work_lever(&mut self.world, idx, y, x, pull, &mut self.rng, &mut fx);
         }
         if let Some((dir, y, x)) = self.hero.push {
             let hy = self.hero.y;
-            self.level.push_block(&mut self.world, hy, dir, y, x, &mut fx);
+            self.level.push_block(&mut self.world, hy, dir, y, x, &mut self.rng, &mut fx);
         }
         self.flush_spawns(&mut fx);
         // After HeroUpdate: its camera nudges and shakes, then FUN_1088_0a3b(1) .. FUN_1088_0c82.
@@ -679,6 +691,9 @@ impl Game {
         }
         // Script command 0x0b: HeroDamage(id), a message.
         self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
+        for &(a, b) in &fx.side_shakes {
+            self.camera.shake_sideways(a, b);
+        }
         for &(a, b) in &fx.shakes {
             if std::env::var_os("ET_SHAKE").is_some() {
                 eprintln!("SHAKE {} ({a:#x}, {b})", self.frame);
@@ -767,6 +782,9 @@ impl Game {
         self.level.update_particles(0, &mut pf);
         // ScreenShake acts at once: the shakes made so far this frame (group 0's grenades) are
         // in place before the actors test 1170:45bc - 1 == 45ba.
+        for (a, b) in std::mem::take(&mut fx.side_shakes) {
+            self.camera.shake_sideways(a, b);
+        }
         for (a, b) in std::mem::take(&mut fx.shakes) {
             if std::env::var_os("ET_SHAKE").is_some() {
                 eprintln!("SHAKE {} ({a:#x}, {b}) before the actors", self.frame);
@@ -814,6 +832,8 @@ impl Game {
             hero: (self.hero.x, self.hero.y, self.hero.height, self.hero.half_width),
         };
         self.level.update_particles(1, &mut pf);
+        // What their effects made (objects through EnemyFactory, nested blasts) happens now.
+        self.flush_spawns(fx);
         // The level's foreground procedure ((*DAT_1170_4c36)()) runs last: the grinder in GRINDER.
         let h = &self.hero;
         let hero = (h.x, h.y, h.crouch_level(), false);
@@ -859,12 +879,12 @@ impl Game {
         let mut fx = Effects::default();
         // FUN_1068_08ff: the old sector's triggers see him go.
         self.level
-            .run_triggers(old, &mut self.world, &mut fx, self.hero.x, self.hero.y);
+            .run_triggers(old, &mut self.world, &mut self.rng, &mut fx, self.hero.x, self.hero.y);
         // LevelFirstFrame: enter the sector (FUN_1088_1280), face its far side, the camera,
         // then a frame without the hero.
         let mut noise = self.camera.shake_started() as i32;
         let sector = self.world.sector_at(self.hero.y, self.hero.x);
-        self.level.enter_sector(&mut self.world, sector, &mut fx);
+        self.level.enter_sector(&mut self.world, sector, &mut self.rng, &mut fx);
         let cam = self.world.sectors[sector].cam;
         self.hero.facing = if self.hero.x - cam.0 < cam.2 - self.hero.x { 1 } else { -1 };
         let grinder = self.level.grinder.as_ref().map(|g| (g.y, g.cam_offset));
@@ -887,6 +907,9 @@ impl Game {
         }
         // Script command 0x0b: HeroDamage(id), a message.
         self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));
+        for &(a, b) in &fx.side_shakes {
+            self.camera.shake_sideways(a, b);
+        }
         for &(a, b) in &fx.shakes {
             self.camera.shake(a, b);
         }
@@ -2082,6 +2105,84 @@ fn main() -> Result<(), Box<dyn Error>> {
     world::load_game_ds(&o.data.join("../ETLAUNCH.EXE"))?;
     let _ = sprites::DIR.set(o.data.join("SPRITES"));
     let world = load_world(&o.data, &map_path)?;
+    if std::env::var_os("ET_SCAN").is_some() {
+        println!("MAP width {} height {}", world.main().width, world.main().height);
+        {
+            let mut seen = std::collections::BTreeSet::new();
+            for pl in [world::MAIN_PLANE, 0, 2] {
+                if let Some(Some(p)) = world.planes.get(pl) {
+                    for &c in &p.cells {
+                        let e = world.cell_function(c, 4) as i16;
+                        let f0 = world.cell_function(c, 0);
+                        let pick = pl == 2 && f0 == 30000;
+                        let blast = pl == world::MAIN_PLANE && world.cell_function(c, 3) != 0 && world.cell_function(c, 1) & 0x80 != 0;
+                        if blast && std::env::var("ET_FX").ok().and_then(|v| v.parse::<i16>().ok()) == Some(e) {
+                            let i = p.cells.iter().position(|&d| std::ptr::eq(&d, &c)).unwrap_or(0);
+                            let _ = i;
+                        }
+                        if e > 0 && e < 200 && (pick || blast) {
+                            seen.insert((if pick { "pick" } else { "blast" }, e));
+                        }
+                    }
+                }
+            }
+            println!("EFFECTS {seen:?}");
+            if let Some(want) = std::env::var("ET_FX").ok().and_then(|v| v.parse::<i16>().ok()) {
+                let p = world.main();
+                for (i, &c) in p.cells.iter().enumerate() {
+                    if world.cell_function(c, 4) as i16 == want && world.cell_function(c, 1) & 0x80 != 0 {
+                        let (tx, ty) = (i as i32 % p.width, i as i32 / p.width);
+                        println!("FX {want} tile {c:#x} f3 {:#x} at ({tx},{ty}) px ({},{})", world.cell_function(c, 3), tx * 16 + 8, ty * 16 + 8);
+                    }
+                }
+            }
+        }
+        if let Ok(v) = std::env::var("ET_CELL") {
+            let c: i32 = v.parse().unwrap_or(0);
+            let w = world.main().width;
+            let t = world.main().cells[c as usize];
+            let f = |n| world.cell_function(t, n) as i16;
+            println!("CELL {c} = ({},{}) tile {t:#x} f0 {} f1 {:#x} f2 {} f3 {} f4 {}", c % w, c / w, f(0), f(1), f(2), f(3), f(4));
+        }
+        for (i, sc) in world.sectors.iter().enumerate() {
+            if sc.water[1] != 0x7fff {
+                println!("WATER sector {i} line {} cam {:?}", sc.water[1], sc.cam);
+            }
+        }
+        // Cells of rarely used features: slope rows with flags (function 2 of a slope tile) and
+        // tile functions 8000..8099.
+        for ty in 0..world.main().height {
+            for tx in 0..world.main().width {
+                let (y, x) = (ty * 16 + 8, tx * 16 + 8);
+                if world.solidity_at(y, x) & 0x20 != 0 {
+                    let cell = world.cell_at(world::MAIN_PLANE, y, x).unwrap_or(0);
+                    let row = (world.cell_function(cell, 2) & 0xff7f) as usize;
+                    let o = row * 0x16 + 0x14;
+                    let f = u16::from_le_bytes([world::SLOPES[o], world::SLOPES[o + 1]]);
+                    if f & !1 != 0 {
+                        println!("SLOPE row {row} flags {f:#x} at ({tx},{ty}) px ({x},{y})");
+                    }
+                }
+                let t = world.tile_function_at(y, x);
+                if let Some(c) = world.cell_at(world::MAIN_PLANE, y, x) {
+                    let f0 = world.cell_function(c, 0);
+                    if (6000..6010).contains(&f0) && world.cell_function(c, 1) != 0 {
+                        println!("SOLIDLEVER tile {c:#x} f0 {f0} f1 {:#x} f2 {:#x} at ({tx},{ty}) px ({x},{y})", world.cell_function(c, 1), world.cell_function(c, 2));
+                    }
+                    if world.cell_function(c, 4) == 43 {
+                        let next = (c as i32 + world.cell_function(c, 2) as i16 as i32) as u16;
+                        println!("EFFECT43 tile {c:#x} f3 {:#x} -> {next:#x} f0 {} at ({tx},{ty}) px ({x},{y})", world.cell_function(c, 3), world.cell_function(next, 0) as i16);
+                    }
+                }
+                if t == 60304 || t == 60308 {
+                    println!("TILEFN {t} at ({tx},{ty}) px ({x},{y})");
+                }
+                if (8000..8100).contains(&t) {
+                    println!("TILEFN {t} at ({tx},{ty}) px ({x},{y})");
+                }
+            }
+        }
+    }
     if std::env::var_os("ET_PICKUPS").is_some() {
         println!("START {:?}", world.map.start);
         println!("NEXT {:?}", next_level(&o.data, &map_path));
@@ -2102,16 +2203,31 @@ fn main() -> Result<(), Box<dyn Error>> {
                 for tx in 0..p.width {
                     let c = p.get(tx, ty);
                     if world.cell_function(c, 0) == 30000 && world.cell_function(c, 4) == hero::WEAPON_PICKUP {
-                        println!("PICKUP weapon {} at x {} y {}", world.cell_function(c, 3) as i32 - 0x1e, tx * 16 + 7, ty * 16 + 7);
+                        println!("PICKUP weapon {} at x {} y {} cell ({tx},{ty}) = {c:#x}", world.cell_function(c, 3) as i32 - 0x1e, tx * 16 + 7, ty * 16 + 7);
                     }
                 }
             }
         }
     }
     let game = Game::new(world, demo);
+    if std::env::var_os("ET_SCAN").is_some() {
+        for p in game.level.platforms.iter().flatten() {
+            if p.flags & 0x1c != 0 {
+                println!("PLATFORM flags {:#x} at ({}, {}) {}x{}", p.flags, p.x, p.y, p.width, p.height);
+            }
+        }
+    }
     if o.headless {
         if game.demo.is_none() {
-            return Err("--headless needs --demo".into());
+            // ET_IDLE=N: N frames of the map with no input (for runtime warnings).
+            let n: u32 = std::env::var("ET_IDLE").ok().and_then(|v| v.parse().ok()).ok_or("--headless needs --demo (or ET_IDLE=N)")?;
+            let mut game = game;
+            for _ in 0..n {
+                game.step([0; 9]);
+                game.sound.clear();
+            }
+            println!("idle {n} frames, hero at ({}, {}) state {}", game.hero.x, game.hero.y, game.hero.state);
+            return Ok(());
         }
         // Sound stays off unless --wav asks for a capture.
         let capture = o.wav.as_ref().map(|p| sound::Capture::new(&o.data, p));

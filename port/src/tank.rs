@@ -241,7 +241,8 @@ impl Level {
                     let t = o.w(0x40);
                     if t < 0xc01 && t % 0x30 == 0 {
                         let r = env.rng.random(0x31);
-                        self.grenade(0x30, 0xb40 - r, ly - 0x25, x - 0x20);
+                        let water = env.world.sectors[env.world.sector_at(ly - 0x25, x - 0x20)].water[1];
+                        self.grenade(0x30, 0xb40 - r, ly - 0x25, x - 0x20, water);
                     }
                     let o = self.o(id);
                     o.set(0x40, o.w(0x40) - 1);

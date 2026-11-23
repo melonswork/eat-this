@@ -259,19 +259,21 @@ fn ranges_overlap(a: i32, b: i32, c: i32, d: i32) -> bool {
 }
 
 /// FUN_1060_0819 for a swinging platform.
-pub fn update(p: &mut PlatObj, hero: &mut HeroSide, now: u32) {
+pub fn update(p: &mut PlatObj, hero: &mut HeroSide, now: u32, world: &crate::world::World) {
     let old_x = p.x;
     p.prev_y = p.y;
-    let mut active = true;
-    let mode = p.mode;
-    if p.lever.0 != 0 {
-        eprintln!("warning: a platform object with a lever (FUN_1060_0819) not ported");
-    }
-    if mode & 0x40 != 0 {
-        active = true;
-    }
+    // The lever (+0x2c state + 1, cell +0x2a): off, it runs on the other mode (+0x26) if it has
+    // one, else stands. Mode 0x40 counts one more (2: it never stops for the hero).
+    let on_lever = p.lever.0 == 0
+        || crate::level::Level::lever_state(world, p.lever.1 as u16) == p.lever.0 - 1;
+    let (mut live, mode) = if !on_lever && p.mode_alt != -1 {
+        (1, p.mode_alt)
+    } else {
+        (on_lever as i32, p.mode)
+    };
+    live += (mode & 0x40 != 0) as i32;
     let (mut nx, mut ny, mut angle) = (p.x, p.y, p.angle);
-    if active || p.flags & 8 != 0 {
+    if live != 0 || p.flags & 8 != 0 {
         if mode & 3 == 0 {
             angle = p.angle + p.speed;
         }
@@ -305,7 +307,7 @@ pub fn update(p: &mut PlatObj, hero: &mut HeroSide, now: u32) {
     if p.flags & 0x10 != 0 {
         p.flags &= !0x10;
         if p.prev_y < ny {
-            active = false;
+            live = 0;
             angle = p.prev_angle;
             nx = old_x;
             ny = p.prev_y;
@@ -319,7 +321,7 @@ pub fn update(p: &mut PlatObj, hero: &mut HeroSide, now: u32) {
         eprintln!("PLAT {now} at ({nx},{ny}) old ({old_x},{}) angle {angle} hero ({},{}) d({},{}) vy {} state {} on {on} w {w}", p.prev_y, hero.x, hero.y, hero.dx, hero.dy, hero.vy, hero.state);
     }
     if on {
-        if active && mode & 3 != 0 && hero.prev_ground != 0x15 && mode & 0x80 == 0 {
+        if live == 1 && mode & 3 != 0 && hero.prev_ground != 0x15 && mode & 0x80 == 0 {
             p.flags |= 0x10;
         }
         hero.dy = (ny - 1) - hero.y;
@@ -328,12 +330,12 @@ pub fn update(p: &mut PlatObj, hero: &mut HeroSide, now: u32) {
         }
         hero.ground = Some(0x15);
     }
-    if !active || (!on || mode & 0x40 != 0) {
+    if live == 0 || (live != 2 && (!on || mode & 0x40 != 0)) {
         p.flags &= !1;
     } else if p.speed.abs() < angle.abs() {
         p.flags |= 1;
     }
-    if active {
+    if live != 0 {
         p.angle = angle;
         p.x = nx;
         p.y = ny;

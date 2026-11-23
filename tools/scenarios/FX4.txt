@@ -1,0 +1,18 @@
+# Tile effect 68 (FUN_1040_56ef: neighbouring function-60300 cells step on, a bonus 0xd10 one time in
+# three, six bits of wood, shake, 0x4a): FOREST04's stump at (448..479, 1104..1119), tiles 0x15/0x16
+# (mask 4: blasts only). The start moved right of it on the grass with a weapon-3 pick-up copied
+# there: rockets at the stump.
+level MAPS/FOREST04.MAP
+start 540 1120
+cell 2 33 70 0xd06
+mouse 20 120
+20
+1 left
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150

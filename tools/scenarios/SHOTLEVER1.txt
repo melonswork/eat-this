@@ -1,0 +1,17 @@
+# Shot levers (FUN_1088_14a3 from the particle's wall hit): CITYHS's posts at (5,70) and (8,70), tiles
+# 0xe08 = lever 6000 and explodable (solidity 0x4c0). The start moved right of them: his pistol shots
+# step them to 0xe09 (FUN_1088_1364, scripts) and blast them with mask 3: effect 90 (FUN_1040_3471:
+# splinters, sound 0x7b, shake).
+level MAPS/CITYHS.MAP
+start 300 1130
+mouse 20 95
+20
+1 left
+3 lmb
+20
+3 lmb
+20
+3 lmb
+20
+3 lmb
+100

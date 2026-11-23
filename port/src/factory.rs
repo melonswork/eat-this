@@ -72,7 +72,7 @@ impl Level {
     pub fn add_to(&mut self, sector: usize, l: usize, o: Obj) -> usize {
         let id = self.objects.len();
         if std::env::var_os("ET_KINDS").is_some() {
-            eprintln!("KIND {:#x} vmt {:#x}", o.kind, o.vmt());
+            eprintln!("KIND {:#x} vmt {:#x} at ({}, {})", o.kind, o.vmt(), o.w(0xe), o.w(0x10));
         }
         self.objects.push(Some(o));
         self.lists[sector][l].push(id);
@@ -815,12 +815,19 @@ impl Level {
                         if std::env::var("ET_PLAT").is_ok() {
                             eprintln!("PLATOBJ made {:?}", p);
                         }
+                        if std::env::var_os("ET_SCAN").is_some() {
+                            println!("SWINGPLAT mode {:#x} alt {:#x} lever {:?} speed {} at ({}, {})", p.mode, p.mode_alt, p.lever, p.speed, p.x, p.y);
+                        }
                         self.plat_objs.push(p);
                     }
                 }
                 100 => {
                     let w = &*world;
                     self.plat_objs.push(crate::platobj::PlatObj::path(&rec, |y, x| w.sector_at(y, x)));
+                    if std::env::var_os("ET_SCAN").is_some() {
+                        let p = self.plat_objs.last().unwrap();
+                        println!("PATHPLAT mode {:#x} alt {:#x} lever {:?} speed {} at ({}, {}) points {:?}", p.mode, p.mode_alt, p.lever, p.speed, p.x, p.y, p.points);
+                    }
                 }
                 k if (100..=199).contains(&k) => {
                     eprintln!("warning: OBJECTS type {k} (FUN_1060_0166) not ported")
@@ -829,6 +836,7 @@ impl Level {
                     let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
                     let s = world.sector_at(g(3), g(2));
                     world.sectors[s].water[..4].copy_from_slice(&[g(2), g(3), g(4), g(5)]);
+                    if std::env::var_os("ET_SCAN").is_some() { println!("WATER sector {s} line {} at ({}, {}) cam {:?}", g(3), g(2), g(3), world.sectors[s].cam); }
                 }
                 0x2719 => {
                     let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
@@ -836,6 +844,7 @@ impl Level {
                     world.sectors[s].water[4] = ((g(3) - 100) >> 1) + 100;
                 }
                 0x271a => self.vehicle = true,
+                0x2717 => self.wind = rec.get(1).copied().unwrap_or(0) as i32,
                 0x2716 => {
                     let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
                     self.quad = Some((g(2), g(3)));
@@ -975,6 +984,7 @@ impl Level {
             61000..=61099 => {
                 // FUN_1070_fa6a: the weight's record, placed by its type's offset (1170:0c38).
                 let t = (f - 61000) as i32;
+                if std::env::var_os("ET_SCAN").is_some() { println!("WEIGHT type {t} at ({x}, {y})"); }
                 let off = crate::world::ds_word(0xc38 + t as usize * 0x12);
                 let (dx, dy) = ((off & 0xff) as i8 as i32, (off >> 8) as i8 as i32);
                 let w = [0, t as i16, (x + dx) as i16, (y + dy) as i16];

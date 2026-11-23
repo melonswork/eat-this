@@ -94,13 +94,13 @@ impl Level {
     /// FUN_1068_08ff: rectangle triggers set a lever cell when the hero enters / leaves them.
     fn update_triggers(&mut self, sector: usize, env: &mut Env) {
         let (hx, hy, _) = env.hero;
-        self.run_triggers(sector, env.world, env.fx, hx, hy);
+        self.run_triggers(sector, env.world, env.rng, env.fx, hx, hy);
         let mut cx = crate::factory::Ctx { hero_x: hx, rng: env.rng };
         self.flush_spawns(env.world, &mut cx, env.fx);
     }
 
     /// FUN_1068_08ff on its own (the teleport runs it for the sector left behind).
-    pub fn run_triggers(&mut self, sector: usize, world: &mut World, fx: &mut Effects, hx: i32, hy: i32) {
+    pub fn run_triggers(&mut self, sector: usize, world: &mut World, rng: &mut crate::rng::PascalRandom, fx: &mut Effects, hx: i32, hy: i32) {
         let ids: Vec<usize> = self.lists[sector][list::TRIGGERS]
             .iter()
             .rev()
@@ -114,10 +114,10 @@ impl Level {
             let (cell, out_tile, in_tile, was_in) =
                 (o.uw(10), o.uw(0xc), o.uw(0xe), o.b(0x10) != 0);
             if !was_in && inside {
-                self.set_cell(world, in_tile, cell, fx);
+                self.set_cell(world, in_tile, cell, rng, fx);
                 self.objects[id].as_mut().unwrap().set_b(0x10, 1);
             } else if was_in && !inside {
-                self.set_cell(world, out_tile, cell, fx);
+                self.set_cell(world, out_tile, cell, rng, fx);
                 self.objects[id].as_mut().unwrap().set_b(0x10, 0);
             }
         }

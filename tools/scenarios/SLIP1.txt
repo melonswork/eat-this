@@ -1,0 +1,13 @@
+# Slippery slopes (HeroUpdate, slope row flag 2: row 30 = flags 0xe): CITY_I04's dirt pile at
+# (700..1260, 800..890), the start moved onto its top. The hero slides down the left side while
+# standing (dust every 16 frames, 1 in 4), walks back up against it, slides down the right side.
+level MAPS/CITY_I04.MAP
+start 1020 790
+mouse 160 100
+30
+20 left
+80
+60 right
+60
+40 right
+100

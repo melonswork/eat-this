@@ -210,7 +210,8 @@ impl Level {
                     let dir = o.w(0x20);
                     let r = env.rng.random(0x101);
                     let angle = 0x5a0 - dir * (power + r);
-                    self.grenade(0x30, angle, gy, gx);
+                    let water = env.world.sectors[env.world.sector_at(gy, gx)].water[1];
+                    self.grenade(0x30, angle, gy, gx, water);
                 }
                 let o = self.o(id);
                 let f = (o.w(0x2e) / 3 - 8).clamp(0, 4);
@@ -682,7 +683,7 @@ impl Level {
     }
 
     /// FUN_1040_6187(speed, angle, y, x): a grenade.
-    pub(crate) fn grenade(&mut self, speed: i32, angle: i32, y: i32, x: i32) {
+    pub(crate) fn grenade(&mut self, speed: i32, angle: i32, y: i32, x: i32, water: i32) {
         let ps = &mut self.particles;
         ps.p.group = 0;
         ps.p.hits = 0x8000;
@@ -693,6 +694,7 @@ impl Level {
         ps.p.draw = !(angle < 0x5a0 || angle > 0x10df) as i32;
         ps.spawn_seq(0x1818, 1, 0x78, y, x, 0);
         ps.bounce(7, speed, angle);
+        ps.set_water(water); // FUN_1050_44ae
         ps.p = crate::particles::Params::default();
     }
 

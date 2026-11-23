@@ -57,7 +57,7 @@ impl Level {
     }
 
     /// FUN_1088_11a3: thunder of the given kind.
-    fn thunder(&mut self, rng: &mut PascalRandom, kind: i32) {
+    pub(crate) fn thunder(&mut self, rng: &mut PascalRandom, kind: i32) {
         self.storm.kind = kind;
         self.storm.flash = if kind == 0 { 0xf } else { 0x24 };
         let p = rng.random(0x96);

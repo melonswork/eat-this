@@ -1,0 +1,12 @@
+# A swinging platform with a lever (FUN_1060_0819, +0x2c/+0x2a): STONES's platform at (712,118)
+# swings only while its lever (52,20) is on (state 1). The start moved onto the platform with the
+# lever set on (tile 0xf58): it swings him round; he jumps off.
+level MAPS/STONES.MAP
+start 720 110
+cell 1 52 20 0xf58
+mouse 160 60
+100
+10 right
+60
+5 up
+150

@@ -1056,7 +1056,41 @@ impl Hero {
         if self.slope != -1 {
             let flags = slope_word(self.slope, 0x14);
             if flags & 2 != 0 {
-                eprintln!("warning: slippery slopes (HeroUpdate, row flag 2) not ported");
+                // Slippery: slides downhill, shedding dust (every 16 frames a 1-in-4 chance with
+                // flag 8, else whenever the previous state was > 0).
+                let (dir, angle) = if self.slope & 0x80 == 0 { (-1, 0xb40) } else { (1, 0) };
+                dx += dir;
+                if !walking {
+                    // HeroAccelerate(limit 8, dir)
+                    self.vx += dir;
+                    if self.vx.abs() > 8 {
+                        self.vx = self.vx.signum() * 8;
+                    }
+                    friction = false;
+                }
+                let dust = if flags & 8 != 0 && ps.now % 0x10 == 0 && rng.random(4) == 0 {
+                    true
+                } else {
+                    self.prev_state >= 1
+                };
+                if dust {
+                    ps.p.group = 0;
+                    ps.p.hits = 0x8000;
+                    ps.p.on_death = 0x10;
+                    let s = rng.random(2);
+                    ps.spawn(s + 0x755c, self.y - 1, self.x);
+                    ps.bounce(9, 0x10, angle);
+                    if rng.random(2) == 0 {
+                        ps.p.delay = 5;
+                        let s = rng.random(2);
+                        ps.spawn(s + 0x755c, self.y, self.x);
+                        ps.bounce(9, 0x10, angle);
+                    }
+                    ps.p.on_death = 0;
+                    ps.p.hits = 0;
+                    ps.p.group = 1;
+                    ps.p.delay = 0;
+                }
             }
             if flags & 1 != 0 {
                 if !walking {
@@ -1356,7 +1390,7 @@ impl Hero {
         let posed = self.end_of_frame(walking, blocked, step_h, rng);
         self.lim = (-0x7fff, 0x7fff);
         self.gun_end(posed, &input, rng, ps.now);
-        self.pick_up(w);
+        self.pick_up(w, lv, rng);
         self.take_hits(ps, rng);
     }
 
@@ -1400,7 +1434,7 @@ impl Hero {
                         } else if p.kind == 0 {
                             crate::platobj::update_path(p, &mut side, w);
                         } else {
-                            crate::platobj::update(p, &mut side, ps.now);
+                            crate::platobj::update(p, &mut side, ps.now, w);
                         }
                     }
                 }
@@ -1645,7 +1679,7 @@ impl Hero {
             }
             let d = ps.hit_test_sprite((self.frame, self.x, self.y, 1, 0), 0x3a2);
             if d > 0 {
-                self.vehicle_hit(d, rng);
+                self.vehicle_hit(d, rng, ps, water);
                 if ps.hit_index >= 0 {
                     let m = &ps.list[ps.hit_index as usize].m;
                     let a = crate::trig::atan2(m.w(0xa) - self.y, m.w(8) - self.x);
@@ -1683,16 +1717,16 @@ impl Hero {
     }
 
     /// FUN_1088_4a81: the vehicle takes damage.
-    fn vehicle_hit(&mut self, damage: i32, _rng: &mut PascalRandom) {
+    fn vehicle_hit(&mut self, damage: i32, rng: &mut PascalRandom, ps: &mut crate::particles::Particles, water: i32) {
         if self.hurt < 1 {
             let left = self.health - damage;
             if left < 1 {
-                eprintln!("warning: the vehicle's destruction (FUN_1088_4a34) not ported");
                 self.hurt = 0x7fff;
                 self.anim = 0x15e;
                 self.state = DEAD;
                 self.turn = NO_TURN;
                 self.health = left;
+                self.vehicle_wreck(rng, ps, water);
             } else {
                 if self.health > 0x8e && left < 0x8f {
                     self.messages.push((-12, false));
@@ -1702,6 +1736,73 @@ impl Hero {
                 self.hurt_blink = 0x52;
             }
         }
+    }
+
+    /// FUN_1088_4a34: the vehicle blows up: a column of bubbles (FUN_1068_2c56), the pieces
+    /// (FUN_1088_46e9) and a blast (FUN_1040_613b).
+    fn vehicle_wreck(&mut self, rng: &mut PascalRandom, ps: &mut crate::particles::Particles, water: i32) {
+        sound::play_at(0x3b, self.y, self.x);
+        self.shakes.push((0x30, 0x16));
+        let (y, x) = (self.y - 0x14, self.x);
+        ps.p.group = 0;
+        for k in 0..=0x18 {
+            ps.p.on_spawn = if k % 0xc == 0 { rng.random(2) + 0x7570 } else { 0 };
+            ps.p.delay = (k * k) / 6;
+            let bx = x - 0x10 + rng.random(0x21);
+            let by = y - rng.random(3);
+            let sprite = rng.random(3) + 0x64b;
+            Self::bubble(ps, water, sprite, by, bx);
+        }
+        ps.p.on_spawn = 0;
+        ps.p.delay = 0;
+        ps.p.group = 1;
+        // FUN_1088_46e9: bits thrown both ways, wider the faster, then puffs.
+        sound::play_at(0x21, y, x);
+        let left = |r: &mut PascalRandom, spread: i32| (r.random(0x80) + 0x960) - spread;
+        let right = |r: &mut PascalRandom, spread: i32| ((0x1860 - r.random(0x80)) + spread) % 0x1680;
+        ps.p.hits = 0x8000;
+        ps.p.callback = 0x24f1;
+        for i in 1..=0x20 {
+            let (speed, spread) = ((i << 6) / 0x20 + 1, (i * 0x3c0) / 0x20);
+            ps.p.delay = rng.random(8);
+            let s = (rng.random(4) == 0) as i32 + 0x5307;
+            ps.spawn_seq(s, 1, 100, y, x, 0);
+            let a = left(rng, spread);
+            ps.throw(0x58, speed, a);
+            ps.p.delay = rng.random(8);
+            let s = (rng.random(4) == 0) as i32 * 2 + 0x5306;
+            ps.spawn_seq(s, 1, 100, y, x, 0);
+            let a = right(rng, spread);
+            ps.throw(0x58, speed, a);
+        }
+        for i in 1..=4 {
+            let (speed, spread) = ((i * 0x30) / 4 + 1, (i * 0x3c0) / 4);
+            for side in 0..2 {
+                ps.p.delay = rng.random(8) + 8;
+                let s = rng.random(5) + 0x530f;
+                ps.spawn_seq(s, 1, 0xaa, y, x, 0);
+                let a = if side == 0 { left(rng, spread) } else { right(rng, spread) };
+                ps.throw(0x5b, speed, a);
+            }
+        }
+        ps.p.callback = 0;
+        ps.p.on_death = 0;
+        for i in 1..=8 {
+            let (speed, spread) = ((i << 5) / 8 + 1, (i * 0x3c0) / 8);
+            for side in 0..2 {
+                ps.p.delay = rng.random(8) + 8;
+                ps.spawn_seq(0x5300, 4, 5, y, x, 1);
+                let a = if side == 0 { left(rng, spread) } else { right(rng, spread) };
+                ps.throw(0x58, speed, a);
+            }
+        }
+        ps.p.hits = 0;
+        for (d, dy, dx) in [(0x1e, 6, 1), (0x19, 0xc, 4), (0x14, -5, -5), (0xf, 5, 0)] {
+            ps.p.delay = d;
+            ps.spawn_seq(0x5300, 4, 5, y + dy, x + dx, 1); // FUN_1040_62b7
+        }
+        ps.p.delay = 0;
+        ps.spawn_seq(0x7000, 3, 0x18, self.y - 0xe, self.x, 1); // FUN_1040_613b
     }
 
     /// Script command 0x1c: the START intro throws him out of the ship.
@@ -2206,26 +2307,46 @@ impl Hero {
     /// The start of FUN_1088_55f0: pick-ups (function 30000 in plane 2) under the hero's two
     /// columns (x-4, x+4) from his feet to his head (FUN_1088_5551). Each is cleared and its
     /// effect (function 4) runs at the tile's centre; main applies both.
-    fn pick_up(&mut self, w: &World) {
+    fn pick_up(&mut self, w: &World, lv: &Level, rng: &mut PascalRandom) {
         let rows = (self.height + 7) >> 4;
         let (feet, head) = (self.y - 4, (self.y - self.height) + 5);
         let mut y = feet;
         for r in (0..=rows).rev() {
             for x in [self.x - 4, self.x + 4] {
-                if (8000..8100).contains(&w.tile_function_at(y, x)) {
-                    eprintln!("warning: FUN_1088_55bd (tile functions 8000..8099) not ported");
-                }
                 let Some(cell) = w.cell_at(2, y, x) else {
+                    self.harmful_tile(w.tile_function_at(y, x), rng);
                     continue;
                 };
                 let t = (x >> 4, y >> 4);
-                if self.pickups.iter().any(|p| p.0 == t) || w.cell_function(cell, 0) != PICKUP {
-                    continue;
+                if !self.pickups.iter().any(|p| p.0 == t) && w.cell_function(cell, 0) == PICKUP {
+                    let (fx, f3) = (w.cell_function(cell, 4), w.cell_function(cell, 3));
+                    self.pickups.push((t, fx, f3, (y & !15) + 7, (x & !15) + 7));
                 }
-                let (fx, f3) = (w.cell_function(cell, 4), w.cell_function(cell, 3));
-                self.pickups.push((t, fx, f3, (y & !15) + 7, (x & !15) + 7));
+                self.harmful_tile(w.tile_function_at(y, x), rng);
             }
             y = if r != 1 { y - 0x10 } else { head };
+        }
+        // The platforms the hero's column meets (FUN_1078_0198), last first: their planes'
+        // tiles under x from the feet up.
+        for p in lv.platforms.iter().rev().flatten() {
+            if self.x < p.x || feet < p.y || p.x + p.width <= self.x || p.y + p.height <= head {
+                continue;
+            }
+            let x = self.x - p.x;
+            let mut y = feet - p.y;
+            for r in (0..=rows).rev() {
+                self.harmful_tile(w.tile_function_in(p.plane, y, x), rng);
+                y = if r != 1 { y - 0x10 } else { head - p.y };
+            }
+        }
+    }
+
+    /// FUN_1088_55bd: tile function 8000 hurts (FUN_1088_3c32(100)); when that hurt him, sound
+    /// 0x16 and a sideways shake.
+    fn harmful_tile(&mut self, f: u16, rng: &mut PascalRandom) {
+        if f == 8000 && self.hit(100, 1, rng) == 1 {
+            sound::play_at(0x16, self.y, self.x);
+            self.side_shakes.push((0x24, 0xe));
         }
     }
 

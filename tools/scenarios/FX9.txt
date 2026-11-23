@@ -1,0 +1,17 @@
+# Tile effect 51 (FUN_1040_517c: the block of functions 60300/60301 goes cell by cell, four chips
+# each fluttering down, sound 0x59, shake): CITYRAIN's RED SLEUTH sign at (784..831, 1840..1871),
+# tiles 0x91f.. (mask 4: blasts only), with effects 53/54 around it. The start moved below it with a
+# weapon-3 pick-up copied there: rockets up at it.
+level MAPS/CITYRAIN.MAP
+start 880 1910
+cell 2 55 119 0xd06
+mouse 20 40
+20
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+200

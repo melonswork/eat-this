@@ -1,0 +1,86 @@
+# The tank's claw grabs the hero (FUN_1070_b9d3: hit kind 0 for 0x60, hero state -3 HELD, pulled
+# towards the claw by gHeroDX/DY, gHeroCrouch = 1): TANK2's first 740 frames (the grenade launcher shot
+# off, the claw out), a wait, then he walks up to the tank: the claw holds him until he dies.
+level MAPS/F_LAST.MAP
+start 2050 735
+cell 2 128 45 0xd06
+cell 2 129 45 0xd06
+cell 2 130 45 0xd06
+cell 2 131 45 0xd06
+cell 2 132 45 0xd06
+cell 2 133 45 0xd06
+mouse 300 120
+10
+45 right
+5 left
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+5 rmb lmb
+15 lmb
+120
+60 right
+500
