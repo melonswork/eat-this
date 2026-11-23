@@ -137,6 +137,34 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             // record's +8 is under 5, else 0x5218.
             sprite = if part.v.w(8) < 5 { 0x5215 + (age / 6) % 6 } else { 0x5218 };
         }
+        0x1e16 => {
+            // FUN_1050_1e16 (a block sinking, effect 33; motion record: top-left cell, x, y,
+            // columns - 1, rows - 1): its tiles where they were, cut at the particle's y; lights
+            // (0x1b06, mode 0x28) along that line; flames (mode 0x10, y step age * 0x1000 / life
+            // + 0x300) on it.
+            let v = &part.v;
+            let (base, bx, by, cols, rows) = (v.w(0), v.w(2), v.w(4), v.w(6), v.w(8));
+            let save = p.clip;
+            p.clip.3 = p.clip.3.min(y - p.cam.1);
+            for e in 0..=rows.max(-1) {
+                for c in 0..=cols.max(-1) {
+                    tile_at(p, world, base + e * 0x14 + c, bx + c * 16 - p.cam.0, by + e * 16 - p.cam.1);
+                }
+            }
+            p.clip = save;
+            p.clip.1 = p.clip.1.max(by - p.cam.1);
+            p.mode = 0x28;
+            for c in 0..=cols.max(-1) {
+                p.at(0x1b06, x + c * 16, y);
+            }
+            p.clip = save;
+            p.mode = 0x10;
+            let step = (age * 0x1000) / m.w(0x22).max(1) + 0x300;
+            for c in 0..=cols.max(-1) {
+                p.flame(step, 0x200, age as u32, x + 8 + c * 16, y);
+            }
+            return;
+        }
         // FUN_1050_0121 is empty; the fire crawlers (14bd) only spawn flames.
         0x121 | 0x14bd => return,
         0x26c8 => {
@@ -267,6 +295,42 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
         _ => {}
     }
     p.at(sprite, x, y);
+}
+
+/// FUN_10f0_445a: map cell `cell` (group << 8 | tile) at screen (x, y) by its draw kind (0 skips
+/// colour 0, 2 opaque, 6 MIX[tile][screen], 8 LIGHT[tile][screen]), clipped.
+fn tile_at(p: &mut Painter, world: &crate::world::World, cell: i32, x: i32, y: i32) {
+    let (gi, t) = ((cell >> 8) as usize, (cell & 0xff) as usize);
+    let Some(Some(g)) = world.groups.get(gi) else { return };
+    if t >= g.len() {
+        return;
+    }
+    let kind = g.infos[t * 16];
+    if kind == 4 || kind == 0xff {
+        return;
+    }
+    let table = match kind {
+        6 => p.tables.mix.as_deref(),
+        8 => p.tables.light.as_deref(),
+        _ => None,
+    };
+    let px = g.tile(t);
+    let (c0, c1, c2, c3) = p.clip;
+    for yy in 0..16 {
+        for xx in 0..16 {
+            let (sx, sy) = (x + xx, y + yy);
+            if sx < c0 || sx > c2 || sy < c1 || sy > c3 {
+                continue;
+            }
+            let c = px[(yy * 16 + xx) as usize];
+            let at = (sy * crate::W + sx) as usize;
+            if let Some(tb) = table {
+                p.fb[at] = tb.get(c as usize * 256 + p.fb[at] as usize).copied().unwrap_or(c);
+            } else if c != 0 || kind == 2 {
+                p.fb[at] = c;
+            }
+        }
+    }
 }
 
 /// The hero's sector's decals (list +0x5a, FUN_1070_fb30).
