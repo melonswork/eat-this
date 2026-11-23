@@ -316,7 +316,15 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
 - `python3 tools/drawdiff.py DEMO FRAME` = the sprites the original draws in a frame (dumpframe `--draws`, cached in
   work/frames/<DEMO>/frame<N>.draws) against the port's ET_DRAWLOG: the quickest way to name a pixel difference.
   It lists the sky (bg.rs) and platform/tile draws as one-sided; pixels, lines and polygons aren't sprites.
-@@STILL@@
+  Also from a sweep of the CD demos (every ~300 frames): the hero's health (4e6c) is now the original's frame by frame in
+  all seven demos (FUN_1050_4b17 divides by the WRONG edge when the target is left of the blast: more than full damage);
+  objects on a slope keep `gLastTileCell` (the y-1 cell when y+1 isn't one); messages split at the FIRST comma with a bad
+  language = 0; a teleport runs an extra HUD update; foreground procs (1170:18e2) by number, 6 = girders (1090:1d2a);
+  beams 465a (`Painter::reds`: hovering machine, sentry, big alien's shield, the last under the running RandSeed);
+  running blood splats; landing dust; FUN_10d0_01e4's polygon filler; 302b mirrored.
+- State: every sampled frame is pixel-exact: all scenarios (5 frames each) and ~790 frames of the seven CD demos, but for
+  one pixel of a flame (LEVEL2_1 11467 and 11778, at (186, 154..159)). Not drawn/ported: script command 0x12 (music
+  volume), the typed cheats but SCAN, the MOVIE cheat's movie2.spr; GRANNY's building (COLLAPSE2) isn't an oracle.
   Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`,
   `ET_MSG=1` the messages shown, `ET_HEALTH=1` the health each frame, `ET_NOPROCS=1` ignores command 0x15,
   `ET_AUTOMAP=1`, `ET_TOTALS=1`; `--bg-only` stops where dumpframe's .bg does (first FUN_1068_09bf), but the
