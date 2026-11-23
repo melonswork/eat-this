@@ -97,8 +97,10 @@ impl MainScript {
         let mut track_titles = Vec::new();
         for (k, v) in &pairs {
             if k.eq_ignore_ascii_case("AddMsg") {
-                if let Some((t, l)) = v.rsplit_once(',') {
-                    if l.trim().parse::<i32>().ok() == Some(language) {
+                // Split at the first comma; a language that isn't a number is 0 (HYDRO_02's
+                // "NON E' QUESTA LA STRADA, VECCHIO!,5").
+                if let Some((t, l)) = v.split_once(',') {
+                    if l.trim().parse::<i32>().unwrap_or(0) == language {
                         messages.push(t.to_string());
                     }
                 }

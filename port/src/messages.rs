@@ -50,8 +50,8 @@ impl MessageBox {
             let main = v.len() as i32;
             if let Some(map) = LEVEL.with(|l| l.borrow().clone()) {
                 for (k, val) in crate::script_lines(&map) {
-                    if let Some((t, l)) = val.rsplit_once(',') {
-                        if k.eq_ignore_ascii_case("AddMsg") && l.trim().parse::<i32>().ok() == Some(lang) {
+                    if let Some((t, l)) = val.split_once(',') {
+                        if k.eq_ignore_ascii_case("AddMsg") && l.trim().parse::<i32>().unwrap_or(0) == lang {
                             v.push(t.to_string());
                         }
                     }

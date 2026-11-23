@@ -712,6 +712,11 @@ impl Game {
             self.hero.exit_timer -= 1;
             if self.hero.exit_timer == 0 {
                 self.teleport();
+                // LevelFirstFrame's own HUD update (the one this frame shows).
+                let drawn = self.messages.drawn.clone();
+                self.messages.frame();
+                self.messages.drawn = drawn;
+                self.hero.status_bar();
             }
         }
         self.hero.fade_step();
