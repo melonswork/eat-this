@@ -556,12 +556,54 @@ impl Level {
                     }
                     lc += 4;
                 }
-                // Not ported yet; skipped with their sizes (tools/scripts.py COMMANDS).
                 0x02 => {
                     fx.effects.push((arg(3), arg(2) as i16 as i32, arg(1) as i16 as i32));
                     lc += 4;
                 }
-                0x0f => lc += 5,
+                // The last platform's rectangle (w21..w24) in pixels.
+                0x0f => {
+                    if let Some(p) = self.platforms.get_mut(last_platform).and_then(|p| p.as_mut()) {
+                        p.bounds = (arg(1) as i16 as i32, arg(2) as i16 as i32, arg(3) as i16 as i32, arg(4) as i16 as i32);
+                    }
+                    lc += 5;
+                }
+                // The same, from its corner cells.
+                0x0c => {
+                    let (c1, c2) = (arg(1) as i32, arg(2) as i32);
+                    if let Some(p) = self.platforms.get_mut(last_platform).and_then(|p| p.as_mut()) {
+                        p.bounds = (c1 % width * 16, c1 / width * 16, c2 % width * 16 + 15, c2 / width * 16 + 15);
+                    }
+                    lc += 3;
+                }
+                // FUN_10f0_5af5: a cell set as it is (no lever, no pick-up).
+                0x17 => {
+                    if let Some(c) = world.planes[plane].as_mut().and_then(|p| p.cells.get_mut(arg(1) as usize)) {
+                        *c = arg(2);
+                    }
+                    lc += 3;
+                }
+                // A blast over the box of two cells (FUN_1050_4296).
+                0x19 => {
+                    let (c1, c2) = (arg(1) as i32, arg(2) as i32);
+                    let (x1, y1) = (c1 % width * 16, c1 / width * 16);
+                    let (hx, hy) = ((c2 % width * 16 + 15 - x1) >> 1, (c2 / width * 16 + 15 - y1) >> 1);
+                    self.particles.blast(2, 0x600, 5, hy, hx, -hy, -hx, y1 + hy, x1 + hx);
+                    lc += 3;
+                }
+                // The sector in which the last platform moves (w18:w19).
+                0x1a => {
+                    let c = arg(1) as i32;
+                    let sector = world.sector_at(c / width * 16, c % width * 16);
+                    if let Some(p) = self.platforms.get_mut(last_platform).and_then(|p| p.as_mut()) {
+                        p.sector = sector;
+                    }
+                    lc += 2;
+                }
+                // The level's CD track.
+                0x11 => {
+                    crate::sound::music(arg(1) as u32, arg(2) != 0);
+                    lc += 3;
+                }
                 0x15 => {
                     self.procs = Some((u32::from(arg(1)), u32::from(arg(2))));
                     if std::env::var("ET_CMD").is_ok() {
@@ -569,8 +611,8 @@ impl Level {
                     }
                     lc += 3;
                 }
-                0x0c | 0x11 | 0x17 | 0x19 => lc += 3,
-                0x12 | 0x1a => lc += 2,
+                // The music's volume (MixerSetVolume), not ported.
+                0x12 => lc += 2,
                 // FUN_1088_a9af: a hidden area found (1170:4eac, the stats screen's count).
                 0x18 => {
                     fx.secrets += 1;
