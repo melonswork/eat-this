@@ -1009,8 +1009,6 @@ struct Graphics {
     /// 1170:512a: the level colour nearest to RGB (0x10, 0x14, 0x19) (FUN_10f0_6039): the rain
     /// is PalMix[512a][pixel].
     rain_colour: u8,
-    /// 1170:1b14: the level colour nearest to black.
-    black: u8,
     /// 1170:1b14..1b23: the level colours nearest to the 16 VGA colours (table 1170:1b24), among
     /// colours 1..=ForegroundColors (LevelLoad, after FUN_10f0_183d).
     vga: [u8; 16],
@@ -1146,11 +1144,6 @@ impl Graphics {
             show_hud: true,
             hud_level: 2,
             storm_palette,
-            // 1170:1b14: the level colour nearest to black (FUN_10f0_6039(0, 0, 0)).
-            black: (0..256).min_by_key(|&i| {
-                let c = colors6[i];
-                (((c[0] as i64).pow(2) + (c[1] as i64).pow(2)).pow(2) + (c[2] as i64).pow(4), i)
-            }).unwrap_or(0) as u8,
             vga: {
                 const VGA: [[i64; 3]; 16] = [
                     [0, 0, 0], [0, 0, 42], [0, 42, 0], [0, 42, 42], [42, 0, 0], [42, 0, 42], [42, 21, 0], [42, 42, 42],
@@ -1230,7 +1223,7 @@ impl Graphics {
                     let fx = (qx << 3) / 9 - (cam_x << 3) / 9;
                     let fy = (qy << 3) / 9 - (cam_y << 3) / 9;
                     let pts = [(x0, y0), (x0 + 0xa0, y0), (fx - 0x20, fy + 99), (fx - 0x50, fy + 0x5b)];
-                    render::fill_polygon(fb, &pts, self.black);
+                    render::fill_polygon(fb, &pts, self.vga[0]);
                 }
             }
         }
@@ -1297,7 +1290,7 @@ impl Graphics {
             vflip: false,
             mix: render::Mix::Level,
             frame,
-            flash: draw::FLASH,
+            flash: self.vga[7],
             clip: render::SCREEN,
         };
         if ship != (0, 0) {
@@ -1606,7 +1599,7 @@ impl Graphics {
             vflip: false,
             mix: render::Mix::Level,
             frame,
-            flash: draw::FLASH,
+            flash: self.vga[7],
             clip: render::SCREEN,
         }
     }
@@ -1629,7 +1622,7 @@ impl Graphics {
             vflip: false,
             mix: render::Mix::Level,
             frame,
-            flash: draw::FLASH,
+            flash: self.vga[7],
             clip: render::SCREEN,
         };
         let got = level::TALLY.with(|t| t.get());

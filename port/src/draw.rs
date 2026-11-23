@@ -14,9 +14,6 @@ use crate::objects::{Look, Obj, list};
 use crate::particles::Particle;
 use crate::render::{Mix, Painter};
 
-/// The hit flash colour 1170:1b1b (its value at level start).
-pub const FLASH: u8 = 7;
-
 /// The level frame counter divided by `d` (the long divisions the draw code does with 617e).
 fn per(p: &Painter, d: u32) -> i32 {
     (p.frame / d) as i32
@@ -29,14 +26,15 @@ pub fn particles(p: &mut Painter, level: &Level, world: &crate::world::World, gr
         if part.m.w(0) != group {
             continue;
         }
-        particle(p, part, world);
+        particle(p, part, world, level);
         p.reset();
     }
 }
 
-fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
+fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level: &Level) {
     let m = &part.m;
     let (x, y) = (m.w(8), m.w(0xa));
+    if std::env::var_os("ET_PARTDRAW").is_some() { eprintln!("PART cb {:#x} sprite {:#x} mode {:#x} at ({}, {})", m.uw(0x42), m.w(0x16), m.w(0x20), x - p.cam.0, y - p.cam.1); }
     p.hflip = m.b(0x18) != 0;
     p.vflip = m.b(0x1a) != 0;
     p.mode = m.w(0x20);
@@ -107,7 +105,15 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
             p.sprite(sprite, x - (p.cam.0 >> 1), y - (p.cam.1 >> 1));
             return;
         }
+        0x1d33 => {
+            // FUN_1050_1d33 (a splash): tint row 4 (6996 = the tint table 4c26), cut at the
+            // hero's sector's water line (4656 +0x16).
+            p.colour = 4;
+            let line = world.sectors.get(level.sector.unwrap_or(0)).map_or(0x7fff, |s| s.water[1]);
+            p.clip.3 = p.clip.3.min(line - p.cam.1 - 1);
+        }
         0x236b => {
+            // FUN_1050_236b (6996, mode 0x34's TINT, = the tint table 4c26).
             p.mode = 0x34;
             p.colour = 2;
         }
