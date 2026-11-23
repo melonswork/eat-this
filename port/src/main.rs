@@ -16,6 +16,7 @@ mod deaths;
 mod bigali;
 mod archive;
 mod bg;
+mod burnwreck;
 mod camera;
 mod carrier;
 mod data;
@@ -426,6 +427,7 @@ impl Game {
         self.level.particles.release_due();
         {
             let mut fx = Effects::default();
+            fx.shakes.append(&mut self.level.particles.spawn_shakes);
             self.level.release_tile_events(&mut self.world, &mut self.rng, &mut fx, self.hero.x);
             self.flush_spawns(&mut fx);
             self.hero.messages.extend(fx.damage_hero.drain(..).map(|id| (id, false)));

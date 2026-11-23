@@ -472,6 +472,12 @@ impl Level {
                 o.set(6, x + 0x80);
                 o.set(8, y + 0x30);
             }
+            crate::burnwreck::KIND => {
+                let mut o = base(kind, 0xbf8, 0x1c);
+                crate::burnwreck::make(&mut o, r.byte2(), r.at(4), r.at(6), self.now);
+                let (y, x) = (o.w(0x10), o.w(0xe));
+                self.add_actor(world, o, y, x);
+            }
             0x141e => {
                 // A smoke/steam emitter (FUN_1070_5280): byte 2 of the record is its kind.
                 let mut o = base(kind, 0xd14, 0x16);

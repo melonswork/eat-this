@@ -126,6 +126,8 @@ pub struct Particles {
     /// Spawns waiting for their frame (FUN_10a0_0161's event queue 1170:19d2), by due frame,
     /// later ones after earlier ones with the same frame.
     pub pending: Vec<(u32, Particle)>,
+    /// ScreenShakes of spawn effects (FUN_1040_60bb(091e)), applied by the frame loop.
+    pub spawn_shakes: Vec<(i32, i32)>,
     /// DAT_1170_617e, the level frame counter.
     pub now: u32,
     /// 1170:45b6: cleared by a death effect that keeps its particle alive.
@@ -226,7 +228,8 @@ impl Particles {
         self.last_pending = false;
         if p.on_spawn != 0 {
             let m = &self.list[self.last].m;
-            spawn_effect(p.on_spawn, m.w(0xa), m.w(8));
+            let (y, x) = (m.w(0xa), m.w(8));
+            spawn_effect(&mut self.spawn_shakes, p.on_spawn, y, x);
         }
         self.last
     }
@@ -253,7 +256,7 @@ impl Particles {
         while self.pending.first().is_some_and(|(d, _)| *d <= self.now) {
             let (_, p) = self.pending.remove(0);
             if p.m.w(0x28) != 0 {
-                spawn_effect(p.m.w(0x28), p.m.w(0xa), p.m.w(8));
+                spawn_effect(&mut self.spawn_shakes, p.m.w(0x28), p.m.w(0xa), p.m.w(8));
             }
             self.list.push(p);
         }
@@ -1519,7 +1522,7 @@ impl Level {
                 let m = &mut self.particles.list[i].m;
                 m.set(0x16, if t < 5 { ((m.uw(0x24) >> 3) & 3) as i32 + 0x1900 } else { 0x1904 });
             }
-            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a | 0x20ed | 0x232e | 0x2459 | 0x2497 | 0x236b => {} // drawing only
+            0x2d2 | 0x2946 | 0x1c92 | 0x1da7 | 0x186e | 0x137a | 0x17f4 | 0x2148 | 0x2192 | 0x13c3 | 0x121 | 0x12f6 | 0x253f | 0x177a | 0x20ed | 0x232e | 0x2459 | 0x2497 | 0x236b | 0x1cef => {} // drawing only
             0x2299 => {
                 // FUN_1050_2299: a burning bit trails smoke.
                 if m.w(0x24) % 4 == 3 {
@@ -3042,10 +3045,14 @@ pub fn fan(
 
 /// FUN_1040_60bb(091e, y, x) when a particle joins the array (FUN_1050_3f77, or FUN_10a0_023f for
 /// a delayed one): 30000 + n plays sound n there; the procedures (< 30000) aren't used this way.
-fn spawn_effect(id: i32, y: i32, x: i32) {
+/// Effect 26 (FUN_1040_2f7b, the burning wreck's fire catching): a shake (`shakes`) and 0x4e.
+fn spawn_effect(shakes: &mut Vec<(i32, i32)>, id: i32, y: i32, x: i32) {
     let id = id as u16 as i32;
     if id >= 30000 {
         sound::play_at((id - 30000) as usize, y, x);
+    } else if id == 26 {
+        shakes.push((0x24, 0xc));
+        sound::play_at(0x4e, y, x);
     } else {
         eprintln!("warning: particle spawn effect {id} not ported");
     }
