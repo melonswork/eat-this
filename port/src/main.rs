@@ -448,6 +448,13 @@ impl Game {
             self.level.run_scripts(&mut self.world, cell, &mut self.rng, &mut fx);
         }
         self.flush_spawns(&mut fx);
+        // Their scripts' tile blasts shake the screen at once.
+        for (a, b) in std::mem::take(&mut fx.side_shakes) {
+            self.camera.shake_sideways(a, b);
+        }
+        for (a, b) in std::mem::take(&mut fx.shakes) {
+            self.camera.shake(a, b);
+        }
         // (465e is set after the platforms, forgetting a door's.)
         self.level.door_noise = false;
         // 1170:465e: a screen shake just started (or the hero fires, below).
