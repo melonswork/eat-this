@@ -271,6 +271,8 @@ impl<'a> Painter<'a> {
             if w <= 0 || h <= 0 {
                 return;
             }
+            let left = x + s.hotspot.0 / 2;
+            let cut = left < self.clip.0 || left + w > self.clip.2 + 1;
             let mut px = vec![0u8; (w * h) as usize];
             for yy in 0..h {
                 // The row's span (its first opaque pixel, its opaque width): screen pixel
@@ -278,10 +280,12 @@ impl<'a> Painter<'a> {
                 let row = &s.pixels[(yy * 2 * s.width) as usize..((yy * 2 + 1) * s.width) as usize];
                 let Some(start) = row.iter().position(|&c| c != 0) else { continue };
                 let end = row.iter().rposition(|&c| c != 0).unwrap_or(start) + 1;
+                // Clipped left or right, every row is read from an even pixel.
+                let from = if cut { start & !1 } else { start };
                 for k in 0..((end - start) >> 1) {
                     let xx = (start >> 1) + k;
                     if (xx as i32) < w {
-                        px[(yy * w) as usize + xx] = row[start + 2 * k];
+                        px[(yy * w) as usize + xx] = row[from + 2 * k];
                     }
                 }
             }
