@@ -768,7 +768,8 @@ impl Level {
         for plane in [2, MAIN_PLANE] {
             self.spawn_icons(world, cx, plane);
         }
-        for rec in world.map.object_records() {
+        let padded = world.map.object_records_padded(4);
+        for (index, rec) in world.map.object_records().into_iter().enumerate() {
             let kind = rec[0] as u16;
             if std::env::var_os("ET_REC").is_some() {
                 eprintln!("REC {kind:#x} {:?}", rec);
@@ -833,10 +834,11 @@ impl Level {
                     eprintln!("warning: OBJECTS type {k} (FUN_1060_0166) not ported")
                 }
                 0x2718 => {
-                    let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
+                    // Words past a short record come from the bytes after it (CITY02's +0x1a).
+                    let g = |i: usize| padded[index][i] as i32;
                     let s = world.sector_at(g(3), g(2));
                     world.sectors[s].water[..4].copy_from_slice(&[g(2), g(3), g(4), g(5)]);
-                    if std::env::var_os("ET_SCAN").is_some() { println!("WATER sector {s} line {} at ({}, {}) cam {:?}", g(3), g(2), g(3), world.sectors[s].cam); }
+                    if std::env::var_os("ET_SCAN").is_some() { println!("WATER sector {s} line {} at ({}, {}) cam {:?} rec {:?}", g(3), g(2), g(3), world.sectors[s].cam, padded[index]); }
                 }
                 0x2719 => {
                     let g = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;

@@ -40,7 +40,7 @@ def main():
                     help="set DS:OFF (hex) to BYTE (hex) when the demo starts, e.g. 1a94=1 for the automap")
     ap.add_argument("--overlay", help="folder over work/cd (default work/tracer/overlay; work/demos when the demo is there)")
     ap.add_argument("--peek", action="append", default=[], metavar="OFF:LEN",
-                    help="print LEN bytes (hex) of DS:OFF (hex) at each dumped frame")
+                    help="print LEN bytes (hex) of DS:OFF (hex) at each dumped frame; @PTR+ADD:LEN reads through the far pointer at DS:PTR")
     o = ap.parse_args()
 
     game_path, _ = demo_files(o.demo)
@@ -84,6 +84,12 @@ def main():
         (out / f"frame{n}.pal").write_bytes(pal)
         print("camera", [e.rw(DS, CAMERA), e.rw(DS, CAMERA + 2)], "hero", [e.rw(DS, 0x4DC4), e.rw(DS, 0x4DC6)])
         for pk in o.peek:
+            if pk.startswith("@"):  # @PTR+ADD:LEN: through the far pointer at DS:PTR
+                at, ln = pk[1:].split(":")
+                ptr, add = (int(v, 16) for v in (at.split("+") + ["0"])[:2])
+                sel, off = e.rw(DS, ptr + 2), e.rw(DS, ptr) + add
+                print(f"{sel:04x}:{off:04x}", e.rb(sel, off, int(ln, 16)).hex(" "))
+                continue
             off, ln = (int(v, 16) for v in pk.split(":"))
             print(f"DS:{off:04x}", e.rb(DS, off, ln).hex(" "))
         print("bgproc %04x:%04x fgproc %04x:%04x" % (e.rw(DS, 0x4C34), e.rw(DS, 0x4C32), e.rw(DS, 0x4C38), e.rw(DS, 0x4C36)))

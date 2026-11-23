@@ -168,6 +168,13 @@ impl Map {
     /// OBJECTS: MAP HEADER u16 @10 records of {u8 n; i16 words[n + 1]}, words[0] = type
     /// (FUN_10f0_5d1e; tools/formats.py has the same).
     pub fn object_records(&self) -> Vec<Vec<i16>> {
+        self.object_records_padded(0)
+    }
+
+    /// The records with `extra` more words each, read past their end from the raw stream (the
+    /// next record's bytes; 0 past the data), as the original reads its records in place
+    /// (*1170:6676): a short 0x2718 record takes its +0x1a from there.
+    pub fn object_records_padded(&self, extra: usize) -> Vec<Vec<i16>> {
         let count = u16_at(&self.header, 10) as usize;
         let mut out = Vec::with_capacity(count);
         let mut at = 0;
@@ -177,8 +184,11 @@ impl Map {
             };
             let n = n as usize + 1;
             out.push(
-                (0..n)
-                    .map(|i| i16_at(&self.objects, at + 1 + 2 * i))
+                (0..n + extra)
+                    .map(|i| {
+                        let b = at + 1 + 2 * i;
+                        if i < n || b + 1 < self.objects.len() { i16_at(&self.objects, b) } else { 0 }
+                    })
                     .collect(),
             );
             at += 1 + 2 * n;
