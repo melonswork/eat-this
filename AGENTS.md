@@ -103,7 +103,7 @@ streams and EVERY CHECK, so the method is the original's own.
 | `PRESS1` | CITY_I03, start left of the press (2850,897) | the press (icon 61001, weight type 1): drop, landing bits, pumping | exact |
 | `CHUNKS1` | CITY01, weapon-3 pick-up at (1360,1231) | wall chunks (effect 43, FUN_1040_45db) from rockets | exact |
 | `SHOTLEVER1` | CITYHS, start right of the posts at (5..8,70) | shot levers (FUN_1088_14a3) on explodable posts: effect 90 (FUN_1040_3471) | exact |
-| `FX1`..`FX11` | CITY_I01, FOREST04, FOREST02, CITY02, GRANNY, CITYRAIN, CITYHS (start moved, weapon-3 pick-ups copied) | tile effects of explodable tiles: 31/32 (FX1), 49 (FX2), 68 (FX4), 79 (FX5), 80 (FX6: a steam emitter made at once by EnemyFactory), 45 (FX7), 51 (FX9), 33 (FX10: the sinking block, drifting smoke mover 0x3acd, wind OBJECTS 0x2717), 35 (FX11) | exact |
+| `FX1`..`FX15` | CITY_I01, FOREST04, FOREST02, CITY02, GRANNY, CITYRAIN, CITYHS, CITY_I02, CITY_I06 (start moved, weapon-3 pick-ups copied) | tile effects of explodable tiles: 31/32 (FX1), 49 (FX2), 68 (FX4), 79 (FX5), 80 (FX6: a steam emitter made at once by EnemyFactory), 45 (FX7), 51 (FX9), 33 (FX10: the sinking block, drifting smoke mover 0x3acd, wind OBJECTS 0x2717), 35 (FX11), 40 (FX12/FX13: CITYHS's gate; its script starts an accelerating platform that squeezes a granny: FUN_10a0_023f runs before the platforms), 24/25 (FX14/FX15: the wrecks, burning wreck 0x1400 `burnwreck.rs`, spawn effect 26) | exact |
 
 ## Tools (non-obvious usage)
 
