@@ -768,7 +768,7 @@ pub fn doors(p: &mut Painter, level: &Level) {
         (0x3412, 32, 0x0454, 0, 0),
         (0x3405, 32, 0x0665, 0, 0),
     ];
-    for d in &level.doors {
+    for d in &level.doors_drawn {
         let Some(&(base, full, proc_, top, bot)) = T.get(d.kind) else { continue };
         let (x, y) = (d.x * 16 - p.cam.0, d.y * 16 - p.cam.1);
         let prog = d.progress;

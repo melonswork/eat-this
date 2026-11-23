@@ -221,6 +221,8 @@ impl Level {
     pub fn update_doors(&mut self, w: &mut World, hero: (i32, i32), first: bool, cx: &mut Ctx) {
         let width = w.main().width;
         let (htx, hty) = (hero.0 >> 4, hero.1 >> 4);
+        // Each door is drawn (its procedure) before its new position is stored.
+        self.doors_drawn = self.doors.clone();
         let mut i = 0;
         while i < self.doors.len() {
             let d = &mut self.doors[i];

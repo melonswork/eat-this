@@ -144,6 +144,8 @@ pub struct Level {
     pub teleports: Vec<Vec<i16>>,
     /// The moving doors (1170:53d2).
     pub doors: Vec<crate::doors::Door>,
+    /// The doors as FUN_10a8_0dab draws them: before it moves them (only the draw reads it).
+    pub doors_drawn: Vec<crate::doors::Door>,
     /// A door started moving this frame (1170:465e = 3).
     pub door_noise: bool,
     /// FUN_10a0_009b's event queue: (due frame, cell, tile, plane), a later one after an equal due.
@@ -236,6 +238,7 @@ impl Level {
             lists: vec![Default::default(); world.sectors.len()],
             teleports: Vec::new(),
             doors: Vec::new(),
+            doors_drawn: Vec::new(),
             door_noise: false,
             pasted: Vec::new(),
             tile_events: Vec::new(),
