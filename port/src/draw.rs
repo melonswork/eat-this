@@ -49,7 +49,11 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
     if std::env::var_os("ET_PARTDRAW").is_some() { eprintln!("PART cb {:#x}:{:#x} sprite {:#x} mode {:#x} at ({}, {}) colour {:#x} life {} age {}", m.uw(0x44), m.uw(0x42), m.w(0x16), m.w(0x20), x - p.cam.0, y - p.cam.1, m.w(0x1e), m.w(0x22), m.w(0x24)); }
     // The callbacks that draw through FUN_10f0_2670 itself rather than the flip table 1170:1b54
     // ignore the record's flips.
-    let plain = matches!(m.uw(0x42), 0x126 | 0x30f | 0x2d2 | 0x1cef | 0x2299 | 0x2459 | 0x2497 | 0x232e | 0x236b | 0x21c5 | 0x1d33);
+    let plain = matches!(
+        m.uw(0x42),
+        0x126 | 0x30f | 0x2d2 | 0x1cef | 0x2299 | 0x2459 | 0x2497 | 0x232e | 0x236b | 0x21c5 | 0x1d33 | 0x1c92 | 0x20ed
+            | 0x23b7 | 0x24f1 | 0x253f | 0x274f | 0x4ff | 0x1e16
+    );
     p.hflip = m.b(0x18) != 0 && !plain;
     p.vflip = m.b(0x1a) != 0 && !plain;
     p.mode = m.w(0x20);
@@ -125,6 +129,24 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             // FUN_1050_1656 (a critter): running (0x5215 + age / 6 % 6) while the motion
             // record's +8 is under 5, else 0x5218.
             sprite = if part.v.w(8) < 5 { 0x5215 + (age / 6) % 6 } else { 0x5218 };
+        }
+        // FUN_1050_0121 is empty; the fire crawlers (14bd) only spawn flames.
+        0x121 | 0x14bd => return,
+        0x26c8 => {
+            // FUN_1050_26c8 (sprayed bits): a pixel blinking between VGA colours 9 and 1, through
+            // MIX in its last 0x1e frames (FUN_10f0_083c / FUN_1050_2662).
+            let c = if age % 4 < 2 { p.vga[9] } else { p.vga[1] };
+            let (sx, sy) = (x - p.cam.0, y - p.cam.1);
+            let (c0, c1, c2, c3) = p.clip;
+            if c0 <= sx && sx <= c2 && c1 <= sy && sy <= c3 {
+                let at = (sy * crate::W + sx) as usize;
+                p.fb[at] = if age < m.w(0x22) - 0x1e {
+                    c
+                } else {
+                    p.tables.mix.as_deref().map_or(c, |t| t[c as usize * 256 + p.fb[at] as usize])
+                };
+            }
+            return;
         }
         0x11e6 => {
             // FUN_1050_11e6 (the grenade): while the motion record's +8 is under 5, 0x1818 or

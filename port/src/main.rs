@@ -1294,6 +1294,7 @@ impl Graphics {
             frame,
             flash: self.vga[7],
             black: self.vga[0],
+            vga: self.vga,
             clip: render::SCREEN,
         };
         if ship != (0, 0) {
@@ -1605,6 +1606,7 @@ impl Graphics {
             frame,
             flash: self.vga[7],
             black: self.vga[0],
+            vga: self.vga,
             clip: render::SCREEN,
         }
     }
@@ -1629,6 +1631,7 @@ impl Graphics {
             frame,
             flash: self.vga[7],
             black: self.vga[0],
+            vga: self.vga,
             clip: render::SCREEN,
         };
         let got = level::TALLY.with(|t| t.get());

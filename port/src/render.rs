@@ -134,6 +134,8 @@ pub struct Painter<'a> {
     pub flash: u8,
     /// 1170:1b14 (VGA colour 0 of the level).
     pub black: u8,
+    /// 1170:1b14..1b23: the level's colours nearest to the 16 VGA colours.
+    pub vga: [u8; 16],
     /// 1170:1aca..1ad0: the clip rectangle (left, top, right, bottom), inclusive.
     pub clip: (i32, i32, i32, i32),
 }
