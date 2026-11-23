@@ -469,7 +469,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
         0x1432 if o.w(0x28) == -0x140 => crate::deaths::draw_statue(p, o, 0x5d00),
         0x1428 => {
             p.hflip = o.w(0x20) < 0;
-            if o.w(0x28) == -500 && o.w(0x2e) > 7 {
+            if o.w(0x28) == -0x14 && o.w(0x2e) > 7 {
                 p.hflip = !p.hflip;
             }
             p.at_flash(o.w(0x2a) > 0, o.w(0x34), x, y);
