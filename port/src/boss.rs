@@ -179,6 +179,7 @@ impl Level {
             o.set(0x3c, o.w(0x3c) - 1);
         }
         let h = env.h;
+        let alive = env.hero_obj.health > 0;
         let cd = self.o(id).w(0x3c);
         if std::env::var("ET_BOSS").is_ok() {
             { let o = self.o(id); eprintln!("BOSSF vx {} vy {} wait {} lims l{} r{} u{} d{} X {} Y {}", o.w(0x22), o.w(0x24), o.w(0x20), o.w(0x28), o.w(0x2c), o.w(0x2a), o.w(0x2e), o.l(0xe), o.l(0x12)); }
@@ -192,8 +193,13 @@ impl Level {
                 self.o(id).set(0x3c, 0x48);
             }
         }
+        // The beam it hangs over the hero: it stops at him.
+        let mut end = floor.min(env.world.sectors[self.sector.unwrap_or(0)].water[1] - 1);
+        if h.x - h.half_width <= x && x < h.x + h.half_width && h.y > top && h.y <= end && alive {
+            end = h.y - h.height / 2;
+        }
         // For the draw pass: the body (the rotor +0x26 and the flash are added when drawing).
-        self.o(id).looks = vec![Obj::look(sprite, x, y)];
+        self.o(id).looks = vec![Obj::look(sprite, x, y), Obj::look(-1, top, end)];
         let d = match sprites::hit_rect(sprite, y, x, false) {
             Some((b, r, t, l)) => self.particles.hit_test(b, r, t, l, 0x1059),
             None => 0,

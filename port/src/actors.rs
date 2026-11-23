@@ -248,7 +248,13 @@ impl Level {
             0x13e2 => self.gunship(id, env),
             crate::gunship::WRECK => self.wreck(id, env),
             0x1428 => self.alien(id, env),
-            0x1432 => self.bigali(id, env),
+            0x1432 => {
+                self.bigali(id, env);
+                // Its shield's draw takes Random() from here on, and puts the seed back.
+                if let Some(o) = self.objects[id].as_mut() {
+                    o.looks = vec![crate::objects::Obj::look(-1, env.rng.seed as i32, 0)];
+                }
+            }
             0x141e => self.steam(id, env),
             crate::burnwreck::KIND => self.burnwreck(id, env),
             0x14fa => self.plant(id, env),

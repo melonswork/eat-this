@@ -11,6 +11,8 @@
 use crate::{H, W, blit, data::SpriteGroup, picture::Picture};
 
 pub struct Background {
+    /// `ForegroundProc=` (table 1170:18e2).
+    pub fore: u32,
     pub proc_: u32,
     pub picture: Option<Picture>,
     /// The script's LoadSpriteGroup slots, in order (None: blank or missing).

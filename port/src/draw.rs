@@ -511,6 +511,28 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
         // first stage), then the rotor; flashing while +0x34 >= 0x22e.
         0x13f6 => {
             let (bx, by) = (o.w(0x16), o.w(0x18));
+            if let Some(beam) = o.looks.get(1) {
+                let (x, top, end) = (bx - p.cam.0, (beam.x - p.cam.1).max(0), (beam.y - p.cam.1).min(199));
+                if (0..0x13f).contains(&x) && top <= end {
+                    if o.w(0x3c) <= 0x44 {
+                        let mut rng = crate::rng::PascalRandom::plain(p.frame);
+                        let c: Vec<u8> = (0..16).map(|_| p.reds[rng.random(3) as usize]).collect();
+                        for y in top..=end {
+                            let k = c[((end - y + 1) & 0xf) as usize];
+                            p.glow(x, y, k);
+                            p.glow(x + 1, y, k);
+                        }
+                    } else if x >= 2 && x + 2 < 0x13f {
+                        for y in top..=end {
+                            for dx in [-2, -1, 2, 3] {
+                                p.glow(x + dx, y, p.flash);
+                            }
+                            p.dot(x, y, p.vga[15]);
+                            p.dot(x + 1, y, p.vga[15]);
+                        }
+                    }
+                }
+            }
             let body = o.looks.first().map_or(0x7fff, |l| l.sprite);
             let t = o.w(0x34);
             if t < 0x22e {
@@ -642,6 +664,25 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
                 p.colour = p.flash;
             }
             p.at(o.w(0x34), x, y);
+            if let (true, Some(seed)) = (o.w(0x3c) > 0, o.looks.first()) {
+                // The shield: 12 rings of 12 dots on a turning ball.
+                let mut rng = crate::rng::PascalRandom::plain(seed.x as u32);
+                let (cx, cy) = (x - o.w(0x20) - p.cam.0, y - 0x1a - p.cam.1);
+                let a0 = ((p.frame << 3) % 0xf0) as i32;
+                for k in 0..12 {
+                    let a = a0 + k * 0xf0;
+                    let dy = cy - crate::trig::cos(a % 0x1680) * 0x26 / 0x4000;
+                    if dy < (cy - 0x24).max(0) || dy > (cy + 0x24).min(199) {
+                        continue;
+                    }
+                    let r = crate::trig::sin(a % 0x1680);
+                    for j in (0..12).rev() {
+                        let dx = r * (crate::trig::cos(j * 0xf0) * 0x26 / 0x4000) / 0x4000;
+                        let c = p.reds[rng.random(3) as usize];
+                        p.dot(cx + dx, dy, c);
+                    }
+                }
+            }
         }
         // FUN_1070_d23b: a springboard, squashed while +0x20 > 0.
         0x148c => p.at(0x7556 + (o.w(0x20) > 0) as i32, x, y),
@@ -707,7 +748,28 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
             p.at(0x3303, x, y);
         }
         // FUN_1070_06f6: a sentry.
-        crate::sentry::KIND => p.at_flash(o.w(0x22) > 0, 0x5212 + (shr(p, 4) & 1), x, y),
+        crate::sentry::KIND => {
+            // FUN_1070_06f6: a flickering column over it (under RandSeed = frame >> 2), then itself.
+            let (sx, bottom) = (x - p.cam.0, y - 9 - p.cam.1);
+            let (top, bottom) = ((bottom - 0x48).max(0), bottom.min(199));
+            if (0..=0x13f).contains(&sx) && top <= bottom {
+                let mut rng = crate::rng::PascalRandom::plain(p.frame >> 2);
+                let lit = o.w(0x24) > 0;
+                let c: Vec<u8> = (0..16)
+                    .map(|_| {
+                        let c = p.reds[rng.random(4) as usize];
+                        match &p.tables.light {
+                            Some(l) if lit => l[0x6400 + c as usize],
+                            _ => c,
+                        }
+                    })
+                    .collect();
+                for yy in top..=bottom {
+                    p.glow(sx, yy, c[((bottom - yy + 1) & 0xf) as usize]);
+                }
+            }
+            p.at_flash(o.w(0x22) > 0, 0x5212 + (shr(p, 4) & 1), x, y);
+        }
         _ if std::env::var("ET_DRAW").is_ok() => {
             eprintln!("draw: kind {:#x} at ({x},{y}) not drawn", o.kind)
         }

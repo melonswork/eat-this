@@ -136,6 +136,8 @@ pub struct Painter<'a> {
     pub black: u8,
     /// 1170:1b14..1b23: the level's colours nearest to the 16 VGA colours.
     pub vga: [u8; 16],
+    /// 1170:465a: the colours nearest to three reds (30, 46, 62 of 63), and 0.
+    pub reds: [u8; 4],
     /// 1170:1aca..1ad0: the clip rectangle (left, top, right, bottom), inclusive.
     pub clip: (i32, i32, i32, i32),
 }
@@ -192,6 +194,25 @@ impl<'a> Painter<'a> {
         }
         self.at(id, x, y);
         self.mode = 0;
+    }
+
+    /// A beam's pixel at screen (x, y): blended through PalMix over the background colours (as
+    /// the lasers do).
+    pub fn glow(&mut self, x: i32, y: i32, c: u8) {
+        let Some(mix) = self.table(Mix::Level) else { return };
+        if (0..W).contains(&x) && (0..H).contains(&y) {
+            let d = &mut self.fb[(y * W + x) as usize];
+            if *d <= self.fg {
+                *d = mix.get(c as usize * 256 + *d as usize).copied().unwrap_or(c);
+            }
+        }
+    }
+
+    /// The same, `c` itself.
+    pub fn dot(&mut self, x: i32, y: i32, c: u8) {
+        if (0..W).contains(&x) && (0..H).contains(&y) && self.fb[(y * W + x) as usize] <= self.fg {
+            self.fb[(y * W + x) as usize] = c;
+        }
     }
 
     /// ET_DRAWLOG=1: what is drawn, as `tools/dumpframe.py --draws` lists it.
