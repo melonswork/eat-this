@@ -1758,6 +1758,9 @@ fn draw_plane(fb: &mut [u8], world: &World, tables: &render::Tables, pl: &world:
                 _ => None,
             };
             let opaque = info[0] == 2;
+            if std::env::var_os("ET_TILEAT").is_some_and(|v| { let v = v.to_string_lossy().to_string(); let mut it = v.split(',').map(|n| n.parse::<i32>().unwrap()); let (qx, qy) = (it.next().unwrap(), it.next().unwrap()); qx >= sx && qx < sx + TILE && qy >= sy && qy < sy + TILE }) {
+                eprintln!("TILEAT cell {cell:#x} t {t} info {:?} plane w {} h {} main w {} origin ({ox},{oy})", info, pl.width, pl.height, world.main().width);
+            }
             let px = group.tile(t as usize);
             for y in 0..TILE {
                 let yy = sy + y;
