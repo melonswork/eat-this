@@ -186,8 +186,7 @@ are black and white.
   starts (its music waits for the first frame), `Video=X.avi,1` before the stats, CREDITS.AVI,
   F1 = ETHELP.AVI. The sound goes to the mixer (`sound::Ev::Pcm`), CD music stops under a level
   video. Shown at 640x480 (240-line videos doubled), 4:3 in the middle of the window.
-  Not done: the help texts FUN_1008_1073 writes over the pages with a GDI font (menu texts -0x25..
-  -0x2c and -0x2c - page); a missing video (scripts name `seb.avi`, not on the CD) is skipped as
+  A missing video (scripts name `seb.avi`, not on the CD) is skipped as
   in the original. Check: `ET_AVI_YUV="FILE.AVI OUT.yuv [N]"` dumps yuv410p; all 27 files equal
   `ffmpeg -fps_mode passthrough -pix_fmt yuv410p` (FFmpeg's CFR output places null frames, which
   hold the picture, at other times).
@@ -216,3 +215,29 @@ All 27 files are plain RIFF AVI 1.0 (hdrl, movi, idx1) with ONE codec: **Intel I
 - The kill total counts the enemy objects the port's setup made (unported kinds are missing).
 - Debug: `ET_FE_SHOT="steps"` runs the front end without a window (see `frontend::shot`),
   `ET_INI` / `ET_SAVINGS` move the settings file and the savings folder.
+
+## Help texts (FUN_1008_1073, drawn at the start and after every page change when 1a98 = 2)
+
+GDI on the main window: SetTextColor 0xd0d0d0, transparent, Arial, lfHeight 16, weight 700, proof quality,
+variable pitch. FUN_1008_1020(align, message, y, x) adds ((screen w - 640) / 2, (screen h - 480) / 2).
+The window is WS_POPUP | WS_BORDER at (-64, -64), the screen's size + 128, and the video goes to the middle
+of it, so on the picture a text is at (x - 64, y - 64). Page 0 (the keyboard):
+
+| message | align | x | y |
+|---|---|---|---|
+| -0x25 | left | 0x58 | 0x4d |
+| -0x26 | left | 0xd5 | 0x74 |
+| -0x27 | right | 0x16a | 0x86 |
+| -0x28 | right | 0x15e | 0x98 |
+| -0x29 | right | 0x2ab | 0x8c |
+| -0x2a | right | 0x279 | 0x9d |
+| -0x2c | right | 0x2bc | 0x1ca |
+| -0x2b | left | 0x1ce | 0x1ee |
+
+Other pages: message -0x2c - page, centred at (0x181, 0x1b8). ETMAIN.SCR's loader upper-cases every message
+after the first 0x19, so -0x25 is in capitals. Checked by running 1008:1073 in the emulator and logging
+CreateWindowEx, CreateFontIndirect, SetTextAlign and TextOut (English, pages 0, 1, 2, 18); the emulator has no
+fonts, so the glyphs themselves can't be compared. Assumed: 14 pixels per em (Arial Bold's VDMX gives 16 high
+at both 13 and 14; GDI should take the larger). The port uses Liberation Sans Bold's 1-bit hinted glyphs
+(tools/helpfont.py; OFL, same advances as Arial Bold), clipped to the 640x480 picture as a 640x480 screen
+clips them (long Dutch lines run off both sides; a larger screen showed them whole).

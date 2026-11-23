@@ -6,6 +6,7 @@
 
 pub mod avi;
 pub mod gfx;
+mod helpfont;
 pub mod indeo3;
 pub mod menu;
 pub mod texts;
@@ -1310,8 +1311,14 @@ impl FrontEnd {
             return;
         }
         match sc {
-            // F1: the help pages (ETHELP.AVI; the texts FUN_1008_1073 writes over them are not drawn).
-            Scancode::F1 => self.play_video("ETHELP.AVI", video::Kind::Pages, video::Then::Menu),
+            // F1: the help pages (ETHELP.AVI, 1a98 = 2) with their texts.
+            Scancode::F1 => {
+                self.play_video("ETHELP.AVI", video::Kind::Pages, video::Then::Menu);
+                if let Some(v) = self.video.as_mut() {
+                    let ids = (video::HelpTexts::LAST..=video::HelpTexts::FIRST).rev();
+                    v.help = Some(video::HelpTexts(ids.map(|id| self.main.msg(id)).collect()));
+                }
+            }
             Scancode::Escape => {
                 // The main menu, or back to the level the menu is over.
                 if self.level_state == 0 || self.in_game || self.cur == Id::Stats {
