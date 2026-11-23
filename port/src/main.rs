@@ -1212,6 +1212,8 @@ impl Graphics {
                 p.mode = 0x20;
                 p.sprite(s, 0xf9 - h, 0x68);
                 if 0xf9 - h < 0 {
+                    // The wrapped one runs half the film ahead.
+                    let s = 0x7d00 + ((frame / 4 + n as u32 / 2) % n as u32) as i32;
                     p.sprite(s, 0x239 - h, 0x68);
                 }
             }

@@ -543,7 +543,8 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
         0x145a => {
             let s = o.w(0x32);
             let mut y = y;
-            let mut lift = 0;
+            // Walking, it bobs a pixel each other 9 steps.
+            let mut lift = i32::from(o.w(0x2c) > 0 && o.w(0x24) == 0 && (o.uw(0x28) / 9) & 1 == 1);
             if o.w(0x24) == 1 && o.w(0x2a) % 0x100 < 0x40 {
                 // Firing (+0x2a % 0x100 < 0x40): the muzzle light, scaled down over each
                 // 16-frame burst, and the gun's recoil lifts it a pixel late in the burst.
