@@ -1054,6 +1054,13 @@ impl Level {
                 self.set_cell(world, new, (r * w + c) as u16, rng, fx);
             }
         }
+        // Plane 2's cell at the block's last corner = 0x316: a hidden area found (4eac), once.
+        if let Some(cell) = world.planes[2].as_mut().and_then(|p| p.cells.get_mut((bottom * w + right) as usize)) {
+            if *cell == 0x316 {
+                *cell = 0;
+                fx.secrets += 1;
+            }
+        }
     }
 
     /// GrinderUpdate (1090:1a91), the parts that change the game: trigger, climb, platform,
