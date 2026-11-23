@@ -374,6 +374,20 @@ impl Game {
         }
     }
 
+    /// ScreenShake / FUN_1050_5c7d set the globals at once: the shakes made so far (a landed
+    /// platform's scripts, levers, pushed blocks) already move this frame's camera.
+    fn apply_shakes(&mut self, fx: &mut Effects) {
+        for (a, b) in std::mem::take(&mut fx.side_shakes) {
+            self.camera.shake_sideways(a, b);
+        }
+        for (a, b) in std::mem::take(&mut fx.shakes) {
+            if std::env::var_os("ET_SHAKE").is_some() {
+                eprintln!("SHAKE {} ({a:#x}, {b}) before the camera", self.frame);
+            }
+            self.camera.shake(a, b);
+        }
+    }
+
     fn flush_spawns(&mut self, fx: &mut Effects) {
         if std::mem::take(&mut fx.hero_launch) {
             self.hero.start_launch();
@@ -448,6 +462,7 @@ impl Game {
             self.level.run_scripts(&mut self.world, cell, &mut self.rng, &mut fx);
         }
         self.flush_spawns(&mut fx);
+        self.apply_shakes(&mut fx);
         // (465e is set after the platforms, forgetting a door's.)
         self.level.door_noise = false;
         // 1170:465e: a screen shake just started (or the hero fires, below).
@@ -527,6 +542,7 @@ impl Game {
         }
         if !self.hero.vehicle {
             self.touch_tiles(&mut fx);
+            self.apply_shakes(&mut fx);
         }
         let mut ps = std::mem::take(&mut self.level.particles);
         let mut plat_objs = std::mem::take(&mut self.level.plat_objs);
@@ -634,6 +650,7 @@ impl Game {
         for (a, b) in std::mem::take(&mut self.hero.side_shakes) {
             self.camera.shake_sideways(a, b);
         }
+        self.apply_shakes(&mut fx);
         // FUN_10a8_1311 (doors opening by themselves) runs before FUN_1088_087b: its door sounds
         // hear the listener of the frame before.
         let hero_at = (self.hero.x, self.hero.y);

@@ -198,14 +198,15 @@ Effects are SOUNDS/*.WAV (ids = ETMAIN.SCR's `LoadWAV=` lines in order), played 
   with lvol/rvol/pitch and the caller). `python3 tools/sounddiff.py DEMO [--all]`: matched/missing/extra plays and
   value mismatches (only fields the original's flags set; same-frame plays of one id pair by value); the missing
   list by caller is the to-do list; port plays in a demo's last frame (the tracer stops inside it) aren't
-  counted. State (2026-11-23): all 51 oracle demos play exactly what the original plays (every play
+  counted. State (2026-11-23): all 55 oracle demos play exactly what the original plays (every play
   matched, no extra, the same volumes and pitch). The last mismatch (LEVEL1_2 frame 14720, a far ricochet) was the
   mouse: FUN_1088_4340 clamps gMouseX/Y to 0..319/0..199 after the look-around, so a demo mouse at x 320 aims like
   319 (bullet angle 308, not 306). Every enemy, object, effect, the vehicle, lifts, hurt
   cries, the message blip, START's train and rain are wired; a sound call sits where the original's is, under
   the same conditions, with the Random() the port already drew.
 - Lessons from closing the last differences: volumes off by 1-5 mean the listener (camera) of another moment:
-  FUN_10a8_1311 (doors opening by themselves) runs BEFORE the camera update; object hits on the hero shake the
+  FUN_10a8_1311 (doors opening by themselves) runs BEFORE the camera update; shakes of scripts
+  run before it (a landed platform's, levers', pushes', touched tiles') move this frame's camera (`Game::apply_shakes`); object hits on the hero shake the
   screen at once (`hero.shakes` from an object are applied after the actors, not lost); `--watch gCameraX,gCameraY`
   in the tracer shows the original's camera (watch row N+1 = after frame N). 1ab8 is global state: FUN_1040_34e3
   leaves it at 0x100 - Random(0x40), the next emitter (315a) resets it. Big aliens made during play (0f2a = 2,

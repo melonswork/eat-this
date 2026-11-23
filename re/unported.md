@@ -85,8 +85,6 @@ Left:
    36, 46, 58, 61, 71, 86 (ported, no scenario).
 2. Unreachable from the episode maps, not ported: path-platform modes 0x4000/0x680/0x8000, platform flags
    8/0x10 (see above).
-3. Sound volumes 2..6 off in FX12 (the walking gunner's 0x84) and FX13 (0x1a from FUN_1088_3c05), like the
-   door sounds: probably the listener of the frame.
 (GRANNY's tilting building is drawn since the drawing branch, `tools/scenarios/draw/COLLAPSE2.txt`.)
 
 ## Sounds the new objects play (for the sound session)
