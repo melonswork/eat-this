@@ -812,7 +812,11 @@ impl Level {
                 }
                 101 => {
                     let w = &*world;
-                    if let Some(p) = crate::platobj::PlatObj::swing(&rec, |y, x| w.sector_at(y, x)) {
+                    if let Some(mut p) = crate::platobj::PlatObj::swing(&rec, |y, x| w.sector_at(y, x)) {
+                        // +0x23: the chain starts a link out when its pivot's tile function is 7000.
+                        if let Some(&(px, py)) = p.points.first() {
+                            p.first_link = (w.tile_function_at(py, px) == 7000) as i32;
+                        }
                         if std::env::var("ET_PLAT").is_ok() {
                             eprintln!("PLATOBJ made {:?}", p);
                         }

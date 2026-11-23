@@ -707,7 +707,7 @@ pub fn platform_objects(p: &mut Painter, level: &Level) {
                     if let Some(&(px, py)) = o.points.first() {
                         let a = o.angle.rem_euclid(0x1680);
                         let (c, sn) = (crate::trig::cos(a), crate::trig::sin(a));
-                        for k in 0..o.radius {
+                        for k in o.first_link..o.radius {
                             p.at(link, px + (c * h * k) / 0x4000, py - (sn * h * k) / 0x4000);
                         }
                     }
