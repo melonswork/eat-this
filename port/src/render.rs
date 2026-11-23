@@ -370,14 +370,74 @@ impl<'a> Painter<'a> {
     }
 
     /// `FUN_10f0_3da`: a one-pixel line in colour `c` between two screen points.
-    pub fn line(&mut self, (x1, y1): (i32, i32), (x2, y2): (i32, i32), c: u8) {
-        let n = (x2 - x1).abs().max((y2 - y1).abs()).max(1);
-        for i in 0..=n {
-            let x = x1 + (x2 - x1) * i / n;
-            let y = y1 + (y2 - y1) * i / n;
-            let (c0, c1, c2, c3) = self.clip;
-            if x >= c0 && x <= c2 && y >= c1 && y <= c3 {
+    pub fn line(&mut self, (mut x1, mut y1): (i32, i32), (mut x2, mut y2): (i32, i32), c: u8) {
+        let (l, t, r, b) = self.clip;
+        let out = |x1: i32, y1: i32, x2: i32, y2: i32| x1.min(x2) > r || x1.max(x2) < l || y1.min(y2) > b || y1.max(y2) < t;
+        if out(x1, y1, x2, y2) {
+            return;
+        }
+        if x1 != x2 {
+            for (a, sign) in [(l, 1), (r, -1)] {
+                if (x1 - a) * sign < 0 {
+                    y1 += (a - x1) * (y2 - y1) / (x2 - x1);
+                    if out(l, y1, l, y2) {
+                        return;
+                    }
+                    x1 = a;
+                }
+            }
+            for (a, sign) in [(l, 1), (r, -1)] {
+                if x1 != x2 && (x2 - a) * sign < 0 {
+                    y2 += (a - x2) * (y2 - y1) / (x2 - x1);
+                    if out(l, y1, l, y2) {
+                        return;
+                    }
+                    x2 = a;
+                }
+            }
+        }
+        if y1 != y2 {
+            for (a, sign) in [(t, 1), (b, -1)] {
+                if (y1 - a) * sign < 0 {
+                    x1 += (a - y1) * (x2 - x1) / (y2 - y1);
+                    if out(x1, t, x2, t) {
+                        return;
+                    }
+                    y1 = a;
+                }
+            }
+            for (a, sign) in [(t, 1), (b, -1)] {
+                if y1 != y2 && (y2 - a) * sign < 0 {
+                    x2 += (a - y2) * (x2 - x1) / (y2 - y1);
+                    if out(x1, t, x2, t) {
+                        return;
+                    }
+                    y2 = a;
+                }
+            }
+        }
+        // A 16-bit fraction starting one step in; its carry moves the minor axis.
+        let (w, h) = ((x2 - x1).abs() + 1, (y2 - y1).abs() + 1);
+        let wide = h < w;
+        if (wide && x2 < x1) || (!wide && y2 < y1) {
+            (x1, y1, x2, y2) = (x2, y2, x1, y1);
+        }
+        let (n, m) = if wide { (w, h) } else { (h, w) };
+        let step = ((m as u32) << 16) / (n as u32 + 1);
+        let mut f = step as u16;
+        let (mut x, mut y) = (x1, y1);
+        for _ in 0..n {
+            if (0..W).contains(&x) && (0..H).contains(&y) {
                 self.fb[(y * W + x) as usize] = c;
+            }
+            let (next, carry) = f.overflowing_add(step as u16);
+            f = next;
+            if wide {
+                x += 1;
+                y += if carry { (y2 - y1).signum() } else { 0 };
+            } else {
+                y += 1;
+                x += if carry { (x2 - x1).signum() } else { 0 };
             }
         }
     }
