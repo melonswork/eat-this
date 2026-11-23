@@ -1331,7 +1331,9 @@ impl Graphics {
         if g.level.storm.level > 0 {
             // FUN_1090_0567 (START's foreground): the front drops, and a lightning flash of kind
             // 0 tints the whole screen (tint row 3) three frames in six.
+            // Two layers: drops 0x1e.. at 4 px a frame, then 0x3c.. at 5.
             self.rain(fb, g, 0x1e, frame);
+            self.rain(fb, g, 0x3c, frame);
             let st = &g.level.storm;
             if st.flash > 0 && st.kind == 0 && st.flash % 6 < 3 {
                 let row = &self.tables.tint[3 * 256..4 * 256];
@@ -1585,7 +1587,7 @@ impl Graphics {
         let Some(mix) = self.tables.mix.as_deref() else { return };
         let row = self.rain_colour as usize * 256;
         for &d in storm::rain_drops()[first..first + n].iter().rev() {
-            let (x, y) = storm::drop_at(d, frame, if first == 0 { 3 } else { 4 });
+            let (x, y) = storm::drop_at(d, frame, match first { 0 => 3, 0x1e => 4, _ => 5 });
             for k in 0..4 {
                 let (px, py) = (x - k, y - 3 + k);
                 if (0..W).contains(&px) && (0..H).contains(&py) {
