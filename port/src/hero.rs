@@ -2444,6 +2444,17 @@ impl Hero {
         if d > 0x60 {
             self.shakes.push((8, (d / 0x10 - 4).min(8)));
         }
+        if d >= 0x40
+            && self.ground == 9
+            && w.solidity_at(self.y + 1, self.x - 8) & 0x2201 != 0
+            && w.solidity_at(self.y + 1, self.x + 8) & 0x2201 != 0
+        {
+            ps.p.callback = 0x2192;
+            ps.p.colour = 0x10;
+            ps.spawn_seq(0x6d00, 2, 0x13, self.y, self.x, 1); // FUN_1040_66d4
+            ps.p.colour = 0;
+            ps.p.callback = 0;
+        }
         // A thud, or on a soft floor (gHeroGround 9) from high up a splash (and a puff, 66d4).
         sound::play_at(if d < 0x40 || self.ground != 9 { 8 } else { 4 }, self.y, self.x);
     }

@@ -88,6 +88,7 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
         }
     };
     match m.uw(0x42) {
+        0x126 if age >= m.w(0x22) => return,
         0x126 => sprite = 0x5638 + ((age + m.w(0x40)) & 1),
         0x1a3 => p.mode = 0x10,
         0x30f => {
@@ -207,7 +208,21 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             sprite = if k < 5 { 0x1818 - ((m.uw(0x24) >> 3) & 1) as i32 } else { 0x1818 + (k / 3 & 7) };
         }
         0x2299 => sprite += (age / 4) % 2,
-        0x2459 | 0x2497 | 0x2946 => sprite += (age >> 2) & 1,
+        0x2459 | 0x2497 => sprite += (age >> 2) & 1,
+        0x2946 => {
+            // FUN_1050_2946: bobs two pixels every 30 frames.
+            p.at(sprite + ((age >> 2) & 1), x, y + crate::trig::sin((age % 0x1e) * 0xc0) * 2 / 0x4000);
+            return;
+        }
+        0x274f => {
+            // FUN_1050_274f: a pulsing light circling two pixels round it, then itself.
+            let a = ((age << 7) as i16 as i32) % 0x1680;
+            let cos = crate::trig::cos(a.rem_euclid(0x1680));
+            let light = (crate::trig::sin((age * 0x200) % 0x1680) << 1) / 0x4000;
+            p.at(0x1b1b + light, x + cos * 2 / 0x4000, y - crate::trig::sin(a.rem_euclid(0x1680)) * 2 / 0x4000);
+            p.at_mode(0x10, 0x1951, x, y);
+            return;
+        }
         0x232e => {
             // Far away: half the camera's scroll.
             p.sprite(sprite, x - (p.cam.0 >> 1), y - (p.cam.1 >> 1));

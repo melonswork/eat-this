@@ -733,11 +733,14 @@ impl Level {
         };
         // Slopes.
         let mut slope_y = 0x7fff;
+        // (gLastTileCell: the cell that was a slope.)
+        let mut slope_cell = w.cell_at(1, y + 1, x).unwrap_or(0);
         let s = w.solidity_at(y + 1, x);
         if s & 0x20 != 0 {
             slope_y = slope_height(w, x, w.cell_at(1, y + 1, x).unwrap_or(0)) + ((y + 1) & !15);
         } else if w.solidity_at(y - 1, x) & 0x20 != 0 {
-            slope_y = slope_height(w, x, w.cell_at(1, y - 1, x).unwrap_or(0)) + ((y - 1) & !15);
+            slope_cell = w.cell_at(1, y - 1, x).unwrap_or(0);
+            slope_y = slope_height(w, x, slope_cell) + ((y - 1) & !15);
         }
         if y + 2 < slope_y {
             let u = y + 1;
@@ -790,8 +793,7 @@ impl Level {
             let o = self.o(id);
             o.set(0x10, slope_y);
             o.set(0x1c, 5);
-            let c = w.cell_at(1, y + 1, x).unwrap_or(0);
-            o.set(0x1e, w.cell_function(c, 2) as i16 as i32);
+            o.set(0x1e, w.cell_function(slope_cell, 2) as i16 as i32);
         }
         let (x, y) = {
             let o = self.objects[id].as_ref().unwrap();
