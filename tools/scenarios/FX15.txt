@@ -1,0 +1,20 @@
+# Tile effect 25 (FUN_1040_2d5c: like effect 24 (FX14) for the other wreck: plates fly, two fires,
+# a burning wreck object 0x1400 kind 1 (FUN_1068_27e7) takes its place, smoking for 0xaf0
+# frames): CITY_I06's car at (4816..4847, 688..703), mask 4. The start moved right of it with a
+# weapon-3 pick-up copied there: rockets, then pistol shots make the wreck jump.
+level MAPS/CITY_I06.MAP
+start 4920 690
+cell 2 307 43 0xd06
+mouse 20 110
+20
+1 left
+5 rmb
+30
+5 rmb
+30
+5 rmb
+60
+3 lmb
+20
+3 lmb
+300

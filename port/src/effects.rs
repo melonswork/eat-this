@@ -511,6 +511,82 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
             fx.shakes.push((0x18, 10));
             sound::play_at(0x4a, y, x);
         }
+        24 | 25 => {
+            // FUN_1040_2b0f (24) / 2d5c (25): a wreck of 60200 cells bursts: plates and bits fly,
+            // fire and smoke, a burning wreck object (0x1400, `burnwreck.rs`) takes its place.
+            let (x1, _, x2, y2) = clear_fn(world, 0xeb28, y & 0xfff0, x & 0xfff0);
+            let (by, mx) = (y2, ((x1 + x2) as u16 >> 1) as i32);
+            let fy = by + 0xf;
+            let (big, small) = if id == 24 { (0x550b, 0x550a) } else { (0x5510, 0x550f) };
+            let ps = &mut lv.particles;
+            ps.p.group = 0;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x11;
+            ps.p.delay = 0x3c;
+            if id == 24 {
+                ps.p.callback = 0x17f4;
+            }
+            let piece = if id == 24 { big } else { small };
+            ps.spawn(big, by + 3, mx - 0xf); // FUN_1050_4106: its own frame step
+            ps.last_mut().m.set(0x26, 4);
+            let r = rng.random(0xa0);
+            ps.throw(9, 0x60, r + 0x640);
+            ps.p.draw = 1;
+            ps.spawn(piece, by + 3, mx + 0x2d);
+            ps.last_mut().m.set(0x26, 3);
+            let r = rng.random(0xa0);
+            ps.throw(9, 0x60, 0x500 - r);
+            ps.p.delay = 0;
+            ps.spawn(piece, by + 3, mx + 0xf);
+            ps.last_mut().m.set(0x26, 2);
+            let r = rng.random(0x281);
+            ps.throw(10, 0x50, 0x6e0 - r);
+            ps.p.callback = 0;
+            ps.p.draw = 0;
+            ps.spawn(big, by + 3, mx + 5);
+            let r = rng.random(if id == 24 { 0x80 } else { 0xa0 });
+            ps.throw(10, 0x60, r + 0x640);
+            ps.spawn(small, by + 3, mx + 0x19);
+            let r = rng.random(if id == 24 { 0x80 } else { 0xa0 });
+            ps.throw(10, 0x70, 0x500 - r);
+            ps.spawn(0x4e08, by - 5, mx + 5);
+            let r = rng.random(0x140);
+            ps.throw(10, 0x70, r + 0x5a0);
+            if id == 24 {
+                ps.spawn(0x4e08, by - 7, mx + 0x19);
+                let r = rng.random(0x140);
+                ps.throw(10, 0x60, 0x5a0 - r);
+            }
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            ps.p.group = 1;
+            sound::play_at(0x4e, fy, mx + 7);
+            fx.shakes.push((0x2a, 0x12));
+            if id == 24 {
+                lv.particles.p.colour = 4;
+                effect(lv, world, 7, by - 1, mx - 1, rng, fx);
+                let ps = &mut lv.particles;
+                ps.p.delay = 0x3c;
+                ps.p.on_spawn = 0x1a;
+                ps.spawn_seq(0x6e00, 3, 0x13, fy, mx + 0x11, 1); // FUN_1040_690b
+                ps.p.on_spawn = 0;
+                ps.p.delay = 0;
+                ps.p.colour = 0;
+            } else {
+                effect(lv, world, 7, by - 1, mx + 0xf, rng, fx);
+                lv.particles.p.delay = 0x28;
+                effect(lv, world, 9, by - 1, mx - 1, rng, fx);
+                lv.particles.p.delay = 0x3c;
+                lv.particles.p.on_spawn = 0x1a;
+                effect(lv, world, 7, by - 9, mx - 0x11, rng, fx);
+                lv.particles.p.on_spawn = 0;
+                lv.particles.p.delay = 0;
+            }
+            // FUN_1068_17f8: made at once, like the steam emitters of effects 35/80.
+            let mut cx = crate::factory::Ctx { hero_x: 0, rng: &mut *rng };
+            let k = (id - 24) as i16;
+            lv.factory(world, &mut cx, crate::burnwreck::KIND, &crate::factory::Rec { w: &[0, k, (mx + 7) as i16, fy as i16], count: 4 });
+        }
         68 => {
             // FUN_1040_56ef: function-60300 cells above / below step on, a bonus 0xd10 one time
             // in three, six bits of wood, a shake.
@@ -1165,10 +1241,16 @@ fn wall_chunks(lv: &mut Level, world: &mut World, y: i32, x: i32, rng: &mut Pasc
 fn clear_block(world: &mut World, y: i32, x: i32) -> (i32, i32, i32, i32) {
     let (x0, y0) = (x & 0xfff0, y & 0xfff0);
     let f = world.tile_function_at(y0, x0);
-    let mut b = (x0, y0, x0, y0);
     if f == 0 || f == OUTSIDE {
-        return b;
+        return (x0, y0, x0, y0);
     }
+    clear_fn(world, f, y0, x0)
+}
+
+/// FUN_10f0_5c10(0, f, y, x): clear the cells joined to (x, y) whose function is `f`; returns
+/// their extent (1170:6680..6686: left, top, right, bottom).
+fn clear_fn(world: &mut World, f: u16, y0: i32, x0: i32) -> (i32, i32, i32, i32) {
+    let mut b = (x0, y0, x0, y0);
     let width = world.main().width;
     let mut stack = vec![(x0, y0)];
     // The original recurses left, right, up, down; the extent doesn't depend on the order.

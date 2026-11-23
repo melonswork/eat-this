@@ -860,6 +860,9 @@ impl Level {
             }
             p.x = p.x16 >> 4;
             p.y = p.y16 >> 4;
+            if std::env::var_os("ET_PLATMOVE").is_some() {
+                eprintln!("PLATMOVE {} #{i} x {} y {} accel {} point {} arrived {arrived} flags {}", self.now, p.x, p.y, p.accel, p.point, p.flags);
+            }
             let (flags, set) = (p.flags, p.sound);
             let last = p.points.last().copied().unwrap_or((0, 0, 0));
             let (pw, ph) = (p.width, p.height);

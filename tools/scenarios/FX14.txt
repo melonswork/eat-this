@@ -1,0 +1,20 @@
+# Tile effect 24 (FUN_1040_2b0f: the taxi wreck's 60200 cells go, plates and bits fly, fire and
+# smoke, a burning wreck object 0x1400 (FUN_1068_27e7) takes its place, smoking for 0xaf0
+# frames): CITY_I02's taxi at (848..895, 1008..1023), mask 4. The start moved right of it with a
+# weapon-3 pick-up copied there: rockets, then pistol shots make the wreck jump.
+level MAPS/CITY_I02.MAP
+start 970 1000
+cell 2 60 62 0xd06
+mouse 20 110
+20
+1 left
+5 rmb
+30
+5 rmb
+30
+5 rmb
+60
+3 lmb
+20
+3 lmb
+300
