@@ -34,7 +34,10 @@ and Tab, with the numpad as a fallback. Each `gInput[i]` is a `KeyPoll` counter:
 held for n frames, so `== 1` means "just pressed". `gInputReleased[i]` is set while a key is up
 and cleared when its action fires, so holding Up doesn't keep re-jumping. Left and Right held
 together cancel out. The mouse (`gMouseX/Y`) aims the gun: `HeroAimAtMouse` stores
-`atan2(mouse - muzzle)` in `gHeroAimAngle`. Keys 1–0 and PgUp/PgDn pick a weapon through
+`atan2(mouse - muzzle)` in `gHeroAimAngle`. At the end of `ReadGameInput` (after the "mouse moved:
+gHeroShooting = 1" test against last frame's values) `FUN_1088_4340` clamps `gMouseX/Y` to 0..319 / 0..199,
+the part past the edge going to 4e4c/4e4e (the camera looks that way); demos record such positions (x 320..331
+in LEVEL1_2), and the gun aims at the clamped point. Keys 1–0 and PgUp/PgDn pick a weapon through
 `gWeaponForDigitKey`.
 
 During demo playback (`gDemoPlaying`) the whole block is replaced by `FUN_1098_06c2`, which reads

@@ -67,8 +67,8 @@ streams and EVERY CHECK, so the method is the original's own.
   ends its level (e.g. EXIT1 -> F_JUMP).
 - To reach a pick-up no route leads to, move the start (`start X Y`): ET_PICKUPS lists pick-ups, start,
   exits and NEXT; CITY_I04 has weapons 6 and 9 on crates in small rooms at x 983..999.
-- dumpframe.py takes `--overlay` (work/demos by default for demos there). The tracer's `--particles` writes
-  nothing now (1170:0918 reads 0 at its hook, even in GRINDER): fix before relying on it.
+- dumpframe.py takes `--overlay` (work/demos by default for demos there). The tracer's `--particles A-B` works
+  (GRINDER just has no particles in its first ~300 frames); a row's frame N = port `ET_PART` frame N-1.
 
 | scenario | level | what it checks | port |
 |---|---|---|---|
@@ -198,10 +198,10 @@ Effects are SOUNDS/*.WAV (ids = ETMAIN.SCR's `LoadWAV=` lines in order), played 
   with lvol/rvol/pitch and the caller). `python3 tools/sounddiff.py DEMO [--all]`: matched/missing/extra plays and
   value mismatches (only fields the original's flags set; same-frame plays of one id pair by value); the missing
   list by caller is the to-do list; port plays in a demo's last frame (the tracer stops inside it) aren't
-  counted. State (2026-11-22): all 28 oracle demos play exactly what the original plays (7236 plays, every one
-  matched, no extra), with the same volumes and pitch but for ONE: LEVEL1_2 frame 14720, a far ricochet 0x7c
-  (26,58 vs 23,54) whose bullet hits a ceiling off screen one bullet step (10 px) further right in the port
-  (unchecked without a working tracer `--particles`). Every enemy, object, effect, the vehicle, lifts, hurt
+  counted. State (2026-11-23): all 51 oracle demos play exactly what the original plays (every play
+  matched, no extra, the same volumes and pitch). The last mismatch (LEVEL1_2 frame 14720, a far ricochet) was the
+  mouse: FUN_1088_4340 clamps gMouseX/Y to 0..319/0..199 after the look-around, so a demo mouse at x 320 aims like
+  319 (bullet angle 308, not 306). Every enemy, object, effect, the vehicle, lifts, hurt
   cries, the message blip, START's train and rain are wired; a sound call sits where the original's is, under
   the same conditions, with the Random() the port already drew.
 - Lessons from closing the last differences: volumes off by 1-5 mean the listener (camera) of another moment:
