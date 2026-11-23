@@ -297,10 +297,18 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   colours 7/0, crates from table 0e4a (13 kinds), grinder teeth, grenades, critters, splashes, robot muzzle light,
   barrel flame/fire, wall regrow frames, door kind 3 shutter, swing chain first link, hidden areas of sensitive
   levers. `--shot F1,F2 file_%d.ppm`, `dumpframe.py --peek @PTR+ADD:LEN`, `ET_TILEAT=x,y`, `ET_PARTDRAW=1`.
+- Fixed 2026-11-23 (second pass): small alien's turn flip (state -0x14), particle callbacks that draw through
+  10f0:2670 directly ignore the record's flips (1b54 is the flip table), negative particle sprites = animation rows
+  of 1170:0918 (FUN_1040_6bd4, evaluated with 617e = age; the tank's fireballs), sprayed bits 26c8 (VGA pixels),
+  bubbles' wobble, platforms clipped to w21..w24 (FUN_1078_0968), door kind 7's lid 0x26, START's rain layers
+  (0x1e.. at 617e*4, 0x3c.. at 617e*5; the splash test uses the *4 layer), smoke 2192 half size, sinking blocks 1e16
+  (`draw::tile_at` = FUN_10f0_445a). `--shot` frames, the Painter's `vga` array, `ET_DOORDRAW`/`ET_DOORNOW`.
 - Still different: FOREST03's top windows (LEVEL2_2 300: the original also has opaque kind-2 tile 0x1ba in its main
   plane there, yet shows the forest); FX2 (CITY_I01) shows the movie 99 frames ahead of (617e/4) % 198 though the
-  CD demos and CITY02 match; WEIGHT1 92 (sprite near the weight); some scaled-flame colours; doors' emerging aliens
-  (0dab, mode 0x24 sprites 0x570a/0x5b4c) not drawn; the other typed cheats; MOVIE cheat's movie2.spr.
+  CD demos and CITY02 match; TANKGRAB1's red bits (callback 23b7, same code: their motion differs somewhere);
+  small leftovers (<= 150 px) in PATHPLAT1 1083, START 3000, WEAPON3 235, TANK1/TANK2, CARRIER1/SPLASH1 early
+  (girder over the carrier's hull), LEVEL1_2 1600/6600, FOREST04 20300; doors' emerging aliens (0dab, mode 0x24
+  sprites 0x570a/0x5b4c) not drawn; the other typed cheats; MOVIE cheat's movie2.spr.
   Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`,
   `ET_MSG=1` the messages shown, `ET_HEALTH=1` the health each frame, `ET_NOPROCS=1` ignores command 0x15,
   `ET_AUTOMAP=1`, `ET_TOTALS=1`; `--bg-only` stops where dumpframe's .bg does (first FUN_1068_09bf), but the
