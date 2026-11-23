@@ -217,7 +217,8 @@ impl<'a> Painter<'a> {
             let scaled = crate::data::Sprite {
                 width: w,
                 height: h,
-                hotspot: ((s.hotspot.0 * 0x100) / xstep, (s.hotspot.1 * 0x100) / ystep + 1),
+                // 10f0:3080: the top is ((hot_y - 1) * 0x100) / ystep + 1.
+                hotspot: ((s.hotspot.0 * 0x100) / xstep, ((s.hotspot.1 - 1) * 0x100) / ystep + 1),
                 pixels: px,
                 extra: Vec::new(),
             };
