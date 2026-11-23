@@ -800,6 +800,11 @@ impl Game {
             shake_amp: self.camera.shake_amplitude(),
         };
         self.level.update_actors(&mut env, window);
+        // An actor hit or killed the hero (FUN_1088_3c32): what flies off him does so at once.
+        self.hero_death_effects();
+        for (sprite, y, x) in std::mem::take(&mut self.hero.splats) {
+            self.level.blood_splat(&self.world, sprite, y, x);
+        }
         if std::mem::take(&mut fx.hero_bounce) {
             self.hero.bounce(-0x32, 10);
         }

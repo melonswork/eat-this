@@ -1224,7 +1224,8 @@ fn status_bar(p: &mut Painter, hero: &crate::hero::Hero) {
     if len < 9 {
         p.mix = Mix::Light;
         p.mode = 0x2c;
-        p.colour = ((per(p, 4) & 1) * 5 + 0x1f) as u8;
+        // FUN_10f0_1361(1, 1, 0x11): 0..16 and back.
+        p.colour = ((16 - ((p.frame % 32) as i32 - 16).abs()) * 5 + 0x1f) as u8;
     }
     p.clip.2 = len + 0x1b;
     p.sprite(0x1f0b, 4, 0xc6);
