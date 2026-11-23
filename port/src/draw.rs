@@ -926,8 +926,10 @@ pub fn platform_objects(p: &mut Painter, level: &Level) {
             0x1e13 => {
                 // FUN_1060_1e13: blinks while it moves.
                 let mut s = sprite;
-                if o.angle != o.prev_angle {
-                    s += (o.angle >> (h & 0x1f)) & 1;
+                // (A lift's +0x18 counts while it moves.)
+                let (angle, prev) = if o.dir != 0 || o.age != 0 { (o.age, 0) } else { (o.angle, o.prev_angle) };
+                if angle != prev {
+                    s += ((angle as u16 >> (h & 0x1f)) & 1) as i32;
                 }
                 p.at(s, o.x, o.y);
             }

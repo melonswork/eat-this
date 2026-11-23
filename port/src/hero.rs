@@ -3013,6 +3013,7 @@ impl Hero {
             self.climb = 5;
             self.y -= 4;
         }
+        self.gun.frame2 = NONE;
         (dx, 0)
     }
 
