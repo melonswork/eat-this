@@ -553,10 +553,9 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
     }
 }
 
-/// The word at 1170:0e4a + kind * 6 (the box kinds' sprites).
+/// The word at 1170:0e4a + kind * 6 (the box kinds' sprites, 13 of them).
 fn crate_sprite(kind: i32) -> i32 {
-    const T: [i32; 8] = [0x752c, 0x752d, 0x752e, 0x5201, 0x5202, 0x5203, 0x330e, 0x330f];
-    T.get(kind as usize).copied().unwrap_or(0x752c)
+    crate::world::ds_word(0xe4a + (kind.max(0) * 6) as usize)
 }
 
 /// FUN_1088_9d34's drawing: the drone (its sprite turns with its angle, plus a blinking light),
