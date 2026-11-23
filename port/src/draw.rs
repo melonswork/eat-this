@@ -22,11 +22,23 @@ fn per(p: &Painter, d: u32) -> i32 {
 /// FUN_1050_4ca5's drawing for `group`: the record's flips (+0x18, +0x1a) and mode (+0x20),
 /// its sprite +0x16 at (+8, +0xa), or its per-frame procedure's own drawing.
 pub fn particles(p: &mut Painter, level: &Level, world: &crate::world::World, group: i32) {
-    for part in &level.particles.list {
+    // Those that ended this frame were drawn at their place in the list.
+    let ended: Vec<&(i32, usize, Particle)> = level.particles.ended.iter().filter(|e| e.0 == group).collect();
+    let mut k = 0;
+    for (j, part) in level.particles.list.iter().enumerate() {
+        while k < ended.len() && ended[k].1 <= j {
+            particle(p, &ended[k].2, world, level);
+            p.reset();
+            k += 1;
+        }
         if part.m.w(0) != group {
             continue;
         }
         particle(p, part, world, level);
+        p.reset();
+    }
+    for e in &ended[k..] {
+        particle(p, &e.2, world, level);
         p.reset();
     }
 }
@@ -91,6 +103,11 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             p.at(body, x, y);
             p.at(0x1906 + ((m.uw(0x24) >> 5) & 1) as i32, x, y - (body & 1));
             return;
+        }
+        0x1656 => {
+            // FUN_1050_1656 (a critter): running (0x5215 + age / 6 % 6) while the motion
+            // record's +8 is under 5, else 0x5218.
+            sprite = if part.v.w(8) < 5 { 0x5215 + (age / 6) % 6 } else { 0x5218 };
         }
         0x11e6 => {
             // FUN_1050_11e6 (the grenade): while the motion record's +8 is under 5, 0x1818 or
@@ -415,9 +432,13 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
                 p.at(0x4c02 - ((o.w(0x22) >> 3) & 1), x, y);
             }
         }
-        // FUN_1070_90f1: a crate (or a box of another kind: sprite table 1170:0e4a).
+        // FUN_1070_90f1: a crate (or a box of another kind: sprite table 1170:0e4a); kind 0 burns.
         0x143c => {
             let k = o.w(10);
+            if k == 0 {
+                // The burning barrel's flame (FUN_1040_6315, +0x24 = its y step).
+                p.flame(o.w(0x24), 0x262, p.frame, x, y - 0xb);
+            }
             let mut s = crate_sprite(k);
             if k == 5 && (p.frame & 0xf) < 8 {
                 s += 1;

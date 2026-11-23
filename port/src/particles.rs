@@ -108,6 +108,7 @@ impl Default for Params {
     }
 }
 
+#[derive(Clone)]
 pub struct Particle {
     pub m: Obj,
     /// The motion record at +0x46 (its layout depends on the mover).
@@ -120,6 +121,9 @@ pub struct Particles {
     pub p: Params,
     /// 1170:45b4: the particle being updated.
     pub current: usize,
+    /// The particles (group, list position, record) that ended this frame after drawing
+    /// themselves (FUN_1050_4ca5 draws before its end-of-life test): only the draw reads them.
+    pub ended: Vec<(i32, usize, Particle)>,
     /// 1170:45b0: the last one spawned (in `pending` when `last_pending`).
     pub last: usize,
     last_pending: bool,
@@ -928,6 +932,7 @@ pub struct Frame<'a> {
 impl Level {
     /// FUN_1050_4ca5(group).
     pub fn update_particles(&mut self, group: i32, f: &mut Frame) {
+        self.particles.ended.retain(|e| e.0 != group);
         let mut i = 0;
         loop {
             if i >= self.particles.list.len() {
@@ -956,6 +961,10 @@ impl Level {
             // LAB_1050_5128: the end of its life.
             let m = &self.particles.list[i].m;
             let (death, flags, state) = (m.w(0x2a), m.w(0x3a), m.w(0x3e));
+            if !hit {
+                let p = self.particles.list[i].clone();
+                self.particles.ended.push((group, i, p));
+            }
             if death == 0 || (flags & 4 != 0 && (state < -9 || state == 0)) {
                 self.particles.remove(i);
             } else {
@@ -965,6 +974,9 @@ impl Level {
                 if self.particles.keep_dying {
                     self.particles.remove(i);
                 } else {
+                    if !hit {
+                        self.particles.ended.pop(); // still in the list: drawn there
+                    }
                     i += 1;
                 }
             }
