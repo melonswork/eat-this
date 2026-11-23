@@ -707,6 +707,10 @@ impl Game {
                 self.teleport();
             }
         }
+        self.hero.fade_step();
+        if self.hero.fade == 0x1c {
+            self.hero.fade_size = 0x1f; // the teleport's frame shows LevelFirstFrame's HUD update
+        }
         self.frame += 1;
         // GameFrame: FUN_10e0_04a4 (loops nobody kept stop), SoundUpdate.
         self.sound.extend(sound::end_frame());
@@ -891,6 +895,7 @@ impl Game {
         if !self.hero.teleport(&self.world, &self.level.teleports) {
             return;
         }
+        self.hero.fade = 0x1d; // 0x1e, less the step of LevelFirstFrame's own HUD update
         self.level.particles.drone.place(self.hero.y, self.hero.x);
         let mut fx = Effects::default();
         // FUN_1068_08ff: the old sector's triggers see him go.
@@ -1314,6 +1319,12 @@ impl Graphics {
             // lights over it (mode 0x28).
             p.at(0x3700, ship.0, ship.1);
             p.at_mode(0x28, 0x3800, ship.0, ship.1);
+        }
+        if g.hero.door_frame != hero::NONE {
+            // FUN_10a8_0dab: the hero walking into an exit, behind the doors.
+            p.hflip = g.hero.facing == -1;
+            p.at(g.hero.door_frame, g.hero.x, g.hero.y);
+            p.hflip = false;
         }
         draw::doors(&mut p, &g.level);
         draw::decals(&mut p, &g.level);

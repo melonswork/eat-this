@@ -109,8 +109,8 @@ def main():
             e.uc.emu_stop()
 
     draws = []
-    # 10f0:2670, its flips (table 1b54), the half-size one, the scaled ones.
-    for off, name, skip in [(0x2670, "plain", 0), (0x2A11, "hflip", 0), (0x380B, "vflip", 0), (0x3BF8, "hvflip", 0),
+    # 10f0:2670, mirrored (the table 1b54; upside down = 1ae6), the half-size one, the scaled ones.
+    for off, name, skip in [(0x2670, "plain", 0), (0x2A11, "hflip", 0), (0x380B, "b54.2", 0), (0x3BF8, "b54.3", 0),
                             (0x3D94, "b54.4", 0), (0x3E68, "b54.5", 0), (0x2D8E, "half", 0), (0x302B, "scaled", 8), (0x3356, "scaledh", 8)]:
         def on_draw(e, name=name, skip=skip):
             if not st["started"] or not st["todo"] or st["frame"] < st["todo"][0]:
@@ -120,7 +120,7 @@ def main():
             w = [e.rw(ss, sp + 2 * k) for k in range(2 + skip // 2 + 3)]
             sid, y, x = w[2 + skip // 2:]
             steps = f" steps {w[2]:#x} {w[4]:#x}" if skip else ""
-            draws.append(f"{name} {sid:#06x} at ({i16(x)}, {i16(y)}) mode {e.rb(DS, 0x1AE0, 1)[0]:#x} colour {e.rb(DS, 0x1AE3, 1)[0]:#x}{steps} from {w[1]:04x}:{w[0]:04x}")
+            draws.append(f"{name} {sid:#06x} at ({i16(x)}, {i16(y)}) mode {e.rb(DS, 0x1AE0, 1)[0]:#x} colour {e.rb(DS, 0x1AE3, 1)[0]:#x} flips {int(name in ('hflip', 'scaledh'))}{int(e.rb(DS, 0x1AE6, 1)[0] != 0)}{steps} from {w[1]:04x}:{w[0]:04x}")
         if o.draws:
             emu.hook(0x10F0, off, on_draw)
 

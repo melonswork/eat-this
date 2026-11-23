@@ -47,7 +47,7 @@ pub const KNOCKED_DOWN: i32 = -200;
 
 /// gHeroGround kind for an ordinary floor (HeroReset sets it; the heavy-landing test checks it).
 const FLAT_FLOOR: i32 = 9;
-const NONE: i32 = 0x7fff;
+pub const NONE: i32 = 0x7fff;
 const NO_TURN: i32 = 0xff;
 const ON_GROUND_VY: i32 = 0x7fff; // HeroResetFallSpeed
 const HEIGHT: i32 = 0x2a;
@@ -133,6 +133,12 @@ pub struct Hero {
     pub pickups: Vec<((i32, i32), u16, u16, i32, i32)>,
     /// 1170:4e62: counts down to the teleport (FUN_1088_517a) at the end of the frame it hits 0.
     pub exit_timer: i32,
+    /// The sprite he walks into an exit with, drawn by the door module (FUN_10a8_0dab).
+    pub door_frame: i32,
+    /// 1170:536a: the screen's pixelation (FUN_1080_007c), -0x1e..0 walking out through an exit,
+    /// 0x1e..0 after a teleport; `fade_size` is the block size of this frame's. Only drawing.
+    pub fade: i32,
+    pub fade_size: i32,
     /// 1170:4e60: what GameFrame does after this frame (10 restart the level, 100 + n the level
     /// is over through a teleport record that leaves it, 0x1e back to the menu).
     pub level_end: i32,
@@ -330,6 +336,9 @@ impl Hero {
             weapons: WEAPON_AMMO.map(|(pickup, max)| Weapon { pickup, max, next: 0, ammo: 0, owned: false }),
             pickups: Vec::new(),
             exit_timer: 0,
+            door_frame: NONE,
+            fade: 0,
+            fade_size: 0,
             level_end: 0,
             exit_kind: 0,
             slope: -1,
@@ -998,7 +1007,9 @@ impl Hero {
             if len - 1 == self.anim {
                 self.exit_timer = 2;
             }
-            // (len - anim == 0x1d: 1170:536a = -0x1e starts the fade.)
+            if len - self.anim == 0x1d {
+                self.fade = -0x1e;
+            }
             self.turn = NO_TURN;
             self.anim += 1;
             self.x += (exit_middle(w, self.y, self.x) + (self.facing == -1) as i32 - self.x).signum();
@@ -2058,9 +2069,21 @@ impl Hero {
         moved
     }
 
+    /// FUN_1088_4b64: a step of the pixelation.
+    pub fn fade_step(&mut self) {
+        self.fade_size = match self.fade {
+            0 => 0,
+            f if f < 0 => f + 0x21,
+            f => f + 1,
+        };
+        self.fade -= self.fade.signum();
+    }
+
     /// The start of FUN_10a8_0dab: walking into an exit, the door module draws him.
     pub fn hide_in_exit(&mut self) {
+        self.door_frame = NONE;
         if self.state == EXIT && self.frame != NONE {
+            self.door_frame = self.frame;
             self.frame = NONE;
             self.gun.frame2 = NONE;
         }

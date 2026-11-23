@@ -102,7 +102,11 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             sprite += n & 3;
         }
         0x177a => {
-            tumble(p);
+            // FUN_1050_177a: both flips every other step.
+            if n & 2 != 0 {
+                p.hflip = !p.hflip;
+                p.vflip = true;
+            }
             sprite += n & 1;
         }
         // FUN_1050_12f6: the grenade tumbles with its throw's clock (velocity record +8).
@@ -921,6 +925,15 @@ pub fn doors(p: &mut Painter, level: &Level) {
             let a = 0x5a0 - ((((prog * 0x5a0) as u16) >> 5) as i32);
             (amp * crate::trig::sin(a.rem_euclid(0x1680))) / 0x4000
         };
+        if d.monster != 0 && d.next != 0 {
+            // The alien behind it, lit more the further it opens (PalMixLight).
+            p.mix = Mix::Light;
+            p.mode = 0x24;
+            p.colour = (0x40 - (d.next * 0x3f) / full) as u8;
+            p.hflip = d.hero_left != 0;
+            p.sprite(if d.monster == 61400 { 0x570a } else { 0x5b4c }, d.cx - p.cam.0, bottom - 1);
+            p.reset();
+        }
         let save = p.clip;
         match proc_ {
             0x0002 => {
@@ -1000,6 +1013,32 @@ pub fn doors(p: &mut Painter, level: &Level) {
     }
 }
 
+/// FUN_1080_007c: the screen in `n`-pixel blocks around its middle (each takes its centre's
+/// colour; worked in place, row by row).
+fn pixelate(fb: &mut [u8], n: i32) {
+    if n <= 1 {
+        return;
+    }
+    let mut last = -1;
+    for y in 0..200i32 {
+        let row = (((y - 100 + (y - 100).signum() * (n >> 1)) / n) * n + 100).clamp(0, 199);
+        if last < y {
+            for x in 0..320i32 {
+                let mut a = x - 160;
+                if a <= 0 {
+                    a -= n;
+                }
+                a += n >> 1;
+                let sx = (a - a % n + 160).clamp(0, 319);
+                fb[(y * 320 + x) as usize] = fb[(row * 320 + sx) as usize];
+            }
+        } else {
+            fb.copy_within(((y - 1) * 320) as usize..(y * 320) as usize, (y * 320) as usize);
+        }
+        last = row;
+    }
+}
+
 /// FUN_1088_4b64's pointer and FUN_1088_2501's status bar: `level` is GameStats (1a92):
 /// 1 = health, keys, the right button's weapon and its ammo, 2 = also the kill / hidden area /
 /// bios sphere counters on the right (`got` of `totals`). Screen coordinates; ETSCORE is slot 0x1f.
@@ -1022,6 +1061,7 @@ pub fn hud(p: &mut Painter, hero: &crate::hero::Hero, pointer: i32, level: i32, 
     let (mx, my) = hero.gun_mouse();
     p.mode = 0x30;
     p.sprite(ptr, mx, my);
+    pixelate(p.fb, hero.fade_size);
     if level > 0 {
         status_bar(p, hero);
     }
