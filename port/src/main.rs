@@ -81,7 +81,7 @@ struct Options {
     demo: Option<PathBuf>,
     headless: bool,
     scale: u32,
-    shot: Option<(u32, PathBuf)>,
+    shot: Option<(Vec<u32>, PathBuf)>,
     trace: Option<(u32, u32)>,
     dump: Option<PathBuf>,
     camera: Option<(i32, i32)>,
@@ -129,10 +129,15 @@ fn options() -> Result<Options, String> {
                 o.camera = Some((x, value()?.parse().map_err(|e| format!("--camera X Y: {e}"))?));
             }
             "--shot" => {
-                let frame = value()?.parse().map_err(|e| format!("--shot FRAME FILE.ppm: {e}"))?;
-                o.shot = Some((frame, value()?.into()));
+                // FRAME[,FRAME...]: with several frames, `%d` in FILE becomes each frame number.
+                let frames = value()?
+                    .split(',')
+                    .map(|f| f.parse())
+                    .collect::<Result<Vec<u32>, _>>()
+                    .map_err(|e| format!("--shot FRAME[,FRAME...] FILE.ppm: {e}"))?;
+                o.shot = Some((frames, value()?.into()));
             }
-            "-h" | "--help" => return Err("usage: eatthis [--data BIN] [--map FILE.MAP | --demo DIR.DMO] [--headless] [--scale N] [--shot FRAME FILE.ppm] [--wav FILE.wav] [--mute]".into()),
+            "-h" | "--help" => return Err("usage: eatthis [--data BIN] [--map FILE.MAP | --demo DIR.DMO] [--headless] [--scale N] [--shot FRAME[,FRAME...] FILE.ppm (%d = frame)] [--wav FILE.wav] [--mute]".into()),
             _ => return Err(format!("unknown argument {a}")),
         }
     }
@@ -2041,18 +2046,31 @@ fn run_window(
     Ok(())
 }
 
-/// Runs `frames` frames without a window and writes the last one as a binary PPM.
-fn screenshot(mut game: Game, gfx: &Graphics, frames: u32, path: &Path) -> std::io::Result<()> {
-    for _ in 0..frames {
-        game.step([-1; 9]);
+/// Runs the game without a window and writes frame `frames[i]` as a binary PPM (`%d` in `path`
+/// becomes the frame number).
+fn screenshot(mut game: Game, gfx: &Graphics, frames: &[u32], path: &Path) -> std::io::Result<()> {
+    let mut sorted = frames.to_vec();
+    sorted.sort();
+    let mut at = 0;
+    for f in sorted {
+        while at < f {
+            game.step([-1; 9]);
+            at += 1;
+        }
+        let p = PathBuf::from(path.to_string_lossy().replace("%d", &f.to_string()));
+        shot_frame(&game, gfx, &p)?;
     }
+    Ok(())
+}
+
+fn shot_frame(game: &Game, gfx: &Graphics, path: &Path) -> std::io::Result<()> {
     let mut fb = vec![0u8; (W * H) as usize];
-    gfx.draw(&game, &mut fb);
+    gfx.draw(game, &mut fb);
     if path.extension().is_some_and(|e| e == "bin") {
         return std::fs::write(path, &fb); // the raw indexed frame, for comparing with tools/dumpframe.py
     }
     let mut rgb = vec![0u8; (W * H * 3) as usize];
-    gfx.present(&game, &fb, &mut rgb);
+    gfx.present(game, &fb, &mut rgb);
     let mut out = format!("P6\n{W} {H}\n255\n").into_bytes();
     out.extend(&rgb);
     std::fs::write(path, out)
@@ -2250,7 +2268,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     gfx.camera = o.camera;
     gfx.bg_only = o.bg_only;
     if let Some((frames, path)) = &o.shot {
-        return Ok(screenshot(game, &gfx, *frames, path)?);
+        return Ok(screenshot(game, &gfx, frames, path)?);
     }
     let (data, camera, bg_only) = (o.data.clone(), o.camera, o.bg_only);
     run_window(game, gfx, o.scale, o.mute, data.clone(), map_path, move |path: &Path| {

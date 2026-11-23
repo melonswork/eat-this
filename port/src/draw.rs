@@ -94,6 +94,12 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World) {
             p.at(0x1906 + ((m.uw(0x24) >> 5) & 1) as i32, x, y - (body & 1));
             return;
         }
+        0x11e6 => {
+            // FUN_1050_11e6 (the grenade): while the motion record's +8 is under 5, 0x1818 or
+            // 0x1817 by 8 frames, else one of 8 by +8 / 3.
+            let k = part.v.w(8);
+            sprite = if k < 5 { 0x1818 - ((m.uw(0x24) >> 3) & 1) as i32 } else { 0x1818 + (k / 3 & 7) };
+        }
         0x2299 => sprite += (age / 4) % 2,
         0x2459 | 0x2497 | 0x2946 => sprite += (age >> 2) & 1,
         0x232e => {
@@ -1029,7 +1035,8 @@ fn status_bar(p: &mut Painter, hero: &crate::hero::Hero) {
 /// water line (`Level::water`, waves included) every screen row is tinted through PalMixSea,
 /// the row picked by a 128-pixel SEATILE texture (slot 0x7c) plus a strength that fades over
 /// the 32 rows under the surface (0x30 on the surface row itself) (FUN_1090_0002). The rows
-/// sway with a sine of their height and drift with the sector's current (+0x1a).
+/// sway with a sine of their height (<< 6) and drift by the frame counter shifted right by the
+/// sector's +0x1a.
 pub fn water(p: &mut Painter, level: &Level, world: &crate::world::World) {
     let Some(sea) = p.tables.sea.as_deref() else { return };
     let sector = level.sector.unwrap_or(0);
@@ -1044,10 +1051,11 @@ pub fn water(p: &mut Painter, level: &Level, world: &crate::world::World) {
     if start > 199 {
         return;
     }
-    let drift = ((cx - frame.wrapping_mul(sec.water[3])) & 0x7f) + 0x80;
-    let rise = if sec.water[0] == 1 { 0 } else { (cy - frame / 2) & 0x7f };
+    // 1168:1083 / 109c are long shifts: the current (+0x1a) is a shift count.
+    let drift = ((cx - ((p.frame as u32) >> (sec.water[3] & 0x1f)) as i32) & 0x7f) + 0x80;
+    let rise = if sec.water[0] == 1 { 0 } else { (cy - (frame >> 2)) & 0x7f };
     for y in start..=199 {
-        let a = ((y + cy) * 6 + frame * 0x10).rem_euclid(0x1680);
+        let a = ((((y + cy) as i64) << 6) + frame as i64 * 0x10).rem_euclid(0x1680) as i32;
         let x0 = -((crate::trig::sin(a) / 0xaaa + drift) & 0x7f);
         let mut row = (rise + y) & 0x7f;
         let strength = if y == surface {
