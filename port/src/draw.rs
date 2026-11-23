@@ -389,7 +389,8 @@ pub fn actors(p: &mut Painter, level: &Level, world: &crate::world::World) {
         for &id in &level.lists[s][list::ACTORS] {
             let Some(o) = &level.objects[id] else { continue };
             let (x1, y1, x2, y2) = o.bbox();
-            if x1 <= window.2 && y1 <= window.3 && window.0 <= x2 && window.1 <= y2 {
+            // A sprite object's box is its sprite's: simply drawn, clipped.
+            if o.kind == 0x14aa || x1 <= window.2 && y1 <= window.3 && window.0 <= x2 && window.1 <= y2 {
                 actor(p, o, world, level.sector);
                 p.reset();
             }
@@ -821,7 +822,8 @@ pub fn platform_objects(p: &mut Painter, level: &Level) {
         let at = |k: usize| ds_word(0x9ce + row * 14 + k);
         let (sprite, link, h) = (at(0), at(6), at(8) & 0xff);
         const PROCS: [u16; 11] = [0x1cee, 0x1a25, 0x1a25, 0x1cee, 0x1a25, 0x1e13, 0x1e88, 0x1e13, 0x2242, 0x2079, 0x1e13];
-        match PROCS.get(row).copied().unwrap_or(0x1a25) {
+        let proc_ = PROCS.get(row).copied().unwrap_or(0x1a25);
+        match proc_ {
             0x1cee => {
                 // FUN_1060_1cee: a light under it (unless it is sprite 0x3600), then itself.
                 if sprite != 0x3600 {
@@ -847,17 +849,33 @@ pub fn platform_objects(p: &mut Painter, level: &Level) {
                 p.at(sprite, o.x, o.y);
             }
             _ => {
-                // FUN_1060_1a25 (and the turning ones, 1e88 / 2079, drawn plainly): the chain
+                // FUN_1060_1a25 (and the turning ones, 1e88 / 2079): the chain
                 // of a swinging platform from its pivot, then the platform.
                 if o.kind == 1 && link != 0x7fff {
                     if let Some(&(px, py)) = o.points.first() {
                         let a = o.angle.rem_euclid(0x1680);
                         let (c, sn) = (crate::trig::cos(a), crate::trig::sin(a));
+                        // 1e88 / 2079: the links turn with it; 1e88 has a chain at each end.
+                        let mut link = link;
+                        if matches!(proc_, 0x1e88 | 0x2079) {
+                            p.hflip = (a + 0x5a0) % 0x1680 > 0xb3f;
+                            p.vflip = a > 0xb3f;
+                            let u = (a % 0x5a0 + 0x50) / 0xa0;
+                            link += if p.hflip == p.vflip { 9 - u } else { u };
+                        }
                         for k in o.first_link..o.radius {
-                            p.at(link, px + (c * h * k) / 0x4000, py - (sn * h * k) / 0x4000);
+                            let (lx, ly) = (px + (c * h * k) / 0x4000, py - (sn * h * k) / 0x4000);
+                            if proc_ == 0x1e88 {
+                                p.at(link, lx - 0x28, ly);
+                                p.at(link, lx + 0x28, ly);
+                            } else {
+                                p.at(link, lx, ly);
+                            }
                         }
                     }
                 }
+                p.hflip = false;
+                p.vflip = false;
                 p.at(sprite, o.x, o.y);
             }
         }
