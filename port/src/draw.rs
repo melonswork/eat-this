@@ -84,7 +84,14 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
     };
     match m.uw(0x42) {
         0x126 => sprite = 0x5638 + ((age + m.w(0x40)) & 1),
-        0x1a3 | 0x30f => p.mode = 0x10,
+        0x1a3 => p.mode = 0x10,
+        0x30f => {
+            // FUN_1050_030f (a bubble): translucent, wobbling 3 px with a sine of its age.
+            p.mode = 0x10;
+            let a = (((age << 7) as i16) as i32 % 0x1680).rem_euclid(0x1680);
+            p.at(sprite, x + (crate::trig::sin(a) * 3) / 0x4000, y);
+            return;
+        }
         0x229 | 0x17f4 => {
             tumble(p);
             sprite += n & 3;
