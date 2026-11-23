@@ -407,22 +407,13 @@ impl Game {
         self.level.particles.pointer = 0;
         self.rng.frame = self.frame + 1;
         self.rng.log = std::env::var("ET_RNG").ok().and_then(|v| v.parse::<u32>().ok()) == Some(self.frame);
-        // GameFrameInGame order: platforms (FUN_1078_0aef), then the hero (input read inside).
+        // GameFrameInGame order: FUN_10a0_023f, platforms (FUN_1078_0aef), then the hero (input
+        // read inside).
         self.level.now = self.frame;
         let mut fx = Effects::default();
         self.level.cam = (self.camera.x, self.camera.y);
-        let mut shakes = Vec::new();
-        if let Some(o) = self.level.update_platforms(&mut self.world, self.camera.y, &mut self.rng, &mut shakes) {
-            self.camera.offset.1 = o;
-        }
-        for (a, b) in shakes {
-            self.camera.shake(a, b);
-        }
-        for cell in std::mem::take(&mut self.level.pasted) {
-            self.level.run_scripts(&mut self.world, cell, &mut self.rng, &mut fx);
-        }
-        self.flush_spawns(&mut fx);
-        // FUN_10a0_023f: delayed particles due this frame.
+        // FUN_10a0_023f: delayed particles and tile events due this frame (before the platforms:
+        // a tile event's script may start one, and it moves this frame).
         self.level.particles.now = self.frame;
         self.level.particles.release_due();
         {
@@ -437,9 +428,20 @@ impl Game {
             for &(a, b) in &fx.shakes {
                 self.camera.shake(a, b);
             }
-            // (465e is set afterwards, forgetting the door's.)
-            self.level.door_noise = false;
         }
+        let mut shakes = Vec::new();
+        if let Some(o) = self.level.update_platforms(&mut self.world, self.camera.y, &mut self.rng, &mut shakes) {
+            self.camera.offset.1 = o;
+        }
+        for (a, b) in shakes {
+            self.camera.shake(a, b);
+        }
+        for cell in std::mem::take(&mut self.level.pasted) {
+            self.level.run_scripts(&mut self.world, cell, &mut self.rng, &mut fx);
+        }
+        self.flush_spawns(&mut fx);
+        // (465e is set after the platforms, forgetting a door's.)
+        self.level.door_noise = false;
         // 1170:465e: a screen shake just started (or the hero fires, below).
         let mut noise = self.camera.shake_started() as i32;
         let mut mouse_now = self.hero.gun_mouse();
