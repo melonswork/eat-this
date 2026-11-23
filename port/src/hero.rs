@@ -530,7 +530,9 @@ impl Hero {
         if mouse != self.gun.mouse {
             self.gun.shooting = true;
         }
-        self.gun.mouse = mouse;
+        // FUN_1088_4340 (after that test) keeps gMouseX/Y on the screen; past an edge the
+        // mouse only looks around (`Camera::look`).
+        self.gun.mouse = (mouse.0.clamp(0, 0x13f), mouse.1.clamp(0, 199));
         self.gun.cam = cam;
         self.gun.frame2 = NONE;
         self.gun.armed = false;
@@ -1482,6 +1484,8 @@ impl Hero {
         let old_facing = self.facing;
         self.half_width = 0x14;
         self.height = 0x1e;
+        // gMouseX/Y as FUN_1088_4340 left them: on the screen.
+        let mouse = (mouse.0.clamp(0, 0x13f), mouse.1.clamp(0, 199));
         self.gun.aim = crate::trig::atan2(mouse.1 - ((self.y - 0xd) - cam.1), mouse.0 - (self.x - cam.0));
         self.gun.mouse = mouse;
         self.gun.cam = cam;
