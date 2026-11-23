@@ -304,6 +304,8 @@ impl Game {
         for &(a, b) in &fx.side_shakes {
             g.camera.shake_sideways(a, b);
         }
+        // LevelFirstFrame draws the HUD too (FUN_1088_4b64 -> 2501): the bar's first pixel.
+        g.hero.status_bar();
         for &(a, b) in &fx.shakes {
             g.camera.shake(a, b);
         }
