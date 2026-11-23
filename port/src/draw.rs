@@ -120,6 +120,7 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             tumble(p);
             sprite = m.w(0x14) + (n & 3);
         }
+        0x20ed => sprite += ((age / 0xf) % 8 - 4).abs(),
         0x2d2 => sprite = m.w(0x14) + ((age >> 1) & 3),
         0x586 | 0x7bf | 0xb2a | 0xd83 | 0xf9f => {
             // The rockets and the torpedo: one of 10 sprites per quarter turn of the angle

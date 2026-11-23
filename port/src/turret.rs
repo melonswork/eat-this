@@ -95,8 +95,10 @@ impl Level {
                         ps.p.hits = 0x1a2;
                         ps.p.damage = 0x18;
                         ps.p.on_death = 0x3e;
+                        ps.p.callback = 0x2d2;
                         ps.spawn(0x191e, ey, ex);
                         ps.line(0x28, angle);
+                        ps.p.callback = 0;
                         ps.p.on_death = 0;
                         ps.p.damage = 0x10;
                         ps.p.hits = 0;
