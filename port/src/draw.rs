@@ -47,8 +47,11 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
     let m = &part.m;
     let (x, y) = (m.w(8), m.w(0xa));
     if std::env::var_os("ET_PARTDRAW").is_some() { eprintln!("PART cb {:#x} sprite {:#x} mode {:#x} at ({}, {})", m.uw(0x42), m.w(0x16), m.w(0x20), x - p.cam.0, y - p.cam.1); }
-    p.hflip = m.b(0x18) != 0;
-    p.vflip = m.b(0x1a) != 0;
+    // The callbacks that draw through FUN_10f0_2670 itself rather than the flip table 1170:1b54
+    // ignore the record's flips.
+    let plain = matches!(m.uw(0x42), 0x126 | 0x30f | 0x2d2 | 0x1cef | 0x2299 | 0x2459 | 0x2497 | 0x232e | 0x236b | 0x21c5 | 0x1d33);
+    p.hflip = m.b(0x18) != 0 && !plain;
+    p.vflip = m.b(0x1a) != 0 && !plain;
     p.mode = m.w(0x20);
     let age = m.w(0x24);
     let step = m.w(0x26).max(1);
