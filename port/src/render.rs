@@ -238,11 +238,49 @@ impl<'a> Painter<'a> {
     pub fn flame(&mut self, ystep: i32, xstep: i32, t: u32, x: i32, y: i32) {
         let id = ((t / 3) % 0x10) as i32 + 0x6a00;
         let (x, y) = (x - self.cam.0, y - self.cam.1);
-        if xstep == 0x100 && ystep == 0x100 {
-            self.sprite(id, x, y);
+        if xstep == 0x200 && ystep == 0x200 {
+            self.half(id, x, y);
         } else {
             self.scaled(id, x, y, xstep, ystep);
         }
+    }
+
+    /// FUN_10f0_2d8e: sprite `id` at half size (every other row from the first, every other
+    /// pixel from each row's first opaque one, the hotspot halved toward zero), anchor at
+    /// screen (x, y).
+    pub fn half(&mut self, id: i32, x: i32, y: i32) {
+        if id < 0 || id == 0x7fff {
+            return;
+        }
+        let bank = self.bank;
+        bank.with(id, |s| {
+            let (w, h) = (s.width >> 1, s.height >> 1);
+            if w <= 0 || h <= 0 {
+                return;
+            }
+            let mut px = vec![0u8; (w * h) as usize];
+            for yy in 0..h {
+                // The row's span (its first opaque pixel, its opaque width): screen pixel
+                // start / 2 + k shows source pixel start + 2k.
+                let row = &s.pixels[(yy * 2 * s.width) as usize..((yy * 2 + 1) * s.width) as usize];
+                let Some(start) = row.iter().position(|&c| c != 0) else { continue };
+                let end = row.iter().rposition(|&c| c != 0).unwrap_or(start) + 1;
+                for k in 0..((end - start) >> 1) {
+                    let xx = (start >> 1) + k;
+                    if (xx as i32) < w {
+                        px[(yy * w) as usize + xx] = row[start + 2 * k];
+                    }
+                }
+            }
+            let half = crate::data::Sprite {
+                width: w,
+                height: h,
+                hotspot: (s.hotspot.0 / 2, s.hotspot.1 / 2),
+                pixels: px,
+                extra: Vec::new(),
+            };
+            self.put(&half, x, y);
+        });
     }
 
     fn put(&mut self, s: &crate::data::Sprite, x: i32, y: i32) {
