@@ -1585,7 +1585,7 @@ impl Graphics {
         let Some(mix) = self.tables.mix.as_deref() else { return };
         let row = self.rain_colour as usize * 256;
         for &d in storm::rain_drops()[first..first + n].iter().rev() {
-            let (x, y) = storm::drop_at(d, frame);
+            let (x, y) = storm::drop_at(d, frame, if first == 0 { 3 } else { 4 });
             for k in 0..4 {
                 let (px, py) = (x - k, y - 3 + k);
                 if (0..W).contains(&px) && (0..H).contains(&py) {
