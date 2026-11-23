@@ -371,7 +371,7 @@ pub fn actors(p: &mut Painter, level: &Level, world: &crate::world::World) {
             let Some(o) = &level.objects[id] else { continue };
             let (x1, y1, x2, y2) = o.bbox();
             if x1 <= window.2 && y1 <= window.3 && window.0 <= x2 && window.1 <= y2 {
-                actor(p, o, world);
+                actor(p, o, world, level.sector);
                 p.reset();
             }
         }
@@ -395,12 +395,12 @@ fn looks(p: &mut Painter, o: &Obj) {
     }
 }
 
-fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
+fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<usize>) {
     let (x, y) = (o.w(0xe), o.w(0x10));
     match o.kind {
         // FUN_1070_0cce's draw: the passengers (mirrored when it flies left), the two jets while
-        // it flies, the body (lit by a hit). Not drawn: the hit glow (1b00, mode 0x28) and the
-        // flames of the wreck (FUN_1040_62ed).
+        // it flies, else the wreck's flames (FUN_1040_62ed) above the sector's water line, the
+        // light 0x1b00 while it has health, the body (lit by a hit).
         crate::carrier::KIND => {
             let (top, dir) = (o.w(0x5e), o.w(0x24));
             for i in (0..o.w(0x2a).clamp(0, 7) as usize).rev() {
@@ -412,12 +412,18 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World) {
                 }
             }
             let body = if o.w(0x20) == 1 {
+                if top < sector.map_or(0x7fff, |s| world.sectors[s].water[1]) {
+                    p.at(((p.frame / 3) % 16) as i32 + 0x6a00, x - 2, top - 8);
+                }
                 0x5c05
             } else {
                 p.at(0x5821, x - 0x10, top);
                 p.at(0x5821, x + 0x10, top);
                 0x5c00 + 3 - ((o.w(0x22) / 6) % 6 - 3).abs()
             };
+            if o.w(0x26) > 0 {
+                p.at_mode(0x28, 0x1b00, x - 1, top);
+            }
             if o.w(0x28) > 0 {
                 p.mode = 0x24;
                 p.colour = p.flash;
