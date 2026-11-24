@@ -5,6 +5,7 @@ edition = "2024"
 description = "A source port of Eat This (Image-Line, 1998). Needs the original CD's data."
 
 [dependencies]
+glow = "0.16"
 sdl2 = { version = "0.37", features = ["bundled", "static-link"] }
 
 [profile.release]

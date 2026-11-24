@@ -32,6 +32,7 @@ use crate::data::SpriteGroup;
 use crate::palette::LevelPalette;
 use crate::{H, W};
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicI32, Ordering::Relaxed};
 use std::collections::HashMap;
 
 /// Sprite groups by slot, fitted to the level palette as they load.
@@ -142,8 +143,84 @@ pub struct Painter<'a> {
     pub clip: (i32, i32, i32, i32),
 }
 
+/// The view (extras, docs/extras.md): the frame buffer's columns show logical x from `-left()` to
+/// `right() - 1`. The original's is 0..320; the widescreen options add columns on both sides.
+static VIEW: [AtomicI32; 2] = [AtomicI32::new(0), AtomicI32::new(W)];
+
+/// `left` extra columns on the left, `width` columns in all.
+pub fn set_view(left: i32, width: i32) {
+    VIEW[0].store(left, Relaxed);
+    VIEW[1].store(width, Relaxed);
+}
+
+pub fn left() -> i32 {
+    VIEW[0].load(Relaxed)
+}
+
+pub fn width() -> i32 {
+    VIEW[1].load(Relaxed)
+}
+
+pub fn right() -> i32 {
+    width() - left()
+}
+
+/// The frame buffer index of logical (x, y).
+pub fn at(x: i32, y: i32) -> usize {
+    (y * width() + x + left()) as usize
+}
+
+/// Column `x` is on the screen.
+pub fn on(x: i32) -> bool {
+    x >= -left() && x < right()
+}
+
+pub fn wide() -> bool {
+    width() != W
+}
+
+/// Where the copies of a 320-pixel-wide repeating picture go, from its own place.
+pub fn repeats() -> &'static [i32] {
+    if wide() { &[-W, 0, W, 2 * W] } else { &[0, W] }
+}
+
 /// The full screen as a clip rectangle.
-pub const SCREEN: (i32, i32, i32, i32) = (0, 0, W - 1, H - 1);
+pub fn screen() -> (i32, i32, i32, i32) {
+    (-left(), 0, right() - 1, H - 1)
+}
+
+thread_local! {
+    /// The glow mask (extras): for each frame buffer pixel how much light the sprite drawn there
+    /// gives off; empty when glow and light are off. Nothing in the original's drawing reads it.
+    pub static GLOW: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static EMIT: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+/// How much light sprite `id` gives off in mode `mode`: fire and explosions, shots, muzzle lights.
+fn emission(id: i32, mode: i32) -> u8 {
+    match (id as u16) >> 8 {
+        0x1a | 0x64 | 0x65 | 0x68 | 0x69 | 0x6a | 0x6e | 0x6f | 0x70 => 255,
+        0x18 | 0x19 => 200,
+        0x1b => 160,
+        // The HUD's score sprites and font.
+        0x1f | 0x20 => 70,
+        _ if mode == 0x28 => 160,
+        _ => 0,
+    }
+}
+
+/// The glow mask forgets a pixel.
+pub fn dark(at: usize) {
+    mark(at, 0);
+}
+
+fn mark(at: usize, v: u8) {
+    GLOW.with(|g| {
+        if let Some(p) = g.borrow_mut().get_mut(at) {
+            *p = v;
+        }
+    });
+}
 
 impl<'a> Painter<'a> {
     fn table(&self, m: Mix) -> Option<&'a [u8]> {
@@ -157,7 +234,7 @@ impl<'a> Painter<'a> {
 
     /// Resets mode, colour, flips and table, as the callers do after a special draw.
     pub fn reset(&mut self) {
-        self.clip = SCREEN;
+        self.clip = screen();
         self.mode = 0;
         self.hflip = false;
         self.vflip = false;
@@ -170,6 +247,7 @@ impl<'a> Painter<'a> {
             return;
         }
         self.log("sprite", id, x, y, "");
+        EMIT.with(|e| e.set(emission(id, self.mode)));
         let bank = self.bank;
         bank.with(id, |s| self.put(s, x, y));
     }
@@ -200,8 +278,9 @@ impl<'a> Painter<'a> {
     /// the lasers do).
     pub fn glow(&mut self, x: i32, y: i32, c: u8) {
         let Some(mix) = self.table(Mix::Level) else { return };
-        if (0..W).contains(&x) && (0..H).contains(&y) {
-            let d = &mut self.fb[(y * W + x) as usize];
+        if on(x) && (0..H).contains(&y) {
+            mark(at(x, y), 255);
+            let d = &mut self.fb[at(x, y)];
             if *d <= self.fg {
                 *d = mix.get(c as usize * 256 + *d as usize).copied().unwrap_or(c);
             }
@@ -210,8 +289,9 @@ impl<'a> Painter<'a> {
 
     /// The same, `c` itself.
     pub fn dot(&mut self, x: i32, y: i32, c: u8) {
-        if (0..W).contains(&x) && (0..H).contains(&y) && self.fb[(y * W + x) as usize] <= self.fg {
-            self.fb[(y * W + x) as usize] = c;
+        if on(x) && (0..H).contains(&y) && self.fb[at(x, y)] <= self.fg {
+            self.fb[at(x, y)] = c;
+            mark(at(x, y), 255);
         }
     }
 
@@ -229,6 +309,7 @@ impl<'a> Painter<'a> {
             return;
         }
         self.log("scaled", id, x, y, &format!(" steps {xstep:#x} {ystep:#x}"));
+        EMIT.with(|e| e.set(emission(id, self.mode)));
         let bank = self.bank;
         bank.with(id, |s| {
             let w = (s.width * 0x100) / xstep;
@@ -288,6 +369,7 @@ impl<'a> Painter<'a> {
             return;
         }
         self.log("half", id, x, y, "");
+        EMIT.with(|e| e.set(emission(id, self.mode)));
         let bank = self.bank;
         bank.with(id, |s| {
             let (w, h) = (s.width >> 1, s.height >> 1);
@@ -341,6 +423,8 @@ impl<'a> Painter<'a> {
         let tint = self.table(Mix::Tint);
         let (mode, colour, key) = (self.mode, self.colour, self.key);
         let (c0, c1, c2, c3) = self.clip;
+        let emit = EMIT.with(|e| e.get());
+        let mut glow = GLOW.with(|g| std::mem::take(&mut *g.borrow_mut()));
         for row in 0..h {
             let sy = top + row;
             if sy < c1 || sy > c3 {
@@ -361,7 +445,7 @@ impl<'a> Painter<'a> {
                 }
                 let scol = if self.hflip { w - 1 - col } else { col };
                 let src = s.pixels[(srow * w + scol) as usize];
-                let at = (sy * W + sx) as usize;
+                let at = at(sx, sy);
                 let dst = self.fb[at];
                 let behind = dst <= fg;
                 let out = match mode {
@@ -372,7 +456,7 @@ impl<'a> Painter<'a> {
                     0x10 => (src != 0 && behind)
                         .then(|| mix.map_or(src, |t| t[src as usize * 256 + dst as usize])),
                     0x14 => (src != 0 && dst == key).then_some(src),
-                    0x1c => (src != 0 && behind && sx + 1 < W).then(|| self.fb[at + 1]),
+                    0x1c => (src != 0 && behind && sx + 1 < right()).then(|| self.fb[at + 1]),
                     0x24 => (src != 0 && behind)
                         .then(|| mix.map_or(src, |t| t[colour as usize * 256 + src as usize])),
                     0x28 => (src != 0 && behind)
@@ -391,9 +475,13 @@ impl<'a> Painter<'a> {
                 };
                 if let Some(c) = out {
                     self.fb[at] = c;
+                    if let Some(p) = glow.get_mut(at) {
+                        *p = emit;
+                    }
                 }
             }
         }
+        GLOW.with(|g| *g.borrow_mut() = glow);
     }
 
     /// `FUN_10f0_3da`: a one-pixel line in colour `c` between two screen points.
@@ -454,8 +542,8 @@ impl<'a> Painter<'a> {
         let mut f = step as u16;
         let (mut x, mut y) = (x1, y1);
         for _ in 0..n {
-            if (0..W).contains(&x) && (0..H).contains(&y) {
-                self.fb[(y * W + x) as usize] = c;
+            if on(x) && (0..H).contains(&y) {
+                self.fb[at(x, y)] = c;
             }
             let (next, carry) = f.overflowing_add(step as u16);
             f = next;
@@ -513,8 +601,8 @@ pub fn fill_polygon(fb: &mut [u8], pts: &[(i32, i32)], c: u8) {
         if !(0..H).contains(&y) {
             continue;
         }
-        for x in xl.max(0)..=xr.min(W - 1) {
-            fb[(y * W + x) as usize] = c;
+        for x in xl.max(-self::left())..=xr.min(self::right() - 1) {
+            fb[at(x, y)] = c;
         }
     }
 }

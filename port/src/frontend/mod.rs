@@ -15,7 +15,9 @@ pub mod video;
 use crate::level::{self, Tally};
 use crate::palette::Pal6;
 use crate::picture::Picture;
-use crate::{Game, Graphics, sound};
+use crate::extras::Extras;
+use crate::session::{self, Input, Log, Session};
+use crate::{Game, Graphics, gpu, light, pad, render, sound};
 use gfx::{Gfx, MENU_FONT, Mode, W, H};
 use menu::{Id, Kind, Menu, Ui};
 use std::collections::HashMap;
@@ -41,6 +43,8 @@ struct Running {
     game: Game,
     gfx: Graphics,
     map: PathBuf,
+    /// Widescreen: where the view's logical x 0 is (it moves over slowly).
+    left: i32,
 }
 
 pub struct FrontEnd {
@@ -80,6 +84,22 @@ pub struct FrontEnd {
     /// The video showing (FUN_1008_1365), and the sound events its keys made.
     video: Option<video::Player>,
     video_evs: Vec<sound::Ev>,
+    // ---- extras (docs/extras.md) ----
+    x: Extras,
+    /// The running level's input log (none in a demo).
+    session: Option<Session>,
+    /// A weapon key waiting for the next frame.
+    weapon: Option<usize>,
+    pad: pad::State,
+    pad_prev: pad::State,
+    /// What the controller should do now (low, high).
+    rumble: (f32, f32),
+    /// The menu item waiting for its new key or button.
+    capture: Option<(Id, usize)>,
+    /// The last frame's view: its left margin and width.
+    drawn: (i32, i32),
+    notice: (String, i32),
+    last_rewind: bool,
 }
 
 fn pcx_palette(path: &Path) -> Option<Pal6> {
@@ -145,6 +165,16 @@ impl FrontEnd {
             quit: false,
             video: None,
             video_evs: Vec::new(),
+            x: Extras::load(),
+            session: None,
+            weapon: None,
+            pad: pad::State::default(),
+            pad_prev: pad::State::default(),
+            rumble: (0.0, 0.0),
+            capture: None,
+            drawn: (0, W),
+            notice: (String::new(), 0),
+            last_rewind: false,
         };
         fe.build_menus(&mut texts);
         sound::listener(0xa0, 100);
@@ -174,8 +204,11 @@ impl FrontEnd {
         let mut options = Menu::new(Id::Options, 0x62, 0xa0);
         options.title = Some((0x2419, 0, 0x62 - 0x1e));
         options.spacing = 0x10;
-        options.default = 3;
-        for _ in 0..4 {
+        options.default = 4;
+        for k in 0..4 {
+            if k == 3 {
+                options.label(g, "EXTRAS", 6);
+            }
             options.label(g, &t.next(), 6);
         }
         let mut display = Menu::new(Id::Display, 0x3f, 0xa0);
@@ -234,6 +267,7 @@ impl FrontEnd {
         for m in [main, options, display, snd, restart, quit, stats, art, episode, user] {
             self.menus.insert(m.id, m);
         }
+        self.build_extras();
         self.scan_user_maps();
     }
 
@@ -249,7 +283,7 @@ impl FrontEnd {
     /// script and its map; "Title=HIDDEN" ones are left out. One label per map.
     fn scan_user_maps(&mut self) {
         let mut dirs: Vec<PathBuf> = Vec::new();
-        for root in [self.data.join("USERMAPS"), Self::save_dir()] {
+        for root in [self.data.join("USERMAPS"), Self::save_dir(), Self::recordings_dir()] {
             if let Ok(rd) = std::fs::read_dir(&root) {
                 let mut v: Vec<PathBuf> = rd.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.is_dir()).collect();
                 v.sort();
@@ -341,12 +375,17 @@ impl FrontEnd {
             if let Some(r) = &self.level {
                 let lp: [[u8; 3]; 256] = r.gfx.palette_of(&r.game).map(|c| c.map(|v| v >> 2));
                 let row = gfx::grey_row(&lp);
-                for (b, &p) in self.gfx.back.iter_mut().zip(&self.game_fb) {
-                    *b = row[p as usize];
+                // (The middle of a wide picture.)
+                let (_, w) = self.drawn;
+                for y in 0..H {
+                    for x in 0..W {
+                        self.gfx.back[(y * W + x) as usize] = row[self.game_fb[(y * w + (w - W) / 2 + x) as usize] as usize];
+                    }
                 }
                 self.back_is_snapshot = true;
             }
         }
+        self.ui.input.mx = self.ui.input.mx.clamp(0, W - 1);
         sound::listener(0xa0, 100);
         let m = self.menu(Id::Main);
         m.a = 0x8c;
@@ -381,6 +420,10 @@ impl FrontEnd {
     fn on_show(&mut self, id: Id) {
         match id {
             Id::Display => self.display_texts(),
+            Id::Extras | Id::XPicture | Id::XControls | Id::XKeys | Id::XPad | Id::XStates => {
+                self.capture = None;
+                self.extras_texts(id);
+            }
             Id::Artwork => {
                 // FUN_1080_1f4d: the juke box goes up to the last CD track title.
                 let n = self.main.track_titles.len() as i32 - 1;
@@ -461,6 +504,7 @@ impl FrontEnd {
 
     /// FUN_1088_d3e7: the level stops.
     fn stop_level(&mut self) {
+        self.finish_recording();
         sound::stop_all();
         self.level = None;
         self.level_state = 0;
@@ -483,9 +527,17 @@ impl FrontEnd {
             .and_then(|(_, v)| find_ci(map.parent()?, v))
             .and_then(|p| crate::demo::Demo::load(&p).ok());
         level::tally(|t| *t = Tally::default());
-        let game = Game::new(world, demo);
+        // Extras: the level's inputs are logged; a recorded run starts as DemoStartRecording does.
+        let record = (self.x.record != 0 && demo.is_none()).then(|| self.aim());
+        let seed = if record.is_some() { 0 } else { session::clock_seed() };
+        let live = demo.is_none();
+        let game = if live { Game::start(world, None, seed, record) } else { Game::new(world, demo) };
+        let log = Log { map: map.to_path_buf(), seed, tries: 0, record, frames: Vec::new() };
+        self.session = live.then(|| Session::new(log));
+        self.weapon = None;
         crate::level_music(map);
-        self.level = Some(Running { game, gfx, map: map.to_path_buf() });
+        let left = game.view_left(self.x.margin());
+        self.level = Some(Running { game, gfx, map: map.to_path_buf(), left });
         self.menu(Id::Stats).b = 0x7fff;
         self.level_state = 2;
         self.in_game = true;
@@ -496,6 +548,7 @@ impl FrontEnd {
     /// GameFrame 4e60 = 100 -> FUN_1080_172a: the stats screen over the script's EndPic,
     /// CD track 6, and the next map goes to the savings (FUN_1080_2fc4).
     fn level_over(&mut self) {
+        self.finish_recording();
         let Some(r) = &self.level else { return };
         // GameFrame 4e60 = 100: `Video=X.avi,1` first (FUN_1080_161b(1)), then the stats.
         match video::script_video(&script_pairs(&script_of(&r.map)), 1) {
@@ -658,6 +711,7 @@ impl FrontEnd {
                 0 => self.show(Id::Display),
                 1 => self.show(Id::Sound),
                 2 => self.show(Id::Artwork),
+                3 => self.show(Id::Extras),
                 _ if sel == count - 1 => self.back(),
                 _ => {}
             },
@@ -704,6 +758,7 @@ impl FrontEnd {
             }
             Id::Stats if act => self.stats_continue(),
             Id::UserMaps => self.update_user_maps(sel, act),
+            Id::Extras | Id::XPicture | Id::XControls | Id::XKeys | Id::XPad | Id::XStates => self.update_extras(id, sel, act),
             _ => {}
         }
     }
@@ -875,6 +930,19 @@ impl FrontEnd {
             }
             Id::Stats => self.draw_stats(),
             Id::UserMaps => self.draw_user_maps(),
+            Id::Extras | Id::XPicture | Id::XControls | Id::XKeys | Id::XPad | Id::XStates => {
+                let t = match id {
+                    Id::Extras => "EXTRAS",
+                    Id::XPicture => "PICTURE",
+                    Id::XControls => "CONTROLS",
+                    Id::XKeys => "KEYS",
+                    Id::XPad => "CONTROLLER",
+                    _ => "SAVE STATES",
+                };
+                self.gfx.shade(7, x - 0x50, y - 0x1e, x + 0x50, y - 0x10);
+                self.gfx.text_centered(&MENU_FONT, t.as_bytes(), x, y - 0x14, Mode::Tint(6));
+                self.draw_items(id);
+            }
             _ => self.draw_items(id),
         }
     }
@@ -1060,7 +1128,7 @@ fn rgb_with_gamma(pal6: &Pal6, gamma: i32) -> [[u8; 3]; 256] {
 
 /// `eatthis` without --map/--demo: the original's menus in a window.
 pub fn run(data: &Path, scale: u32, mute: bool) -> Result<(), Box<dyn Error>> {
-    use sdl2::{event::Event, keyboard::Scancode, mouse::MouseButton, pixels::PixelFormatEnum};
+    use sdl2::{event::Event, keyboard::Scancode, mouse::MouseButton};
     if let Ok(spec) = std::env::var("ET_AVI_YUV") {
         // Debug: "FILE.AVI OUT.yuv [N]" writes the first N frames as raw yuv410p (compare with
         // `ffmpeg -i FILE.AVI -f rawvideo -pix_fmt yuv410p`).
@@ -1114,38 +1182,30 @@ pub fn run(data: &Path, scale: u32, mute: bool) -> Result<(), Box<dyn Error>> {
     let mut fe = FrontEnd::new(data);
     let (ww, wh) = fe.settings.window;
     let s = scale.max(1);
-    let window = sdl
-        .video()?
-        .window("Eat This", (ww as u32).max(W as u32 * s / 2), (wh as u32).max(H as u32 * s / 2))
-        .position_centered()
-        .resizable()
-        .build()?;
-    let mut canvas = window.into_canvas().present_vsync().build()?;
-    canvas.set_logical_size(W as u32, H as u32)?;
-    let tc = canvas.texture_creator();
-    let mut tex = tc.create_texture_streaming(PixelFormatEnum::RGB24, W as u32, H as u32)?;
-    let mut tex2 = tc.create_texture_streaming(PixelFormatEnum::RGB24, W as u32, 2 * H as u32)?;
+    let video_sys = sdl.video()?;
+    let mut out = gpu::Output::new(&video_sys, "Eat This", (ww as u32).max(W as u32 * s / 2), (wh as u32).max(H as u32 * s / 2), false)?;
+    let mut controller = pad::Pad::new(&sdl);
     let (vw, vh) = video::SIZE;
-    let mut tex_v = tc.create_texture_streaming(PixelFormatEnum::RGB24, vw, vh)?;
     let mut rgb_v = vec![0u8; (vw * vh * 3) as usize];
     sdl.mouse().show_cursor(false);
     let mut events = sdl.event_pump()?;
     let mut rgb = vec![0u8; (W * H * 3) as usize];
-    let mut rgb2 = vec![0u8; (W * H * 6) as usize];
+    let mut rgb2 = Vec::new();
     let (mut lmb, mut rmb) = (false, false);
     let tick = std::time::Duration::from_secs(1) / crate::HZ;
     let mut next = std::time::Instant::now();
     let mut ticks = 0u32;
     let mut applied_gains = (-1.0f32, -1.0f32);
-    let mut applied_window: Option<(i32, (i32, i32))> = None;
+    let mut applied_window: Option<(i32, (i32, i32), i32)> = None;
     'main: loop {
         for e in events.poll_iter() {
+            controller.event(&e);
             match e {
                 Event::Quit { .. } => break 'main,
                 Event::KeyDown { scancode: Some(sc), repeat: false, .. } => fe.key_down(sc),
                 Event::MouseMotion { x, y, .. } => {
-                    fe.ui.input.mx = x.clamp(0, W - 1);
-                    fe.ui.input.my = y.clamp(0, H - 1);
+                    let (x, y) = out.to_picture(x, y);
+                    fe.mouse(x, y);
                 }
                 Event::MouseButtonDown { mouse_btn, .. } => match mouse_btn {
                     MouseButton::Left => lmb = true,
@@ -1165,7 +1225,10 @@ pub fn run(data: &Path, scale: u32, mute: bool) -> Result<(), Box<dyn Error>> {
             ticks += 1;
             let ks = events.keyboard_state();
             let mut evs = Vec::new();
+            fe.pad = controller.state();
             fe.tick(&|sc: Scancode| ks.is_scancode_pressed(sc), lmb, rmb, &mut evs);
+            let k = fe.x.rumble as f32 / 100.0;
+            controller.rumble(fe.rumble.0 * k, fe.rumble.1 * k, 60);
             if let Some(dev) = audio.as_mut() {
                 let mut m = dev.lock();
                 for e in evs {
@@ -1186,14 +1249,14 @@ pub fn run(data: &Path, scale: u32, mute: bool) -> Result<(), Box<dyn Error>> {
                     (m.0.sfx_gain, m.0.music_gain) = gains;
                 }
             }
-            let want = (s.display_mode, s.window);
+            let want = (s.display_mode, s.window, fe.x.margin());
             if applied_window != Some(want) {
                 applied_window = Some(want);
-                let win = canvas.window_mut();
+                let win = out.window_mut();
                 let full = s.display_mode == 2;
                 let _ = win.set_fullscreen(if full { sdl2::video::FullscreenType::Desktop } else { sdl2::video::FullscreenType::Off });
                 if !full {
-                    let _ = win.set_size(s.window.0.max(W) as u32, s.window.1.max(H) as u32);
+                    let _ = win.set_size((s.window.0.max(W) * (W + 2 * fe.x.margin()) / W) as u32, s.window.1.max(H) as u32);
                 }
             }
         }
@@ -1210,30 +1273,30 @@ pub fn run(data: &Path, scale: u32, mute: bool) -> Result<(), Box<dyn Error>> {
         if let Some(v) = &fe.video {
             // 640x480 at 4:3 in the middle of the 320x200 picture.
             v.render(&mut rgb_v);
-            tex_v.update(None, &rgb_v, vw as usize * 3)?;
-            canvas.set_draw_color(sdl2::pixels::Color::BLACK);
-            canvas.clear();
-            let vwid = (H as u32 * 4 / 3).min(W as u32);
-            canvas.copy(&tex_v, None, Some(sdl2::rect::Rect::new((W - vwid as i32) / 2, 0, vwid, H as u32)))?;
-            canvas.present();
+            let size = ((H * 4 / 3).min(W), H);
+            let look = gpu::Look { upscale: gpu::SHARP, ..gpu::Look::default() };
+            let look = if fe.x == Extras::default() { gpu::Look::default() } else { look };
+            out.present(&gpu::Pic { rgb: &rgb_v, w: vw as i32, h: vh as i32, size, frame: (W, H) }, &look)?;
             continue;
         }
-        fe.render(&mut rgb);
+        let w = fe.render(&mut rgb);
+        let look = fe.x.look();
         if fe.settings.display_mode == 1 {
             // Scanlines: every other line of a double-height picture is black.
-            let row = W as usize * 3;
+            let row = w as usize * 3;
+            rgb2.resize(row * 2 * H as usize, 0);
             for y in 0..H as usize {
                 rgb2[2 * y * row..(2 * y + 1) * row].copy_from_slice(&rgb[y * row..(y + 1) * row]);
                 rgb2[(2 * y + 1) * row..(2 * y + 2) * row].fill(0);
             }
-            tex2.update(None, &rgb2, W as usize * 3)?;
-            canvas.copy(&tex2, None, None)?;
+            let look = gpu::Look { integer: look.integer, ..gpu::Look::default() };
+            out.present(&gpu::Pic { rgb: &rgb2, w, h: 2 * H, size: (w, H), frame: (w, H) }, &look)?;
         } else {
-            tex.update(None, &rgb, W as usize * 3)?;
-            canvas.copy(&tex, None, None)?;
+            out.present(&gpu::Pic { rgb: &rgb, w, h: H, size: (w, H), frame: (w, H) }, &look)?;
         }
-        canvas.present();
     }
+    fe.finish_recording();
+    fe.x.save();
     fe.settings.save();
     Ok(())
 }
@@ -1258,6 +1321,37 @@ fn shot(data: &Path, script: &str) -> Result<(), Box<dyn Error>> {
                     fe.tick(&|_| false, false, false, &mut evs);
                 }
             }
+            // `set Name=value`: an extras setting; `print`: the level's state; `pad buttons... [aim X Y]`:
+            // the controller's buttons (names of pad::BUTTONS, START, UP.. RIGHT) held from now on.
+            "set" => {
+                let text = fe.x.text() + &words[1..].join("\n");
+                fe.x = Extras::parse(&text);
+            }
+            "print" => {
+                if let Some(r) = &fe.level {
+                    use std::hash::{DefaultHasher, Hash, Hasher};
+                    let mut h = DefaultHasher::new();
+                    session::fingerprint(&r.game).hash(&mut h);
+                    let m = fe.aim();
+                    println!("frame {} hero ({}, {}) weapon {} mouse {m:?} state {:016x} in game {}", r.game.frame, r.game.hero.x, r.game.hero.y, r.game.hero.weapon, h.finish(), fe.in_game);
+                }
+            }
+            "pad" => {
+                let mut p = pad::State::default();
+                for (k, w) in words.iter().enumerate().skip(1) {
+                    if let Some(b) = pad::BUTTONS.iter().position(|b| b == w) {
+                        p.held[b] = true;
+                    } else if let Some(d) = ["UP", "DOWN", "LEFT", "RIGHT"].iter().position(|b| b == w) {
+                        p.dirs[d] = true;
+                    } else if *w == "START" {
+                        p.start = true;
+                    } else if *w == "aim" {
+                        let n = |i: usize| words.get(k + i).and_then(|v| v.parse().ok()).unwrap_or(0.0);
+                        p.aim = (n(1), n(2));
+                    }
+                }
+                fe.pad = p;
+            }
             "levelend" => {
                 if let Some(r) = fe.level.as_mut() {
                     r.game.level_over = true;
@@ -1272,8 +1366,8 @@ fn shot(data: &Path, script: &str) -> Result<(), Box<dyn Error>> {
                 std::fs::write(words.get(1).copied().unwrap_or("fe.ppm"), out)?;
             }
             "shot" => {
-                fe.render(&mut rgb);
-                let mut out = format!("P6\n{W} {H}\n255\n").into_bytes();
+                let w = fe.render(&mut rgb);
+                let mut out = format!("P6\n{w} {H}\n255\n").into_bytes();
                 out.extend(&rgb);
                 std::fs::write(words.get(1).copied().unwrap_or("fe.ppm"), out)?;
             }
@@ -1281,7 +1375,7 @@ fn shot(data: &Path, script: &str) -> Result<(), Box<dyn Error>> {
                 let n: u32 = n.parse().map_err(|_| format!("ET_FE_SHOT: bad step {step}"))?;
                 let keys: Vec<Scancode> = words[1..].iter().filter_map(|k| Scancode::from_name(k)).collect();
                 for k in &keys {
-                    if fe.video.is_some() || matches!(k, Scancode::Escape | Scancode::F1 | Scancode::F3 | Scancode::F4 | Scancode::F5 | Scancode::F6 | Scancode::F7) || crate::weapon_key(*k).is_some() || (fe.in_game && crate::letter(*k).is_some()) {
+                    if fe.video.is_some() || fe.capture.is_some() || (fe.in_game && fe.x.extra_keys.iter().any(|&v| vk_scancode(v) == Some(*k))) || matches!(k, Scancode::Escape | Scancode::F1 | Scancode::F3 | Scancode::F4 | Scancode::F5 | Scancode::F6 | Scancode::F7) || crate::weapon_key(*k).is_some() || (fe.in_game && crate::letter(*k).is_some()) {
                         fe.key_down(*k);
                     }
                 }
@@ -1301,6 +1395,9 @@ impl FrontEnd {
         use sdl2::keyboard::Scancode;
         if let Some(v) = self.video.as_mut() {
             v.key(sc, &mut self.video_evs);
+            return;
+        }
+        if self.extras_key(sc) {
             return;
         }
         if let (true, Some(c)) = (self.in_game, crate::letter(sc)) {
@@ -1332,9 +1429,7 @@ impl FrontEnd {
             | Scancode::Num7 | Scancode::Num8 | Scancode::Num9 | Scancode::Num0 | Scancode::PageUp | Scancode::PageDown
                 if self.in_game =>
             {
-                if let Some(r) = self.level.as_mut() {
-                    r.game.weapon_key = crate::weapon_key(sc);
-                }
+                self.weapon = crate::weapon_key(sc);
             }
             Scancode::F3 => self.hotkey(Id::UserMaps),
             Scancode::F5 => self.hotkey(Id::Options),
@@ -1357,6 +1452,7 @@ impl FrontEnd {
     /// One 70 Hz frame (GameFrame): the level or the menus; the sound events go to `evs`.
     fn tick(&mut self, pressed: &dyn Fn(sdl2::keyboard::Scancode) -> bool, lmb: bool, rmb: bool, evs: &mut Vec<sound::Ev>) {
         use sdl2::keyboard::Scancode;
+        self.pad_edges();
         if let Some(v) = self.video.as_mut() {
             evs.append(&mut self.video_evs);
             v.tick(evs);
@@ -1368,16 +1464,19 @@ impl FrontEnd {
         }
         evs.append(&mut self.video_evs);
         self.frame += 1;
+        self.notice.1 -= 1;
+        self.rumble = (0.0, 0.0);
         // The mouse buttons as GameFrame counts them: 1 the frame they go down, then 2.
         let i = &mut self.ui.input;
         i.lmb = if lmb { if i.lmb >= 1 { 2 } else { 1 } } else { 0 };
         i.rmb = if rmb { if i.rmb >= 1 { 2 } else { 1 } } else { 0 };
         if self.in_game {
             let mut keys = [0i8; 9];
-            let k = self.settings.keys;
+            let k = self.keys();
+            let pads = self.pad.keys(&self.x.pad);
             let vks = [k[0], k[1], k[2], k[3], k[4], k[5], k[4], k[5], k[6]];
             for (n, vk) in vks.iter().enumerate() {
-                let down = vk_scancode(*vk).is_some_and(|sc| pressed(sc));
+                let down = pads[n] || vk_scancode(*vk).is_some_and(|sc| pressed(sc));
                 keys[n] = crate::key_poll(&mut self.game_keys[n], down);
             }
             // ReadGameInput: the mouse buttons fire when the shoot keys are up; the cursor
@@ -1389,19 +1488,46 @@ impl FrontEnd {
             if keys[5] < 1 {
                 keys[5] = i.rmb as i8;
             }
-            let mouse = (i.mx * 319 / W, i.my * 199 / H);
-            let r = self.level.as_mut().unwrap();
-            r.game.live_mouse = Some(mouse);
-            if !r.game.demo_done() {
-                r.game.step(keys);
+            let rewind = self.x.rewind != 0
+                && (self.pad.action(&self.x.pad, pad::REWIND) || vk_scancode(self.x.extra_keys[3]).is_some_and(|sc| pressed(sc)));
+            if rewind && self.rewind(evs) {
+                return;
             }
+            self.last_rewind = false;
+            self.pad_aim();
+            let mouse = self.aim();
+            let weapon = self.weapon.take();
+            let recording = self.session.as_ref().is_some_and(|s| s.log.record.is_some());
+            let wide = if recording { 0 } else { self.x.wide_actors() };
+            let keep = self.x.rewind != 0;
+            let margin = self.x.margin();
+            let r = self.level.as_mut().unwrap();
+            let health = r.game.hero.health;
+            if !r.game.demo_done() {
+                match self.session.as_mut() {
+                    Some(s) => {
+                        s.keep_snaps = keep;
+                        // The original's demos hold no weapon keys: a recording does without.
+                        let weapon = if recording { -1 } else { weapon.map_or(-1, |w| w as i8) };
+                        s.step(&mut r.game, Input { keys, mouse: (mouse.0 as i16, mouse.1 as i16), weapon, wide: wide as u8 });
+                    }
+                    None => r.game.step(keys),
+                }
+            }
+            self.rumble = pad::feel(&r.game, health);
+            let left = r.game.view_left(margin);
+            r.left += (left - r.left).clamp(-2, 2);
             evs.extend(r.game.sound.drain(..));
             if std::mem::take(&mut r.game.restart) {
                 // GameFrame 4e60 = 10: HeroReset, the level again (LevelInit randomizes).
                 let tries = r.game.level.tries + 1;
                 let map = r.map.clone();
+                self.finish_recording();
                 if self.load_level(&map).is_ok() {
                     self.level.as_mut().unwrap().game.level.tries = tries;
+                    if let Some(s) = self.session.as_mut() {
+                        s.log.tries = tries;
+                    }
                 }
             } else if std::mem::take(&mut r.game.level_over) {
                 self.level_over();
@@ -1427,7 +1553,14 @@ impl FrontEnd {
             ];
             let mut v = [0i8; 9];
             for (n, s) in sets.iter().enumerate() {
-                v[n] = crate::key_poll(&mut self.menu_keys[n], s.iter().any(|k| pressed(*k)));
+                let d = &self.pad;
+                let held = [d.dirs[0], d.dirs[1], d.dirs[2], d.dirs[3], d.held[1], false, false, d.held[5], d.held[6]][n];
+                v[n] = crate::key_poll(&mut self.menu_keys[n], held || s.iter().any(|k| pressed(*k)));
+            }
+            if self.capture.is_some() {
+                // A key or button is awaited: the menu stands still.
+                v = [-1; 9];
+                (self.ui.input.lmb, self.ui.input.rmb) = (0, 0);
             }
             let i = &mut self.ui.input;
             (i.up, i.down, i.left, i.right, i.enter, i.home, i.end, i.pgup, i.pgdn) = (v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8]);
@@ -1436,22 +1569,403 @@ impl FrontEnd {
         }
     }
 
-    /// The frame as RGB: the level's picture or the menus', through the gamma correction.
-    fn render(&mut self, rgb: &mut [u8]) {
+    /// The frame as RGB: the level's picture or the menus', through the gamma correction. Returns
+    /// its width.
+    fn render(&mut self, rgb: &mut Vec<u8>) -> i32 {
         let mut fb = std::mem::take(&mut self.game_fb);
+        let mut w = W;
+        let lit = self.x.glow > 0 || self.x.light > 0;
         let pal = if self.in_game {
             let r = self.level.as_ref().unwrap();
+            w = W + 2 * self.x.margin();
+            let left = r.left.clamp(0, w - W);
+            fb.resize((w * H) as usize, 0);
+            render::set_view(left, w);
+            render::GLOW.with(|g| {
+                let mut g = g.borrow_mut();
+                g.clear();
+                g.resize(if lit { (w * H) as usize } else { 0 }, 0);
+            });
             r.gfx.draw(&r.game, &mut fb);
+            if self.notice.1 > 0 {
+                render::set_view((w - W) / 2, w);
+                r.gfx.notice(&mut fb, &self.notice.0, r.game.frame);
+            }
+            render::set_view(0, W);
+            self.drawn = (left, w);
             r.gfx.palette_of(&r.game).map(|c| c.map(|v| v >> 2))
         } else {
             self.gfx.palette
         };
         let src = if self.in_game { &fb } else { &self.gfx.fb };
         let colours = rgb_with_gamma(&pal, self.settings.gamma);
+        rgb.resize((w * H * 3) as usize, 0);
         for (px, &i) in rgb.chunks_exact_mut(3).zip(src) {
             px.copy_from_slice(&colours[i as usize]);
         }
+        if self.in_game && lit {
+            let mask = render::GLOW.with(|g| std::mem::take(&mut *g.borrow_mut()));
+            light::apply(rgb, w as usize, H as usize, &mask, self.x.glow, self.x.light);
+        }
         self.game_fb = fb;
+        w
+    }
+}
+
+/// The extras (docs/extras.md): none of this is the original's.
+impl FrontEnd {
+    fn recordings_dir() -> PathBuf {
+        std::env::var_os("ET_RECORDINGS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("RECORDINGS"))
+    }
+
+    fn state_path(&self) -> PathBuf {
+        let dir = std::env::var_os("ET_STATES").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("STATES"));
+        dir.join(format!("SLOT{}.ETS", self.x.slot))
+    }
+
+    fn say(&mut self, t: &str) {
+        self.notice = (t.to_string(), 140);
+    }
+
+    /// The game's keys: EatThis.ini's unless remapped.
+    fn keys(&self) -> [i32; 7] {
+        std::array::from_fn(|k| if self.x.keys[k] != 0 { self.x.keys[k] } else { self.settings.keys[k] })
+    }
+
+    /// The cursor as ReadGameInput gives it (x * 319 / width, FUN_1088_42a3).
+    fn aim(&self) -> (i32, i32) {
+        (self.ui.input.mx * 319 / W, self.ui.input.my * 199 / H)
+    }
+
+    /// The columns the cursor may be in: the original's 320, all of a wide view whose enemies act.
+    fn cursor_range(&self) -> (i32, i32) {
+        match &self.level {
+            Some(r) if self.in_game && self.x.wide_actors() > 0 && self.session.as_ref().is_some_and(|s| s.log.record.is_none()) => {
+                (-r.left, W + 2 * self.x.margin() - r.left - 1)
+            }
+            _ => (0, W - 1),
+        }
+    }
+
+    /// The mouse moved to (x, y) of the picture shown.
+    fn mouse(&mut self, x: i32, y: i32) {
+        let left = if self.in_game { self.level.as_ref().map_or(0, |r| r.left) } else { 0 };
+        let (lo, hi) = self.cursor_range();
+        self.ui.input.mx = (x - left).clamp(lo, hi);
+        self.ui.input.my = y.clamp(0, H - 1);
+    }
+
+    fn pad_aim(&mut self) {
+        let Some(r) = &self.level else { return };
+        let hero = (r.game.hero.x - r.game.camera.x, r.game.hero.y - r.game.camera.y);
+        let (lo, hi) = self.cursor_range();
+        let at = (self.ui.input.mx, self.ui.input.my);
+        if let Some(m) = pad::aim(&self.pad, self.x.aim != 0, at, hero, lo, hi) {
+            (self.ui.input.mx, self.ui.input.my) = m;
+        }
+    }
+
+    /// The controller's presses that act like keys going down.
+    fn pad_edges(&mut self) {
+        use sdl2::keyboard::Scancode;
+        let (now, old) = (self.pad, std::mem::replace(&mut self.pad_prev, self.pad));
+        if let Some((Id::XPad, k)) = self.capture {
+            if let (Some(b), None) = (now.any(), old.any()) {
+                self.x.pad[k] = b;
+                self.capture = None;
+                // The press is used up: the menu doesn't see it.
+                self.menu_keys = [2; 9];
+                self.extras_texts(Id::XPad);
+            }
+            return;
+        }
+        let edge = |b: usize| now.held[b] && !old.held[b];
+        let start = now.start && !old.start;
+        if self.video.is_some() {
+            if start || edge(2) {
+                self.key_down(Scancode::Escape);
+            } else if edge(1) {
+                self.key_down(Scancode::Return);
+            }
+        } else if self.in_game {
+            if start {
+                self.key_down(Scancode::Escape);
+            }
+            for (a, k) in [(pad::PREV, 10), (pad::NEXT, 11)] {
+                if now.action(&self.x.pad, a) && !old.action(&self.x.pad, a) {
+                    self.weapon = Some(k);
+                }
+            }
+        } else if start {
+            self.key_down(Scancode::Escape);
+        } else if edge(2) {
+            self.back();
+        }
+    }
+
+    /// A key going down, for the extras; true when it was one of theirs.
+    fn extras_key(&mut self, sc: sdl2::keyboard::Scancode) -> bool {
+        use sdl2::keyboard::Scancode;
+        if let Some((id, k)) = self.capture {
+            if sc != Scancode::Escape && id == Id::XKeys {
+                let Some(vk) = (1..256).find(|&v| vk_scancode(v) == Some(sc)) else { return true };
+                if k < 7 {
+                    self.x.keys[k] = vk;
+                } else {
+                    self.x.extra_keys[k - 7] = vk;
+                }
+                self.menu_keys = [2; 9];
+            } else if sc != Scancode::Escape {
+                return true;
+            }
+            self.capture = None;
+            self.extras_texts(id);
+            return true;
+        }
+        if !self.in_game {
+            return false;
+        }
+        match self.x.extra_keys.iter().position(|&v| vk_scancode(v) == Some(sc)) {
+            Some(0) => self.save_state(),
+            Some(1) => self.load_state(),
+            Some(2) => {
+                self.x.slot = self.x.slot % 9 + 1;
+                let t = format!("SLOT {}", self.x.slot);
+                self.say(&t);
+            }
+            Some(_) if self.x.rewind != 0 => {}
+            _ => return false,
+        }
+        true
+    }
+
+    fn save_state(&mut self) {
+        let path = self.state_path();
+        let running = self.level_state == 2 && self.menus[&Id::Stats].b == 0x7fff;
+        let t = match &self.session {
+            Some(s) if running => match s.log.save(&path) {
+                Ok(()) => format!("STATE {} SAVED", self.x.slot),
+                Err(e) => {
+                    eprintln!("can't save {}: {e}", path.display());
+                    "CAN'T SAVE THE STATE".to_string()
+                }
+            },
+            _ => "NOTHING TO SAVE".to_string(),
+        };
+        self.say(&t);
+    }
+
+    fn load_state(&mut self) {
+        let path = self.state_path();
+        match self.try_load(&path) {
+            Ok(()) => {
+                let t = format!("STATE {} LOADED", self.x.slot);
+                self.say(&t);
+            }
+            Err(e) => {
+                eprintln!("can't load {}: {e}", path.display());
+                let t = format!("NO STATE IN SLOT {}", self.x.slot);
+                self.say(&t);
+            }
+        }
+    }
+
+    fn try_load(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+        let log = Log::load(path)?;
+        if !log.map.exists() {
+            return Err(format!("no {}", log.map.display()).into());
+        }
+        // What ran until now ends, recording included.
+        self.finish_recording();
+        let same = self.level.as_ref().is_some_and(|r| r.map == log.map && self.session.is_some());
+        let game = log.replay(&self.data)?;
+        sound::stop_all();
+        let mut gfx = Graphics::load(&self.data, &game.world, &log.map)?;
+        gfx.hud_level = self.settings.game_stats;
+        if !same {
+            crate::level_music(&log.map);
+        }
+        // The cursor is where the state left it until it moves.
+        if let Some(i) = log.frames.last() {
+            (self.ui.input.mx, self.ui.input.my) = ((i.mouse.0 as i32 * W + 318) / 319, (i.mouse.1 as i32 * H + 198) / 199);
+        }
+        let left = game.view_left(self.x.margin());
+        self.level = Some(Running { game, gfx, map: log.map.clone(), left });
+        self.session = Some(Session::new(log));
+        self.weapon = None;
+        self.menu(Id::Stats).b = 0x7fff;
+        self.level_state = 2;
+        self.in_game = true;
+        self.back_is_snapshot = false;
+        Ok(())
+    }
+
+    /// One frame of rewinding (at twice the speed); false when there is nothing to rewind.
+    fn rewind(&mut self, evs: &mut Vec<sound::Ev>) -> bool {
+        let Some(s) = self.session.as_mut() else { return false };
+        if let Some(g) = s.rewind(2) {
+            let r = self.level.as_mut().unwrap();
+            r.game = g;
+        } else if !self.last_rewind {
+            return false;
+        }
+        self.last_rewind = true;
+        self.weapon = None;
+        evs.extend(sound::end_frame());
+        self.notice = ("<<".to_string(), 2);
+        true
+    }
+
+    /// A recorded run is over: it is written and listed under START USER MAP.
+    fn finish_recording(&mut self) {
+        let Some(s) = self.session.take() else { return };
+        let Some(r) = self.level.as_ref().filter(|_| s.log.record.is_some() && s.log.frames.len() > 70) else { return };
+        match session::save_recording(&Self::recordings_dir(), &s.log, &r.game.checks) {
+            Ok(d) => {
+                eprintln!("recorded {}", d.display());
+                self.scan_user_maps();
+            }
+            Err(e) => eprintln!("can't write the recording: {e}"),
+        }
+    }
+
+    fn build_extras(&mut self) {
+        let g = &mut self.gfx;
+        for (id, y, spacing, labels) in [
+            (Id::Extras, 0x56, 0x10, 5),
+            (Id::XPicture, 0x38, 0x10, 8),
+            (Id::XControls, 0x4a, 0x10, 6),
+            (Id::XKeys, 0x26, 0xd, 12),
+            (Id::XPad, 0x30, 0xe, 9),
+            (Id::XStates, 0x5a, 0x10, 4),
+        ] {
+            let mut m = Menu::new(id, y, 0xa0);
+            m.spacing = spacing;
+            m.default = -1;
+            for k in 0..labels {
+                let t = match (id, k) {
+                    (Id::XPicture, 3) => Some(("GLOW", self.x.glow)),
+                    (Id::XPicture, 4) => Some(("LIGHT", self.x.light)),
+                    (Id::XControls, 1) => Some(("RUMBLE", self.x.rumble)),
+                    _ => None,
+                };
+                match t {
+                    Some((t, v)) => m.slider(g, t, v, 100, 5, 20),
+                    None => m.label(g, "-", 6),
+                }
+            }
+            if id == Id::XPicture {
+                m.align(3, 4);
+            }
+            self.menus.insert(id, m);
+        }
+    }
+
+    /// An extras menu's labels as the settings are now.
+    fn extras_texts(&mut self, id: Id) {
+        let on = |v: i32| if v != 0 { "ON" } else { "OFF" };
+        let key = |vk: i32| vk_scancode(vk).map_or("-".to_string(), |s| s.name().to_ascii_uppercase());
+        let x = self.x.clone();
+        let wait = |k: usize| self.capture == Some((id, k));
+        let back = self.menus[&Id::Options].items.last().map_or("GET BACK".to_string(), |i| i.text.clone());
+        let mut t: Vec<String> = match id {
+            Id::Extras => vec!["PICTURE".into(), "CONTROLS".into(), "SAVE STATES".into(), format!("RECORD LEVELS: {}", on(x.record))],
+            Id::XPicture => vec![
+                format!("SCALING: {}", ["PLAIN", "SHARP", "SCALE4X", "XBR"][x.upscale as usize]),
+                format!("CRT: {}", on(x.crt)),
+                format!("WHOLE PIXELS: {}", on(x.integer)),
+                String::new(),
+                String::new(),
+                format!("WIDESCREEN: {}", ["OFF", "16:9", "21:9"][x.wide as usize]),
+                format!("ENEMIES SEE WIDE: {}", on(x.wide_sim)),
+            ],
+            Id::XControls => vec![
+                format!("STICK AIMS: {}", ["FREELY", "AROUND THE HERO"][x.aim as usize]),
+                String::new(),
+                format!("REWINDING: {}", on(x.rewind)),
+                "KEYS".into(),
+                "CONTROLLER BUTTONS".into(),
+            ],
+            Id::XKeys => {
+                let names = ["UP", "DOWN", "LEFT", "RIGHT", "FIRE", "SECOND FIRE", "SWITCH WEAPON", "SAVE STATE", "LOAD STATE", "NEXT SLOT", "REWIND"];
+                let keys = self.keys();
+                let all = keys.iter().chain(&x.extra_keys);
+                names
+                    .iter()
+                    .zip(all)
+                    .enumerate()
+                    .map(|(k, (n, &v))| if wait(k) { format!("{n}: PRESS A KEY") } else { format!("{n}: {}", key(v)) })
+                    .collect()
+            }
+            Id::XPad => pad::ACTIONS
+                .iter()
+                .enumerate()
+                .map(|(k, n)| if wait(k) { format!("{n}: PRESS A BUTTON") } else { format!("{n}: {}", pad::BUTTONS[x.pad[k] as usize]) })
+                .collect(),
+            _ => {
+                let what = match Log::load(&self.state_path()) {
+                    Ok(l) => {
+                        let s = l.frames.len() / 70;
+                        let name = l.map.file_stem().unwrap_or_default().to_string_lossy().to_ascii_uppercase();
+                        format!("{name} {}:{:02}", s / 60, s % 60)
+                    }
+                    Err(_) => "EMPTY".into(),
+                };
+                vec![format!("SLOT {}: {what}", x.slot), "SAVE".into(), "LOAD".into()]
+            }
+        };
+        t.push(back);
+        let g = &mut self.gfx;
+        let m = self.menus.get_mut(&id).unwrap();
+        for (k, t) in t.iter().enumerate().filter(|(_, t)| !t.is_empty()) {
+            m.retext(g, k, t);
+        }
+    }
+
+    fn update_extras(&mut self, id: Id, sel: i32, act: bool) {
+        let m = self.menu(id);
+        let count = m.items.len() as i32;
+        let v: Vec<i32> = m.items.iter().map(|i| i.value()).collect();
+        match id {
+            Id::XPicture => (self.x.glow, self.x.light) = (v[3], v[4]),
+            Id::XControls => self.x.rumble = v[1],
+            _ => {}
+        }
+        if !act || sel < 0 {
+            return;
+        }
+        if sel == count - 1 {
+            self.x.save();
+            self.back();
+            return;
+        }
+        let x = &mut self.x;
+        match (id, sel) {
+            (Id::Extras, 0) => return self.show(Id::XPicture),
+            (Id::Extras, 1) => return self.show(Id::XControls),
+            (Id::Extras, 2) => return self.show(Id::XStates),
+            (Id::Extras, 3) => x.record ^= 1,
+            (Id::XPicture, 0) => x.upscale = (x.upscale + 1) % 4,
+            (Id::XPicture, 1) => x.crt ^= 1,
+            (Id::XPicture, 2) => x.integer ^= 1,
+            (Id::XPicture, 5) => x.wide = (x.wide + 1) % 3,
+            (Id::XPicture, 6) => x.wide_sim ^= 1,
+            (Id::XControls, 0) => x.aim ^= 1,
+            (Id::XControls, 2) => x.rewind ^= 1,
+            (Id::XControls, 3) => return self.show(Id::XKeys),
+            (Id::XControls, 4) => return self.show(Id::XPad),
+            (Id::XKeys | Id::XPad, k) => self.capture = Some((id, k as usize)),
+            (Id::XStates, 0) => x.slot = x.slot % 9 + 1,
+            (Id::XStates, 1) => self.save_state(),
+            (Id::XStates, 2) => {
+                self.load_state();
+                if self.in_game {
+                    return;
+                }
+            }
+            _ => {}
+        }
+        self.extras_texts(id);
     }
 }
 

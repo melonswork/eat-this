@@ -19,6 +19,13 @@ pub enum Id {
     Stats,    // 48a0, 102c
     Artwork,  // 48d2, 1044
     Episode,  // 4900, 105c
+    // The extras' menus (not the original's).
+    Extras,
+    XPicture,
+    XControls,
+    XKeys,
+    XPad,
+    XStates,
 }
 
 #[derive(Clone, Debug)]

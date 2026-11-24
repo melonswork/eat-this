@@ -192,7 +192,7 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             let (sx, sy) = (x - p.cam.0, y - p.cam.1);
             let (c0, c1, c2, c3) = p.clip;
             if c0 <= sx && sx <= c2 && c1 <= sy && sy <= c3 {
-                let at = (sy * crate::W + sx) as usize;
+                let at = crate::render::at(sx, sy);
                 p.fb[at] = if age < m.w(0x22) - 0x1e {
                     c
                 } else {
@@ -358,7 +358,7 @@ fn tile_at(p: &mut Painter, world: &crate::world::World, cell: i32, x: i32, y: i
                 continue;
             }
             let c = px[(yy * 16 + xx) as usize];
-            let at = (sy * crate::W + sx) as usize;
+            let at = crate::render::at(sx, sy);
             if let Some(tb) = table {
                 p.fb[at] = tb.get(c as usize * 256 + p.fb[at] as usize).copied().unwrap_or(c);
             } else if c != 0 || kind == 2 {
@@ -410,7 +410,7 @@ pub fn decals(p: &mut Painter, level: &Level) {
 pub fn actors(p: &mut Painter, level: &Level, world: &crate::world::World) {
     let sector = level.sector.unwrap_or(0);
     let (cx, cy) = p.cam;
-    let window = (cx, cy, cx + 0x13f, cy + 199);
+    let window = (cx - crate::render::left(), cy, cx + crate::render::right() - 1, cy + 199);
     let mut sectors = vec![sector];
     if sector != 0 {
         sectors.push(0);
@@ -528,7 +528,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
             let (bx, by) = (o.w(0x16), o.w(0x18));
             if let Some(beam) = o.looks.get(1) {
                 let (x, top, end) = (bx - p.cam.0, (beam.x - p.cam.1).max(0), (beam.y - p.cam.1).min(199));
-                if (0..0x13f).contains(&x) && top <= end {
+                if x >= -crate::render::left() && x < crate::render::right() - 1 && top <= end {
                     if o.w(0x3c) <= 0x44 {
                         let mut rng = crate::rng::PascalRandom::plain(p.frame);
                         let c: Vec<u8> = (0..16).map(|_| p.reds[rng.random(3) as usize]).collect();
@@ -537,7 +537,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
                             p.glow(x, y, k);
                             p.glow(x + 1, y, k);
                         }
-                    } else if x >= 2 && x + 2 < 0x13f {
+                    } else if x >= 2 - crate::render::left() && x + 2 < crate::render::right() - 1 {
                         for y in top..=end {
                             for dx in [-2, -1, 2, 3] {
                                 p.glow(x + dx, y, p.flash);
@@ -767,7 +767,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
             // FUN_1070_06f6: a flickering column over it (under RandSeed = frame >> 2), then itself.
             let (sx, bottom) = (x - p.cam.0, y - 9 - p.cam.1);
             let (top, bottom) = ((bottom - 0x48).max(0), bottom.min(199));
-            if (0..=0x13f).contains(&sx) && top <= bottom {
+            if crate::render::on(sx) && top <= bottom {
                 let mut rng = crate::rng::PascalRandom::plain(p.frame >> 2);
                 let lit = o.w(0x24) > 0;
                 let c: Vec<u8> = (0..16)
@@ -837,8 +837,8 @@ pub fn hero_and_drone(p: &mut Painter, hero: &crate::hero::Hero, drone: &crate::
 pub fn pickups(p: &mut Painter, world: &crate::world::World) {
     let Some(pl) = world.planes[2].as_ref() else { return };
     let (cx, cy) = p.cam;
-    let (tx0, ty0) = ((cx >> 4).max(0), (cy >> 4).max(0));
-    let (tx1, ty1) = (((cx + 0x13f) >> 4).min(pl.width - 1), ((cy + 199) >> 4).min(pl.height - 1));
+    let (tx0, ty0) = (((cx - crate::render::left()) >> 4).max(0), (cy >> 4).max(0));
+    let (tx1, ty1) = (((cx + crate::render::right() - 1) >> 4).min(pl.width - 1), ((cy + 199) >> 4).min(pl.height - 1));
     for ty in ty0..=ty1 {
         for tx in tx0..=tx1 {
             let cell = pl.get(tx, ty);
@@ -853,6 +853,12 @@ pub fn pickups(p: &mut Painter, world: &crate::world::World) {
 thread_local! {
     /// 1170:45be: the vertical shake's last amount (the camera's), for the pick-ups' draw.
     static SHAKE: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+    static HUD_SHIFT: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+}
+
+/// Widescreen: how far right of the HUD's columns the world's are (the pointer follows the world).
+pub fn set_hud_shift(dx: i32) {
+    HUD_SHIFT.with(|c| c.set(dx));
 }
 
 pub fn set_shake(amount: i32) {
@@ -907,7 +913,7 @@ pub fn platform_objects(p: &mut Painter, level: &Level) {
     }
     for o in order {
         let (x1, y1, x2, y2) = o.bbox;
-        if !(x1 <= cx + 0x13f && y1 <= cy + 199 && cx <= x2 && cy <= y2) {
+        if !(x1 < cx + crate::render::right() && y1 <= cy + 199 && cx - crate::render::left() <= x2 && cy <= y2) {
             continue;
         }
         let row = o.row;
@@ -1128,6 +1134,7 @@ pub fn doors(p: &mut Painter, level: &Level) {
 /// FUN_1080_007c: the screen in `n`-pixel blocks around its middle (each takes its centre's
 /// colour; worked in place, row by row).
 fn pixelate(fb: &mut [u8], n: i32) {
+    use crate::render::{at, left, right, width};
     if n <= 1 {
         return;
     }
@@ -1135,17 +1142,17 @@ fn pixelate(fb: &mut [u8], n: i32) {
     for y in 0..200i32 {
         let row = (((y - 100 + (y - 100).signum() * (n >> 1)) / n) * n + 100).clamp(0, 199);
         if last < y {
-            for x in 0..320i32 {
+            for x in -left()..right() {
                 let mut a = x - 160;
                 if a <= 0 {
                     a -= n;
                 }
                 a += n >> 1;
-                let sx = (a - a % n + 160).clamp(0, 319);
-                fb[(y * 320 + x) as usize] = fb[(row * 320 + sx) as usize];
+                let sx = (a - a % n + 160).clamp(-left(), right() - 1);
+                fb[at(x, y)] = fb[at(sx, row)];
             }
         } else {
-            fb.copy_within(((y - 1) * 320) as usize..(y * 320) as usize, (y * 320) as usize);
+            fb.copy_within(((y - 1) * width()) as usize..(y * width()) as usize, (y * width()) as usize);
         }
         last = row;
     }
@@ -1172,7 +1179,7 @@ pub fn hud(p: &mut Painter, hero: &crate::hero::Hero, pointer: i32, level: i32, 
     }
     let (mx, my) = hero.gun_mouse();
     p.mode = 0x30;
-    p.sprite(ptr, mx, my);
+    p.sprite(ptr, mx + HUD_SHIFT.with(|c| c.get()), my);
     pixelate(p.fb, hero.fade_size);
     if level > 0 {
         status_bar(p, hero);
@@ -1217,8 +1224,8 @@ pub fn messages(p: &mut Painter, mb: &crate::messages::MessageBox) {
     if let Some(light) = p.tables.light.as_deref() {
         let (mut a, mut b) = (0x20usize, 0x24usize);
         for row in 0..(h + 2).clamp(0, crate::H) {
-            for x in 0..crate::W {
-                let at = (row * crate::W + x) as usize;
+            for x in -crate::render::left()..crate::render::right() {
+                let at = crate::render::at(x, row);
                 let r = if x & 1 == 0 { a } else { b };
                 p.fb[at] = light[r * 256 + p.fb[at] as usize];
             }
@@ -1242,7 +1249,7 @@ pub fn messages(p: &mut Painter, mb: &crate::messages::MessageBox) {
 /// (01ce), mode 4 (01cc); `^|` goes down a line ('0''s height + 2), `^Cxx` tints (mode 0x2c,
 /// colour xx), `^O` stops it, `^Bxx` skips the codes after it every other xx ticks. Returns where
 /// the text ended (2444, 2446).
-fn text_at(p: &mut Painter, t: &[u8], limit: i32, x: i32, y: i32) -> (i32, i32) {
+pub fn text_at(p: &mut Painter, t: &[u8], limit: i32, x: i32, y: i32) -> (i32, i32) {
     let line = p.bank.size(0x2030).map_or(8, |s| s.1) + 2;
     let hex = |i: usize| -> u8 {
         let d = |c: u8| if c > b'9' { c.wrapping_sub(0x37) } else { c.wrapping_sub(b'0') };
@@ -1402,12 +1409,12 @@ pub fn water(p: &mut Painter, level: &Level, world: &crate::world::World) {
             ((surface + 0x20 - y) / 2).max(0)
         };
         let Some(tex) = p.bank.row(0x7c00, row) else { return };
-        let mut x = x0;
-        while x < crate::W {
+        let mut x = x0 - (crate::render::left() + 0x7f) / 0x80 * 0x80;
+        while x < crate::render::right() {
             for (i, &t) in tex.iter().enumerate() {
                 let sx = x + i as i32;
-                if (0..crate::W).contains(&sx) {
-                    let at = (y * crate::W + sx) as usize;
+                if crate::render::on(sx) {
+                    let at = crate::render::at(sx, y);
                     let k = (t as i32 + strength) & 0xff;
                     p.fb[at] = sea[(k as usize) * 256 + p.fb[at] as usize];
                 }
@@ -1435,14 +1442,14 @@ pub fn automap(p: &mut Painter, world: &crate::world::World, level: &Level, rect
     let black = vga[0];
     let set = |fb: &mut [u8], x: i32, y: i32, c: u8| {
         if (0..W).contains(&x) && (0..H).contains(&y) {
-            fb[(y * W + x) as usize] = c;
+            fb[crate::render::at(x, y)] = c;
         }
     };
     // FUN_10f0_0113 kind 0x11: each pixel through PalMix row 1b14; kind 0: the frame.
     if let Some(mix) = p.tables.mix.as_deref() {
         for y in 0x21..=(h + 0x21).min(H - 1) {
             for x in 2..=(w + 2).min(W - 1) {
-                let at = (y * W + x) as usize;
+                let at = crate::render::at(x, y);
                 p.fb[at] = mix[black as usize * 256 + p.fb[at] as usize];
             }
         }

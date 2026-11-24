@@ -33,6 +33,7 @@ impl Shake {
     }
 }
 
+#[derive(Clone)]
 pub struct Camera {
     pub x: i32, // gCameraX
     pub y: i32,
@@ -78,6 +79,12 @@ impl Camera {
     /// 1170:45be: the vertical shake's last amount.
     pub fn shake_amount(&self) -> i32 {
         self.vertical.amount
+    }
+
+    /// How hard the screen shakes now (extras: rumble); only read.
+    pub fn rumble(&self) -> i32 {
+        let a = |s: &Shake| if s.count > 0 { s.amplitude * s.count / s.strength.max(1) } else { 0 };
+        a(&self.vertical).max(a(&self.horizontal))
     }
 
     /// 1170:45c0.

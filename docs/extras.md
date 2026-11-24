@@ -6,6 +6,25 @@ Features the original never had. The rules for all of them:
 - **Kept out of the simulation.** `tools/checkall.sh` must stay exact. Extras read game state; they never add or move a `Random()` or change what an update does.
 - **The one exception** is widescreen option B below, which changes behaviour on purpose. It is off in demos and in `checkall`.
 
+**Status (2026-11-24): all seven are in** (OPTIONS > EXTRAS; settings in `EatThisExtras.ini`).
+Where the result differs from the plan below:
+
+- **Upscalers:** xBRZ is GPL and ScaleFX is another author's shader, so there are Scale4x (Scale2x twice) and an
+  xBR-style shader written here instead. GPU path: OpenGL 3.3 through `glow`; without it, SDL's renderer and no shaders.
+- **Glow and light** run on the CPU at the original's resolution (2-3.5 ms), from a mask the sprite drawing fills;
+  the light comes from the lit pixels, not from particle records. START's lightning doesn't glow.
+- **Save states** are the level's seed and inputs, replayed on load; they only load in a build whose simulation is the same.
+- **16:10** is the original's own shape, so widescreen is 16:9 (+36 columns) or 21:9 (+148). Columns outside the hero's
+  sector are black. The view moves over at a sector's edge instead.
+- **Recordings** hold no weapon keys (1-0, PgUp, PgDn), because the original's format doesn't: Tab switches weapons.
+- Not tried with a physical controller: its inputs were tested through the scripted front end, the rumble not at all.
+
+Code: `session.rs` (input log, states, rewind, recordings), `gpu.rs`, `scale.rs`, `light.rs`, `pad.rs`, `extras.rs`,
+the end of `frontend/mod.rs`, and the view in `render.rs`. Checks: `--check-states --demo X.DMO`,
+`--rerecord DIR --demo X.DMO` (then play it with `mise run trace`), `--wide N --shot F FILE`,
+`ET_GLOW="60 50"` with `--shot`, `ET_GL_SHOT="in.ppm out.ppm UPSCALE CRT INTEGER W H"`, and `ET_FE_SHOT`'s
+`set Name=value`, `pad BUTTON... [aim X Y]` and `print`.
+
 Planned order: 1, 2, 3, 4, 5, 6 and the recordings (7) last.
 
 ## 1. Controller

@@ -5,3 +5,6 @@ __pycache__
 port/target
 port/EatThis.ini
 port/SAVINGS
+port/EatThisExtras.ini
+port/STATES
+port/RECORDINGS

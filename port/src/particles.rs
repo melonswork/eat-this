@@ -118,7 +118,7 @@ pub struct Particle {
     pub drawn: bool,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Particles {
     pub list: Vec<Particle>,
     pub p: Params,

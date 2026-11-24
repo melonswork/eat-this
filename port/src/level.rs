@@ -121,6 +121,7 @@ pub struct Effects {
     pub bonus_pickups: Vec<(u16, i32, i32)>,
 }
 
+#[derive(Clone)]
 pub struct Level {
     /// 1170:0f2a is 2 (a level running) rather than 1 (its setup): EnemyFactory's big aliens growl.
     pub in_play: bool,
@@ -1012,7 +1013,7 @@ impl Level {
 
 /// The grinder (OBJECTS type 0x2724, GrinderUpdate 1090:1a91): a platform that climbs the shaft
 /// once its trigger lever is on, crushing every row of "grinder food" tiles (function 15000).
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Grinder {
     pub y: i32,                  // 1170:4ee0: the top of the grinder
     top: i32,                    // 4ee2: where it stops
