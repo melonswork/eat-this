@@ -70,9 +70,11 @@ pub struct Sector {
     pub water: [i32; 5],
 }
 
+#[derive(Clone)]
 pub struct World {
-    pub map: Map,
-    pub groups: Vec<Option<TileGroup>>,
+    /// The files' data, shared by every snapshot of the game.
+    pub map: std::sync::Arc<Map>,
+    pub groups: std::sync::Arc<Vec<Option<TileGroup>>>,
     pub planes: Vec<Option<Plane>>,
     /// The whole-map default sector (1170:45d8) is `sectors[0]`; the flood-filled ones follow
     /// (the 1170:464a list).
@@ -90,7 +92,7 @@ impl World {
                     .map(|name| TileGroup::load(&tiles_dir.join(name)))
                     .transpose()
             })
-            .collect::<io::Result<_>>()?;
+            .collect::<io::Result<Vec<_>>>()?;
         if std::env::var_os("ET_GROUPS").is_some() {
             eprintln!("GROUPS {:?} (background {})", map.groups, map.background);
         }
@@ -103,8 +105,8 @@ impl World {
             });
         }
         let mut w = World {
-            map,
-            groups,
+            map: std::sync::Arc::new(map),
+            groups: std::sync::Arc::new(groups),
             planes,
             sectors: Vec::new(),
         };

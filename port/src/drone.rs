@@ -26,7 +26,7 @@ pub struct Candidate {
     level: i32,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Drone {
     pub x: i32,      // 4d9e
     pub y: i32,      // 4da0

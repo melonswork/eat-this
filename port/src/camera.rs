@@ -33,6 +33,7 @@ impl Shake {
     }
 }
 
+#[derive(Clone)]
 pub struct Camera {
     pub x: i32, // gCameraX
     pub y: i32,

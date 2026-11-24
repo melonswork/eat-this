@@ -6,6 +6,7 @@ use std::{io, path::Path};
 pub const CHECK_PERIOD: u32 = 35;
 pub const INPUTS: usize = 9;
 
+#[derive(Clone)]
 pub struct Demo {
     pub frames: u32,
     keys: [Vec<i8>; INPUTS], // already past the priming frame

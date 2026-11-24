@@ -8,6 +8,7 @@
 //! Every other number falls back to the level's picture scrolled at 1/16 of the camera. That is a
 //! guess, not what those routines do.
 
+use crate::render::{at, on, repeats};
 use crate::{H, W, blit, data::SpriteGroup, picture::Picture};
 
 pub struct Background {
@@ -31,9 +32,10 @@ pub fn copy_row(fb: &mut [u8], pic: &Picture, y: usize, shift: usize) {
     }
     let shift = shift % pic.width;
     let src = &pic.pixels[y * pic.width..(y + 1) * pic.width];
-    let dst = &mut fb[y * W as usize..(y + 1) * W as usize];
-    dst[..pic.width - shift].copy_from_slice(&src[shift..]);
-    dst[pic.width - shift..].copy_from_slice(&src[..shift]);
+    let base = at(0, y as i32) as i32;
+    for x in -crate::render::left()..crate::render::right() {
+        fb[(base + x) as usize] = src[(x + shift as i32).rem_euclid(W) as usize];
+    }
 }
 
 impl Background {
@@ -74,8 +76,8 @@ impl Background {
             let last = row.iter().rposition(|&c| c != 0).unwrap_or(first);
             for sx in first..=last {
                 let px = x + s.hotspot.0 + sx as i32;
-                if (0..W).contains(&px) {
-                    fb[(py * W + px) as usize] = row[sx];
+                if on(px) {
+                    fb[at(px, py)] = row[sx];
                 }
             }
         }
@@ -93,8 +95,8 @@ impl Background {
             for sx in 0..s.width {
                 let src = s.pixels[(sy * s.width + sx) as usize];
                 let (px, py) = (x + s.hotspot.0 + sx, y + s.hotspot.1 + sy);
-                if src != 0 && (0..W).contains(&px) && (0..H).contains(&py) {
-                    let at = (py * W + px) as usize;
+                if src != 0 && on(px) && (0..H).contains(&py) {
+                    let at = at(px, py);
                     fb[at] = mix[src as usize * 256 + fb[at] as usize];
                 }
             }
@@ -119,8 +121,10 @@ impl Background {
                 // FUN_1090_1a06 (GRINDER): the second group's backdrop at 1/4 of the camera,
                 // tiled down. (Extra map 8 goes over it; main.rs draws that.)
                 let y = (-cam.1 / 4) % H;
-                self.sprite(1, 0, fb, 0, y);
-                self.sprite(1, 0, fb, 0, y + H);
+                for &dx in if crate::render::wide() { repeats() } else { &[0] } {
+                    self.sprite(1, 0, fb, dx, y);
+                    self.sprite(1, 0, fb, dx, y + H);
+                }
             }
             4 => self.forest(fb, cam),
             10 if cam.1 <= 0x290 => self.forest(fb, cam),
@@ -144,12 +148,13 @@ impl Background {
     /// drawn: the little screen on a building (`DAT_4d9c`).
     fn city(&self, fb: &mut [u8], cam: (i32, i32), frame: u32, flash: bool) {
         let sky = -((frame >> 3) as i32 % W);
-        self.sprite(0, 1, fb, sky, 0);
-        self.sprite(0, 1, fb, sky + W, 0);
+        for dx in repeats() {
+            self.sprite(0, 1, fb, sky + dx, 0);
+        }
         if let (true, Some(row)) = (flash, &self.sky_flash) {
             // Mode 0x2c through PalMixLight with colour 0x80: the sky's pixels lit.
             // (The sky sprite covers rows 0..119; its colour-0 pixels stay as they were.)
-            for px in fb[..(W * 120) as usize].iter_mut().filter(|p| **p != 0) {
+            for px in fb[..(crate::render::width() * 120) as usize].iter_mut().filter(|p| **p != 0) {
                 *px = row[*px as usize];
             }
         }
@@ -165,10 +170,12 @@ impl Background {
             acc += a;
         }
         let s = horizon as i32;
-        self.sprite(0, 0, fb, -s, 0);
-        self.sprite(0, 0, fb, W - s, 0);
-        self.sprite_mixed(0, 2, fb, -s, 0);
-        self.sprite_mixed(0, 2, fb, W - s, 0);
+        for dx in repeats() {
+            self.sprite(0, 0, fb, dx - s, 0);
+        }
+        for dx in repeats() {
+            self.sprite_mixed(0, 2, fb, dx - s, 0);
+        }
     }
 
     /// `FUN_1090_178e` (FORPLANE): the sky (sprite 0x3200) drifting left a pixel per 16 frames,
@@ -177,8 +184,9 @@ impl Background {
     /// the camera. Not drawn: the object at 1170:534e (FUN_10d0_01e4).
     fn forplane(&self, fb: &mut [u8], cam: (i32, i32), frame: u32) {
         let sky = -((frame >> 4) as i32 % W);
-        self.sprite(0, 0, fb, sky, 0);
-        self.sprite(0, 0, fb, sky + W, 0);
+        for dx in repeats() {
+            self.sprite(0, 0, fb, sky + dx, 0);
+        }
         if let Some(pic) = &self.picture {
             let a = i64::from(cam.0);
             let mut acc = a * 0x1e8 / 0x10;
@@ -188,7 +196,7 @@ impl Background {
             }
         }
         let h = ((cam.0 + 0x640) / 0x10) % W;
-        for x in [-h, W - h] {
+        for x in repeats().iter().map(|dx| dx - h) {
             self.sprite(0, 1, fb, x, 0);
             self.sprite(0, 2, fb, x, 0);
         }
@@ -204,15 +212,17 @@ impl Background {
         // Modes: 0x3202 and 0x3200 0x20 (opaque), 0x3201 4 (colour 0 skipped).
         if y > 0 {
             let c = -((frame >> 3) as i32 % W); // 1168:1083: a shift
-            self.sprite_opaque(0, 2, fb, c, y);
-            self.sprite_opaque(0, 2, fb, c + W, y);
-            self.sprite(0, 1, fb, x0, y);
-            self.sprite(0, 1, fb, x0 + W, y);
+            for dx in repeats() {
+                self.sprite_opaque(0, 2, fb, c + dx, y);
+            }
+            for dx in repeats() {
+                self.sprite(0, 1, fb, x0 + dx, y);
+            }
         }
         if y < -199 {
             y %= 200;
         }
-        for (dx, dy) in [(0, 0), (W, 0), (0, H), (W, H)] {
+        for (dx, dy) in repeats().iter().flat_map(|&dx| [(dx, 0), (dx, H)]) {
             self.sprite_opaque(0, 0, fb, x0 + dx, y + dy);
         }
     }
@@ -223,7 +233,7 @@ impl Background {
     fn forest(&self, fb: &mut [u8], cam: (i32, i32)) {
         let x = -((cam.0 >> 4) % W);
         let y = -((cam.1 >> 4) % H);
-        for (dx, dy) in [(0, 0), (W, 0), (0, H), (W, H)] {
+        for (dx, dy) in repeats().iter().flat_map(|&dx| [(dx, 0), (dx, H)]) {
             self.sprite(3, 0, fb, x + dx, y + dy);
         }
     }

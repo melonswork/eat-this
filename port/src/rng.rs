@@ -1,6 +1,13 @@
 //! Borland Pascal 7 System.Random (ETLAUNCH 1168:1513 / 1168:1570). The game logic draws every
 //! random number from this one LCG, which is what makes recorded demos replayable.
 
+impl Clone for PascalRandom {
+    /// A snapshot's generator: the dump file stays with the original.
+    fn clone(&self) -> Self {
+        PascalRandom { seed: self.seed, calls: self.calls, log: self.log, dump: None, frame: self.frame }
+    }
+}
+
 pub struct PascalRandom {
     pub seed: u32,
     /// Calls so far, to compare against the demo's CHECK windows.

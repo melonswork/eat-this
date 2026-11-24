@@ -57,6 +57,7 @@ const FATAL_FALL: i32 = 0x120;
 /// Tile function 13100, "Send leaves": SpawnDust only does something on these.
 const LEAVES: u16 = 0x332c;
 
+#[derive(Clone)]
 pub struct Hero {
     pub x: i32, // feet centre, px
     pub y: i32,
@@ -208,7 +209,7 @@ impl Gun {
 }
 
 /// The pistol (weapon 2's left button; HeroUpdate's end block and HeroFireWeapon 1088:6437).
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Gun {
     pub muzzle: (i32, i32), // gHeroMuzzleX/Y (4de8/4dea): offset of the gun from its rest point
     pub aim: i32,           // gHeroAimAngle (4e46)

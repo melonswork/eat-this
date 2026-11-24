@@ -42,6 +42,7 @@ mod plant;
 mod render;
 mod rng;
 mod sentry;
+mod session;
 mod smallbot;
 mod sound;
 mod steam;
@@ -91,6 +92,12 @@ struct Options {
     wav: Option<PathBuf>,
     /// `--mute`: no audio device in window mode.
     mute: bool,
+    /// `--check-states`: test the save states and rewinding on a demo's input (session.rs).
+    check_states: bool,
+    /// `--rerecord DIR`: play a demo's input live and save it as a recording under DIR.
+    rerecord: Option<PathBuf>,
+    /// `--wide N`: N extra columns on each side (with --shot; the window has a setting).
+    wide: i32,
 }
 
 fn options() -> Result<Options, String> {
@@ -107,6 +114,9 @@ fn options() -> Result<Options, String> {
         bg_only: false,
         wav: None,
         mute: false,
+        check_states: false,
+        rerecord: None,
+        wide: 0,
     };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -125,6 +135,9 @@ fn options() -> Result<Options, String> {
             "--bg-only" => o.bg_only = true,
             "--wav" => o.wav = Some(value()?.into()),
             "--mute" => o.mute = true,
+            "--rerecord" => o.rerecord = Some(value()?.into()),
+            "--wide" => o.wide = value()?.parse().map_err(|e| format!("--wide: {e}"))?,
+            "--check-states" => o.check_states = true,
             "--camera" => {
                 let x = value()?.parse().map_err(|e| format!("--camera X Y: {e}"))?;
                 o.camera = Some((x, value()?.parse().map_err(|e| format!("--camera X Y: {e}"))?));
@@ -165,6 +178,7 @@ fn key_poll(counter: &mut i8, down: bool) -> i8 {
     *counter
 }
 
+#[derive(Clone)]
 struct Game {
     world: World,
     level: Level,
@@ -197,9 +211,14 @@ struct Game {
     typed: Vec<u8>,
     /// 1170:1a94: the automap (FUN_1088_2187), toggled by typing ETSCAN.
     automap: bool,
+    /// Widescreen option B (extras): how many columns past the original's 320 wake the actors, on
+    /// each side. 0 in demos and by default.
+    wide_actors: i32,
+    /// Live play: RandSeed at the input reads a recording's CHECK entry samples.
+    checks: Vec<u32>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct CheckReport {
     /// Whether RandSeed matched CHECK[0], the seed after level setup.
     setup: Option<bool>,
@@ -215,15 +234,15 @@ struct CheckReport {
 }
 
 impl Game {
-    fn new(mut world: World, demo: Option<Demo>) -> Game {
+    fn new(world: World, demo: Option<Demo>) -> Game {
         // LevelInit calls Randomize unless a demo plays; DemoLoad zeroes RandSeed.
-        let seed = if demo.is_some() {
-            0
-        } else {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(1, |d| d.as_secs() as u32)
-        };
+        let seed = if demo.is_some() { 0 } else { session::clock_seed() };
+        Game::start(world, demo, seed, None)
+    }
+
+    /// A level start with a known seed (extras: a recorded or replayed one); `mouse` is where a
+    /// recorded start has the cursor.
+    fn start(mut world: World, demo: Option<Demo>, seed: u32, mouse: Option<(i32, i32)>) -> Game {
         let mut rng = PascalRandom::new(seed);
         let mut level = Level::new(&mut world);
         let mut hero = Hero::new(world.map.start, 1);
@@ -231,6 +250,9 @@ impl Game {
         if let Some(d) = &demo {
             let m = d.input(0).1;
             hero.set_mouse((m.0 as i32, m.1 as i32));
+        }
+        if let Some(m) = mouse {
+            hero.set_mouse(m);
         }
         // SpawnFromIconTiles' totals (plane 2), then the constructors that count themselves.
         let mut totals = frontend::level_totals(&world);
@@ -282,6 +304,8 @@ impl Game {
             messages: messages::MessageBox::default(),
             typed: Vec::new(),
             automap: false,
+            wide_actors: 0,
+            checks: Vec::new(),
         };
         g.level.in_play = true;
         // LevelFirstFrame runs a frame without the hero (as after a teleport).
@@ -396,6 +420,17 @@ impl Game {
         self.level.flush_spawns(&mut self.world, &mut cx, fx);
     }
 
+    /// Widescreen: where logical x 0 is in a view `wide` columns wider on each side. The view moves
+    /// over to stay in the sector when the sector is wide enough.
+    fn view_left(&self, wide: i32) -> i32 {
+        let s = self.level.sector.and_then(|s| self.world.sectors.get(s)).map_or((0, 0, 0, 0), |s| s.cam);
+        if wide == 0 || s.2 - s.0 + 1 < W + 2 * wide {
+            return wide;
+        }
+        let view = (self.camera.x - wide).clamp(s.0, s.2 + 1 - W - 2 * wide);
+        (self.camera.x - view).clamp(0, 2 * wide)
+    }
+
     /// 4eb2 / 4eae / 4eaa as the HUD and the stats screen read them.
     fn totals(&self) -> level::Tally {
         self.totals
@@ -472,17 +507,6 @@ impl Game {
             Some(d) => {
                 let (k, mouse) = d.input(self.frame);
                 mouse_now = (mouse.0 as i32, mouse.1 as i32);
-                // FUN_1088_4340: the mouse past the screen edge looks around.
-                let look = |m: i32, max: i32| {
-                    if m < 0 {
-                        m
-                    } else if m <= max {
-                        0
-                    } else {
-                        m - max
-                    }
-                };
-                self.camera.look = (look(mouse.0 as i32, 0x13f), look(mouse.1 as i32, 199));
                 // DemoRecordFrame tests the level frame counter, which GameFrameInGame bumps at
                 // its very end: CHECK[k] is RandSeed at this input read of 0-based frame 35k.
                 if self.frame % CHECK_PERIOD == 0 {
@@ -493,6 +517,9 @@ impl Game {
             None => {
                 // ReadGameInput: keys 1..9 0 select gWeaponForDigitKey's weapon, PgUp/PgDn the
                 // one before/after the current (SelectWeapon does nothing in the vehicle).
+                if self.frame % CHECK_PERIOD == 0 {
+                    self.checks.push(self.rng.seed);
+                }
                 if let Some(k) = self.weapon_key.take() {
                     if !self.hero.vehicle {
                         let at = self.hero.weapon_slot();
@@ -510,6 +537,11 @@ impl Game {
                 keys
             }
         };
+        // FUN_1088_4340: the mouse past the screen edge looks around.
+        if self.demo.is_some() || self.live_mouse.is_some() {
+            let look = |m: i32, max: i32| if m < 0 { m } else { (m - max).max(0) };
+            self.camera.look = (look(mouse_now.0, 0x13f), look(mouse_now.1, 199));
+        }
         if std::env::var("ET_PART").ok().and_then(|v| v.parse::<u32>().ok()).is_some_and(|f| self.frame >= f && self.frame < f + 12) {
             for p in &self.level.particles.list {
                 if p.m.w(0x4a) == particles::MOVE_ROCKET as i32 || std::env::var("ET_ALLPART").is_ok() {
@@ -679,9 +711,9 @@ impl Game {
         }
         // FUN_1070_faec: the actors whose box meets the camera.
         let window = (
-            self.camera.x,
+            self.camera.x - self.wide_actors,
             self.camera.y,
-            self.camera.x + 0x13f,
+            self.camera.x + 0x13f + self.wide_actors,
             self.camera.y + 199,
         );
         self.world_update(&mut fx, noise, input[hero::UP] > 0, window);
@@ -1256,7 +1288,7 @@ impl Graphics {
                 let mut p = self.painter(fb, frame);
                 p.mode = 0x20;
                 p.sprite(s, 0xf9 - h, 0x68);
-                if 0xf9 - h < 0 {
+                if 0xf9 - h < 0 || render::wide() {
                     // The wrapped one runs half the film ahead.
                     let s = 0x7d00 + ((frame / 4 + n as u32 / 2) % n as u32) as i32;
                     p.sprite(s, 0x239 - h, 0x68);
@@ -1317,7 +1349,7 @@ impl Graphics {
         // The map planes, then the platforms (their own planes, at their positions).
         for plane in [0, MAIN_PLANE] {
             if let Some(pl) = g.world.planes[plane].as_ref() {
-                draw_plane(fb, &g.world, &self.tables, pl, -cam_x, -cam_y, frame, FULL);
+                draw_plane(fb, &g.world, &self.tables, pl, -cam_x, -cam_y, frame, render::screen());
             }
         }
         // FUN_1078_0abd / 0968: each platform clipped to its rectangle w21..w24 (none drawn
@@ -1353,7 +1385,7 @@ impl Graphics {
             black: self.vga[0],
             vga: self.vga,
             reds: self.reds,
-            clip: render::SCREEN,
+            clip: render::screen(),
         };
         if ship != (0, 0) {
             // START's background proc (FUN_1090_0ace) draws the truck after the tiles, and its
@@ -1413,7 +1445,29 @@ impl Graphics {
                 }
             }
         }
+        self.sides(fb, g, cam_x);
+        // The HUD stays in the original's 320 columns, in the middle of a wide view.
+        let (l, w) = (render::left(), render::width());
+        render::set_view((w - W) / 2, w);
+        draw::set_hud_shift(l - (w - W) / 2);
         self.hud(fb, g, frame);
+        render::set_view(l, w);
+    }
+
+    /// Widescreen: the extra columns outside the sector (other rooms) are black.
+    fn sides(&self, fb: &mut [u8], g: &Game, cam_x: i32) {
+        if !render::wide() {
+            return;
+        }
+        let s = g.level.sector.and_then(|s| g.world.sectors.get(s)).map_or((0, 0, 0, 0), |s| s.cam);
+        for x in (-render::left()..render::right()).filter(|x| !(0..W).contains(x)) {
+            if cam_x + x < s.0 || cam_x + x > s.2 {
+                for y in 0..H {
+                    fb[render::at(x, y)] = 0;
+                    render::dark(render::at(x, y));
+                }
+            }
+        }
     }
 
     /// FUN_1088_a481's draw (from proc 15): GRANNY's building in its sector, in the half-speed
@@ -1435,10 +1489,10 @@ impl Graphics {
         let y0 = t / 2 + c.y - hy;
         let right = pl.width * 16 + x0 - 1 - 0x140;
         let bottom = c.y - hy + pl.height * 16 - 1 - 0xc0;
-        if x0 > W - 1 || y0 > H - 1 || right < 0 || bottom < 0 {
+        if x0 > render::right() - 1 || y0 > H - 1 || right < -render::left() || bottom < 0 {
             return;
         }
-        let clip = (x0.max(0), y0.max(0), right.min(W - 1), bottom.min(H - 1));
+        let clip = (x0.max(-render::left()), y0.max(0), right.min(render::right() - 1), bottom.min(H - 1));
         if a == 0 {
             draw_plane(fb, &g.world, &self.tables, pl, x0 - 0xa0, y0 - 0x80, frame, clip);
             return;
@@ -1466,7 +1520,7 @@ impl Graphics {
                         let px = group.tile(n);
                         let c = px[(((vv >> 12) & 15) * 16 + ((uu >> 12) & 15)) as usize];
                         if c != 0 {
-                            fb[(sy * W + sx) as usize] = c;
+                            fb[render::at(sx, sy)] = c;
                         }
                     }
                 }
@@ -1496,11 +1550,14 @@ impl Graphics {
         let skyline = |p: &mut render::Painter, base: i32, y: i32| {
             for &(x, dy, s) in SKYLINE.iter().rev() {
                 p.sprite(s, (x + base) % 0x280 - 0x20, y + dy);
+                if render::wide() {
+                    p.sprite(s, (x + base) % 0x280 - 0x20 - 0x280, y + dy);
+                }
             }
         };
         // FUN_1090_15da: a 320x200 sprite four times, from (x, y).
         let tile4 = |p: &mut render::Painter, s: i32, x: i32, y: i32| {
-            for (dx, dy) in [(0, 0), (W, 0), (0, H), (W, H)] {
+            for (dx, dy) in render::repeats().iter().flat_map(|&dx| [(dx, 0), (dx, H)]) {
                 p.sprite(s, x + dx, y + dy);
             }
         };
@@ -1525,7 +1582,7 @@ impl Graphics {
                         return;
                     }
                     if line > 0 {
-                        p.fb[(line * W) as usize..].fill(0);
+                        p.fb[(line * render::width()) as usize..].fill(0);
                         p.clip.1 = line;
                     }
                 }
@@ -1541,8 +1598,9 @@ impl Graphics {
                 p.clip.3 = y2;
                 p.mode = 0x20;
                 let x = -((fr / 16) % W);
-                p.sprite(0x3201, x, 0x79);
-                p.sprite(0x3201, x + W, 0x79);
+                for dx in render::repeats() {
+                    p.sprite(0x3201, x + dx, 0x79);
+                }
                 p.mode = 4;
                 let base = 0x500 - ((cam.0 + 0x640) / 10) % 0x500;
                 let y4 = 0x79 - dy / 0x48;
@@ -1558,9 +1616,9 @@ impl Graphics {
                     p.sprite(s, (SKYLINE[5].0 + lx) % 0x280 - 0x20, ly);
                 }
                 skyline(&mut p, base, y4);
-                p.clip = render::SCREEN;
+                p.clip = render::screen();
                 let x6 = (cam.0 / 6) % 0x40;
-                for k in (0..=5).rev() {
+                for k in (if render::wide() { -2..=8 } else { 0..=5 }).rev() {
                     p.sprite(0x3200, k * 0x40 - x6, y2);
                 }
             }
@@ -1597,8 +1655,9 @@ impl Graphics {
                 } else {
                     p.mode = 0x20;
                 }
-                p.sprite(0x3201, sky, 0);
-                p.sprite(0x3201, sky + W, 0);
+                for dx in render::repeats() {
+                    p.sprite(0x3201, sky + dx, 0);
+                }
                 p.mix = render::Mix::Level;
                 if bp == 13 {
                     p.mode = 0x14;
@@ -1615,11 +1674,13 @@ impl Graphics {
                     }
                 }
                 p.mode = 4;
-                p.sprite(0x3200, -h, 0);
-                p.sprite(0x3200, W - h, 0);
+                for dx in render::repeats() {
+                    p.sprite(0x3200, dx - h, 0);
+                }
                 p.mode = 0x30;
-                p.sprite(0x3202, -h, 0);
-                p.sprite(0x3202, W - h, 0);
+                for dx in render::repeats() {
+                    p.sprite(0x3202, dx - h, 0);
+                }
             }
         }
     }
@@ -1659,11 +1720,13 @@ impl Graphics {
         let row = self.rain_colour as usize * 256;
         for &d in storm::rain_drops()[first..first + n].iter().rev() {
             let (x, y) = storm::drop_at(d, frame, match first { 0 => 3, 0x1e => 4, _ => 5 });
-            for k in 0..4 {
-                let (px, py) = (x - k, y - 3 + k);
-                if (0..W).contains(&px) && (0..H).contains(&py) {
-                    let at = (py * W + px) as usize;
-                    fb[at] = mix[row + fb[at] as usize];
+            for &dx in if render::wide() { &[-0x148, 0, 0x148][..] } else { &[0] } {
+                for k in 0..4 {
+                    let (px, py) = (x - k + dx, y - 3 + k);
+                    if render::on(px) && (0..H).contains(&py) {
+                        let at = render::at(px, py);
+                        fb[at] = mix[row + fb[at] as usize];
+                    }
                 }
             }
         }
@@ -1687,7 +1750,7 @@ impl Graphics {
             black: self.vga[0],
             vga: self.vga,
             reds: self.reds,
-            clip: render::SCREEN,
+            clip: render::screen(),
         }
     }
 
@@ -1713,7 +1776,7 @@ impl Graphics {
             black: self.vga[0],
             vga: self.vga,
             reds: self.reds,
-            clip: render::SCREEN,
+            clip: render::screen(),
         };
         let got = level::TALLY.with(|t| t.get());
         draw::hud(&mut p, &g.hero, g.level.particles.pointer, self.hud_level, got, g.totals());
@@ -1755,9 +1818,9 @@ impl Graphics {
             return;
         }
         let xs: Vec<i32> = if kind & 1 != 0 {
-            let mut x = cx.rem_euclid(pw);
+            let mut x = (cx - render::left()).rem_euclid(pw) + render::left();
             let mut v = Vec::new();
-            while -x < W {
+            while -x < render::right() {
                 v.push(x);
                 x -= pw;
             }
@@ -1797,9 +1860,6 @@ struct Decor {
     sector: usize,
 }
 
-/// The whole screen as a clip rectangle (left, top, right, bottom).
-const FULL: (i32, i32, i32, i32) = (0, 0, W - 1, H - 1);
-
 /// Tiles of `pl` with its top-left corner at screen (ox, oy), within `clip`. Cells with the
 /// sign bit and icon groups are not drawn; animated tiles follow `frame`.
 /// FUN_10f0_513c: a tile plane. The tile record's draw kind (byte 0, of the cell before its
@@ -1808,8 +1868,8 @@ const FULL: (i32, i32, i32, i32) = (0, 0, W - 1, H - 1);
 /// pixel.
 fn draw_plane(fb: &mut [u8], world: &World, tables: &render::Tables, pl: &world::Plane, ox: i32, oy: i32, frame: u32, clip: (i32, i32, i32, i32)) {
     let map = &world.map;
-    let (cx1, cy1) = (clip.0.max(0), clip.1.max(0));
-    let (cx2, cy2) = (clip.2.min(W - 1), clip.3.min(H - 1));
+    let (cx1, cy1) = (clip.0.max(-render::left()), clip.1.max(0));
+    let (cx2, cy2) = (clip.2.min(render::right() - 1), clip.3.min(H - 1));
     if cx1 > cx2 || cy1 > cy2 {
         return;
     }
@@ -1859,7 +1919,7 @@ fn draw_plane(fb: &mut [u8], world: &World, tables: &render::Tables, pl: &world:
                         continue;
                     }
                     let c = px[(y * TILE + x) as usize];
-                    let at = (yy * W + xx) as usize;
+                    let at = render::at(xx, yy);
                     if let Some(t) = table {
                         fb[at] = t.get(c as usize * 256 + fb[at] as usize).copied().unwrap_or(c);
                     } else if c != 0 || opaque {
@@ -1881,8 +1941,8 @@ fn blit(fb: &mut [u8], px: &[u8], w: i32, h: i32, x0: i32, y0: i32, flip: bool) 
         for x in 0..w {
             let sx = x0 + x;
             let c = px[(y * w + if flip { w - 1 - x } else { x }) as usize];
-            if c != 0 && (0..W).contains(&sx) {
-                fb[(sy * W + sx) as usize] = c;
+            if c != 0 && render::on(sx) {
+                fb[render::at(sx, sy)] = c;
             }
         }
     }
@@ -2176,14 +2236,16 @@ fn screenshot(mut game: Game, gfx: &Graphics, frames: &[u32], path: &Path) -> st
 }
 
 fn shot_frame(game: &Game, gfx: &Graphics, path: &Path) -> std::io::Result<()> {
-    let mut fb = vec![0u8; (W * H) as usize];
+    let (wide, w) = ((render::width() - W) / 2, render::width());
+    render::set_view(game.view_left(wide), w);
+    let mut fb = vec![0u8; (w * H) as usize];
     gfx.draw(game, &mut fb);
     if path.extension().is_some_and(|e| e == "bin") {
         return std::fs::write(path, &fb); // the raw indexed frame, for comparing with tools/dumpframe.py
     }
-    let mut rgb = vec![0u8; (W * H * 3) as usize];
+    let mut rgb = vec![0u8; (w * H * 3) as usize];
     gfx.present(game, &fb, &mut rgb);
-    let mut out = format!("P6\n{W} {H}\n255\n").into_bytes();
+    let mut out = format!("P6\n{w} {H}\n255\n").into_bytes();
     out.extend(&rgb);
     std::fs::write(path, out)
 }
@@ -2234,6 +2296,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     world::load_game_ds(&o.data.join("../ETLAUNCH.EXE"))?;
     let _ = sprites::DIR.set(o.data.join("SPRITES"));
+    if let (true, Some(d)) = (o.check_states, &demo) {
+        let ok = session::check(&o.data, &map_path, d)?;
+        std::process::exit(if ok { 0 } else { 1 });
+    }
+    if let (Some(root), Some(d)) = (&o.rerecord, &demo) {
+        println!("{}", session::rerecord(&o.data, &map_path, d, root)?.display());
+        return Ok(());
+    }
     let world = load_world(&o.data, &map_path)?;
     if std::env::var_os("ET_SCAN").is_some() {
         println!("MAP width {} height {}", world.main().width, world.main().height);
@@ -2380,6 +2450,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     gfx.camera = o.camera;
     gfx.bg_only = o.bg_only;
     if let Some((frames, path)) = &o.shot {
+        render::set_view(o.wide, W + 2 * o.wide);
         return Ok(screenshot(game, &gfx, frames, path)?);
     }
     let (data, camera, bg_only) = (o.data.clone(), o.camera, o.bg_only);
