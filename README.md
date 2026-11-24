@@ -3,7 +3,7 @@
 [![mise](https://mise-versions.jdx.dev/badge.svg)](https://mise.jdx.dev)
 ![Rust](https://img.shields.io/badge/rust-1.100-b7410e?logo=rust)
 ![SDL2](https://img.shields.io/badge/SDL2-bundled-1d4f91)
-![oracle demos](https://img.shields.io/badge/oracle%20demos-28%2F28%20exact-2e7d32)
+![oracle demos](https://img.shields.io/badge/oracle%20demos-78%2F78%20exact-2e7d32)
 
 ![FOREST04, rendered by the port](docs/screenshot.png)
 
@@ -18,15 +18,16 @@ demos never show are recorded with the original game itself (`tools/mkdemo.py`).
 
 ## Progress
 
-- **Simulation:** all 7 demos from the CD and 21 scenario demos match the original exactly,
-  and every object type on the three episodes' maps is ported. Some smaller features are
-  ported but untested; see [`re/unported.md`](re/unported.md).
-- **Graphics:** tiles, sprites, parallax backgrounds, weather, the HUD and the message box.
-- **Sound:** sound effects through an SDL2 mixer, and music from the CD's audio tracks. The
-  port misses 3 of the original's 6,022 sound plays in the CD demos.
+- **Simulation:** all 7 demos from the CD and 71 scenario demos match the original exactly,
+  and every object type on the three episodes' maps is ported. The few
+  things left are in [`re/unported.md`](re/unported.md).
+- **Graphics:** tiles, sprites, parallax backgrounds, weather, the HUD, the message box and the
+  automap. Of 1,112 sampled frames, 1,109 match the original pixel for pixel; three are off by one pixel.
+- **Sound:** sound effects through an SDL2 mixer, and music from the CD's audio tracks. Every
+  sound play in all 78 demos matches the original's.
 - **Front end:** the original's menus, episodes, the stats screen, the next level, saves and
   `EatThis.ini`. The videos play through an Indeo 3 decoder written for the port.
-- **Not done:** the automap and a few smaller drawing details.
+- **Extras:** see [`docs/extras.md`](docs/extras.md).
 
 ## Play
 
