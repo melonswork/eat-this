@@ -1,6 +1,7 @@
 """Patch a .MAP (Image Line archive) for oracle scenarios: move the hero's start, set cells.
 
     python3 tools/mapedit.py IN.MAP OUT.MAP [--start X Y] [--cell PLANE TX TY VALUE]...
+        [--object OLD NEW]...   (comma-separated words: the only place OBJECTS holds OLD gets NEW)
 
 The changed entries are re-packed with a literal-only LZW stream (a clear code every 200 bytes,
 so the code width stays 9 bits) and appended to the file; their directory records are rewritten
@@ -44,6 +45,7 @@ def main():
     ap.add_argument("dst")
     ap.add_argument("--start", nargs=2, type=int)
     ap.add_argument("--cell", nargs=4, type=lambda s: int(s, 0), action="append", default=[])
+    ap.add_argument("--object", nargs=2, action="append", default=[])
     a = ap.parse_args()
     if "work/cd" in str(Path(a.dst).resolve()):
         raise SystemExit("refusing to write into work/cd")
@@ -61,6 +63,15 @@ def main():
         p = changed.get(name) or get(name)
         struct.pack_into("<H", p, (ty * width + tx) * 2, value)
         changed[name] = p
+    for old, new in a.object:
+        pack = lambda t: b"".join(struct.pack("<H", int(v, 0) & 0xFFFF) for v in t.split(","))  # noqa: E731
+        o, n = pack(old), pack(new)
+        p = changed.get("OBJECTS") or get("OBJECTS")
+        at = [i for i in range(0, len(p) - len(o) + 1, 2) if p[i : i + len(o)] == o]
+        if len(at) != 1 or len(o) != len(n):
+            raise SystemExit(f"--object {old}: found {len(at)} times (want 1), {len(o)} -> {len(n)} bytes")
+        p[at[0] : at[0] + len(n)] = n
+        changed["OBJECTS"] = p
     dir_at = struct.unpack_from("<I", raw, 0x1F)[0]
     for i, e in enumerate(arc.entries):
         if e.name in changed:

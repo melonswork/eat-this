@@ -255,6 +255,11 @@ pub struct HeroSide {
     pub prev_ground: i32,
     /// Set to 0x15 when he stands on one.
     pub ground: Option<i32>,
+    /// 1170:5123 / 5124: something in reach to use with Up / Down (platforms he drives).
+    pub reach: (i32, i32),
+    /// 1170:4e5a: frames of the use pose; 511d: whether he used it with Down.
+    pub use_count: i32,
+    pub use_down: bool,
 }
 
 fn ranges_overlap(a: i32, b: i32, c: i32, d: i32) -> bool {
@@ -297,135 +302,39 @@ pub fn update(p: &mut PlatObj, hero: &mut HeroSide, now: u32, world: &crate::wor
         nx = q.x;
         ny = q.y;
     }
-    let w = p.width();
-    let rel = (hero.x + hero.dx) - old_x;
-    let (lo, hi) = (-hero.half_width, w - 1 + hero.half_width);
-    let inside = rel >= lo.min(hi) && rel <= lo.max(hi);
-    let mut on = inside && ranges_overlap(ny - 1, p.prev_y - 1, hero.y + hero.dy, hero.y);
-    if on {
-        let climbing = hero.state < 0 && (-5..=-1).contains(&hero.state);
-        on = !climbing
-            && (hero.state < 1
-                || hero.vy >= 0
-                || (hero.y <= p.prev_y - 1 && ny - 1 < hero.y + hero.dy));
-    }
-    if p.flags & 0x10 != 0 {
-        p.flags &= !0x10;
-        if p.prev_y < ny {
-            live = 0;
-            angle = p.prev_angle;
-            nx = old_x;
-            ny = p.prev_y;
-        } else {
-            p.prev_angle = p.angle;
-        }
-    } else {
-        p.prev_angle = p.angle;
+    if p.mode & 0x4000 != 0 && p.flags & 1 == 0 {
+        ny += bob(now);
     }
     if std::env::var("ET_PLAT").is_ok() {
-        eprintln!("PLAT {now} at ({nx},{ny}) old ({old_x},{}) angle {angle} hero ({},{}) d({},{}) vy {} state {} on {on} w {w}", p.prev_y, hero.x, hero.y, hero.dx, hero.dy, hero.vy, hero.state);
+        eprintln!("PLAT {now} at ({nx},{ny}) old ({old_x},{}) angle {angle} hero ({},{}) d({},{}) vy {} state {} w {}", p.prev_y, hero.x, hero.y, hero.dx, hero.dy, hero.vy, hero.state, p.width());
     }
-    if on {
-        if live == 1 && mode & 3 != 0 && hero.prev_ground != 0x15 && mode & 0x80 == 0 {
-            p.flags |= 0x10;
-        }
-        hero.dy = (ny - 1) - hero.y;
-        if mode & 8 == 0 {
-            hero.dx += nx - old_x;
-        }
-        hero.ground = Some(0x15);
-    }
-    if live == 0 || (live != 2 && (!on || mode & 0x40 != 0)) {
-        p.flags &= !1;
-    } else if p.speed.abs() < angle.abs() {
-        p.flags |= 1;
-    }
-    if live != 0 {
-        p.angle = angle;
-        p.x = nx;
-        p.y = ny;
-    }
-    if p.angle == p.prev_angle {
-        p.flags &= !2;
-    } else if p.x != old_x || p.y != p.prev_y {
-        p.flags |= 2;
-    }
+    finish(p, hero, Move { live, mode, start: p.angle, a: angle, x: nx, y: ny, old_x, ends: None });
 }
 
-/// FUN_1060_0819 for a platform following a path (type 0). +0x18 (`angle`) is twice the
-/// distance from the last point reached (+0x2e, `radius`) towards the next; each frame the speed
-/// (+0x22) is added to it while the mode lets it move.
-pub fn update_path(p: &mut PlatObj, hero: &mut HeroSide, world: &crate::world::World) {
-    let mut old_x = p.x;
-    p.prev_y = p.y;
-    let on_lever = p.lever.0 == 0
-        || crate::level::Level::lever_state(world, p.lever.1 as u16) == p.lever.0 - 1;
-    let (mut live, mode) = if !on_lever && p.mode_alt != -1 {
-        (1, p.mode_alt)
-    } else {
-        (on_lever as i32, p.mode)
-    };
-    live += (mode & 0x40 != 0) as i32;
-    let start = p.angle;
-    let mut a = start;
-    let (mut x, mut y) = (old_x, p.prev_y);
-    let n = p.points.len() as i32;
-    let pt = |i: i32| p.points.get(i.clamp(0, (n - 1).max(0)) as usize).copied().unwrap_or((0, 0));
-    if live != 0 || p.flags & 8 != 0 {
-        let mut idx = p.radius;
-        let (mut e, mut f) = pt(idx);
-        (x, y) = (e, f);
-        if a >= 0 {
-            if idx < p.count - 1 {
-                if p.speed < a || idx > 0 || mode & 0x10 == 0 || p.flags & 1 == 0 {
-                    idx += 1;
-                }
-            } else if mode & 4 != 0 || (mode & 0x10 != 0 && (p.speed < a || p.flags & 1 == 0)) {
-                idx = 0;
-                if mode & 0x20 != 0 {
-                    p.radius = 0;
-                    (e, f) = pt(0);
-                    old_x = e;
-                    p.prev_y = f;
-                }
-            }
-        } else if idx > 0 {
-            idx -= 1;
-        } else {
-            a = 0;
-        }
-        let (tx, ty) = pt(idx);
-        let step = (a.abs() as u16 >> 1) as i32;
-        let sx = (tx - e).signum();
-        let sy = (ty - f).signum();
-        if e == tx {
-            y += sy * step;
-        } else if f == ty {
-            x += sx * step;
-        } else {
-            // The long arithmetic: r = |dx << 16 / dy|, the step split by it.
-            let r = ((((tx - e) as i64) << 16) / (ty - f) as i64).abs() as i32;
-            let den = r.wrapping_add(0x10000) as i64;
-            y += ((step as i64 * 0x10000 * sy as i64) / den) as i32;
-            x += (((step as i32).wrapping_mul(r) as i64 * sx as i64) / den) as i32;
-        }
-        let mul = |s: i32, v: i32| (s * v) as i16;
-        if mul(sx, tx) <= mul(sx, x) && mul(sy, ty) <= mul(sy, y) {
-            p.radius = idx;
-            a = 0;
-            x = tx;
-            y = ty;
-        }
-        if p.flags & 8 != 0 && a == 0 && (p.saved_mode & 0x800 == 0 || p.count - 1 == idx) {
-            p.flags &= !8;
-        } else if mode & 3 == 0 {
-            p.flags |= 0xc;
-            p.saved_mode = mode;
-        }
-    }
-    if p.mode & 0x4000 != 0 && p.flags & 1 == 0 {
-        eprintln!("warning: a bobbing path platform (mode 0x4000, FUN_1060_0819) not ported");
-    }
+/// Mode 0x4000: the bobbing (3 pixels) of a platform nobody has set going.
+fn bob(now: u32) -> i32 {
+    let t = (now as i64 * 6 * 0x10).rem_euclid(0x1680) as i32;
+    trig::sin(t) * 3 / 0x4000
+}
+
+/// What FUN_1060_0819's first half leaves for the second.
+struct Move {
+    live: i32,
+    mode: i32,
+    /// +0x18 at the start of the frame, and now.
+    start: i32,
+    a: i32,
+    x: i32,
+    y: i32,
+    old_x: i32,
+    /// A path's segment: the point it left and the one it heads for.
+    ends: Option<((i32, i32), (i32, i32))>,
+}
+
+/// FUN_1060_0819's second half (kinds 0 and 1): the hero standing on it, what his weight or his
+/// use of it starts, and the speed.
+fn finish(p: &mut PlatObj, hero: &mut HeroSide, m: Move) {
+    let Move { mut live, mode, start, mut a, mut x, mut y, old_x, ends } = m;
     let w = p.width();
     let rel = (hero.x + hero.dx) - old_x;
     let (lo, hi) = (-hero.half_width, w - 1 + hero.half_width);
@@ -480,7 +389,7 @@ pub fn update_path(p: &mut PlatObj, hero: &mut HeroSide, world: &crate::world::W
                 p.saved_mode = mode;
             }
         } else if on {
-            eprintln!("warning: a path platform the hero drives (mode {mode:#x}, FUN_1060_0819) not ported");
+            drive(p, hero, mode, a, old_x);
         }
         if p.speed.abs() < a.abs() {
             p.flags |= 1;
@@ -488,8 +397,19 @@ pub fn update_path(p: &mut PlatObj, hero: &mut HeroSide, world: &crate::world::W
     }
     if p.flags & 8 != 0 {
         let mut d = p.speed;
-        if p.saved_mode & 0x8000 != 0 {
-            eprintln!("warning: a path platform slowing at its ends (mode 0x8000, FUN_1060_0819) not ported");
+        if let (true, Some(((ex, ey), (tx, ty)))) = (p.saved_mode & 0x8000 != 0, ends) {
+            // Slows near both ends of the segment.
+            let near = |from: i32, to: i32, at: i32| {
+                let n = (from - at).abs();
+                if n > 0x2d { (to - at).abs() } else { n }
+            };
+            let n = if ey == ty { near(ex, tx, x) } else { near(ey, ty, y) };
+            if n < 0x2d {
+                d = trig::sin(n << 5) * d / 0x4000;
+                if d < 2 {
+                    d = p.speed.signum() << 1;
+                }
+            }
         }
         if (p.flags & 4 != 0) == (p.saved_mode & 0x1000 != 0) {
             d = -d;
@@ -509,6 +429,128 @@ pub fn update_path(p: &mut PlatObj, hero: &mut HeroSide, world: &crate::world::W
     } else if p.x != old_x || p.y != p.prev_y {
         p.flags |= 2;
     }
+}
+
+/// Modes 0x80 (the use pose: Up / Down in its middle), 0x200 / 0x400 (the side he stands on): the
+/// hero on it drives it.
+fn drive(p: &mut PlatObj, hero: &mut HeroSide, mode: i32, a: i32, old_x: i32) {
+    if std::env::var_os("ET_PLAT").is_some() { eprintln!("DRIVE mode {mode:#x} rel {} w {} radius {} count {} a {a} use {} points {:?}", hero.x - old_x, p.width(), p.radius, p.count, hero.use_count, p.points); }
+    let first = p.points.first().map_or(0, |q| q.1);
+    let last = p.points.get((p.count - 1).max(0) as usize).map_or(0, |q| q.1);
+    let up = first - last >= 0; // its path goes up
+    let w4 = (p.width() as u16 >> 2) as i32;
+    if mode & 0x600 == 0 {
+        let rel = hero.x - old_x;
+        let (lo, hi) = (w4.min(w4 * 3 - 1), w4.max(w4 * 3 - 1));
+        if rel < lo || rel > hi {
+            return;
+        }
+        if p.radius < p.count - 1 || p.angle < 0 {
+            if up { hero.reach.0 = 2 } else { hero.reach.1 = 4 }
+        }
+        if p.radius > 0 || p.angle > 0 {
+            if up { hero.reach.1 = 4 } else { hero.reach.0 = 2 }
+        }
+        if hero.use_count == 1 || (a != 0 && hero.use_count > 0) {
+            p.flags |= 8;
+            p.saved_mode = mode;
+            if hero.use_count == 1 {
+                if up != hero.use_down {
+                    p.flags |= 4;
+                } else {
+                    p.flags &= !4;
+                }
+            }
+        }
+    } else {
+        p.flags |= 8;
+        p.saved_mode = mode;
+        let right = hero.x >= old_x + w4 * 2;
+        if (mode & 0x400 == 0) == (up != right) {
+            p.flags |= 4;
+        } else {
+            p.flags &= !4;
+        }
+    }
+}
+
+/// FUN_1060_0819 for a platform following a path (type 0). +0x18 (`angle`) is twice the
+/// distance from the last point reached (+0x2e, `radius`) towards the next; each frame the speed
+/// (+0x22) is added to it while the mode lets it move.
+pub fn update_path(p: &mut PlatObj, hero: &mut HeroSide, now: u32, world: &crate::world::World) {
+    let mut old_x = p.x;
+    p.prev_y = p.y;
+    let on_lever = p.lever.0 == 0
+        || crate::level::Level::lever_state(world, p.lever.1 as u16) == p.lever.0 - 1;
+    let (mut live, mode) = if !on_lever && p.mode_alt != -1 {
+        (1, p.mode_alt)
+    } else {
+        (on_lever as i32, p.mode)
+    };
+    live += (mode & 0x40 != 0) as i32;
+    let start = p.angle;
+    let mut a = start;
+    let (mut x, mut y) = (old_x, p.prev_y);
+    let n = p.points.len() as i32;
+    let pt = |i: i32| p.points.get(i.clamp(0, (n - 1).max(0)) as usize).copied().unwrap_or((0, 0));
+    let mut ends = None;
+    if live != 0 || p.flags & 8 != 0 {
+        let mut idx = p.radius;
+        let (mut e, mut f) = pt(idx);
+        (x, y) = (e, f);
+        if a >= 0 {
+            if idx < p.count - 1 {
+                if p.speed < a || idx > 0 || mode & 0x10 == 0 || p.flags & 1 == 0 {
+                    idx += 1;
+                }
+            } else if mode & 4 != 0 || (mode & 0x10 != 0 && (p.speed < a || p.flags & 1 == 0)) {
+                idx = 0;
+                if mode & 0x20 != 0 {
+                    p.radius = 0;
+                    (e, f) = pt(0);
+                    old_x = e;
+                    p.prev_y = f;
+                }
+            }
+        } else if idx > 0 {
+            idx -= 1;
+        } else {
+            a = 0;
+        }
+        let (tx, ty) = pt(idx);
+        ends = Some(((e, f), (tx, ty)));
+        let step = (a.abs() as u16 >> 1) as i32;
+        let sx = (tx - e).signum();
+        let sy = (ty - f).signum();
+        if e == tx {
+            y += sy * step;
+        } else if f == ty {
+            x += sx * step;
+        } else {
+            // The long arithmetic: r = |dx << 16 / dy|, the step split by it.
+            let r = ((((tx - e) as i64) << 16) / (ty - f) as i64).abs() as i32;
+            let den = r.wrapping_add(0x10000) as i64;
+            y += ((step as i64 * 0x10000 * sy as i64) / den) as i32;
+            x += (((step as i32).wrapping_mul(r) as i64 * sx as i64) / den) as i32;
+        }
+        let mul = |s: i32, v: i32| (s * v) as i16;
+        if mul(sx, tx) <= mul(sx, x) && mul(sy, ty) <= mul(sy, y) {
+            p.radius = idx;
+            a = 0;
+            x = tx;
+            y = ty;
+        }
+        if p.flags & 8 != 0 && a == 0 && (p.saved_mode & 0x800 == 0 || p.count - 1 == idx) {
+            p.flags &= !8;
+        } else if mode & 3 == 0 {
+            p.flags |= 0xc;
+            p.saved_mode = mode;
+        }
+    }
+    if p.mode & 0x4000 != 0 && p.flags & 1 == 0 {
+        y += bob(now);
+    }
+    finish(p, hero, Move { live, mode, start, a, x, y, old_x, ends });
 }
 
 /// FUN_1060_16ef (with 1689, 15a6, 152f): a lift. Returns the Random() calls it makes through
