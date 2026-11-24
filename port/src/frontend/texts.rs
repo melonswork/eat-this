@@ -99,7 +99,8 @@ impl MainScript {
             if k.eq_ignore_ascii_case("AddMsg") {
                 if let Some((t, l)) = v.rsplit_once(',') {
                     if l.trim().parse::<i32>().ok() == Some(language) {
-                        messages.push(t.to_string());
+                        // LoadMain: only the first 0x19 (the help pages') keep their case.
+                        messages.push(if messages.len() < 0x19 { t.to_string() } else { t.to_ascii_uppercase() });
                     }
                 }
             } else if k.eq_ignore_ascii_case("CDTrackTitle") {

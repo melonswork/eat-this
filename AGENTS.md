@@ -178,7 +178,8 @@ streams and EVERY CHECK, so the method is the original's own.
   scripts with `1 Return;` to skip it; `shot` during a video writes its 640x480 frame.
 - Videos (VIDEOS/*.AVI, Indeo 3 + PCM): `frontend/indeo3.rs` (port of FFmpeg's indeo3.c, LGPL), `avi.rs`, `video.rs`;
   intro, level start/end (`Video=X.avi,0/1`), credits, F1 help; skip = Escape/Space/Return. `ET_AVI_YUV` dumps yuv410p
-  to compare with ffmpeg (all 27 match). Help pages' GDI texts not drawn.
+  to compare with ffmpeg (all 27 match). Help pages' texts (FUN_1008_1073): `HelpTexts` in video.rs,
+  `helpfont.rs` made by tools/helpfont.py.
 
 ## Sound (2026-11-20, re/sound.md)
 

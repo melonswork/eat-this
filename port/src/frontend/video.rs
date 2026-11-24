@@ -8,6 +8,7 @@
 //!   Escape leaves (FUN_1008_16b9).
 
 use super::avi::Avi;
+use super::helpfont::GLYPHS;
 use crate::sound::Ev;
 use sdl2::keyboard::Scancode;
 use std::path::{Path, PathBuf};
@@ -42,6 +43,75 @@ pub struct Player {
     page: usize,
     pub done: bool,
     started_sound: bool,
+    /// The help pages' texts (none: credits, 1a98 = 1).
+    pub help: Option<HelpTexts>,
+}
+
+/// The texts FUN_1008_1073 writes over ETHELP.AVI's pages (messages -0x25..-0x3e, by -id - 0x25).
+pub struct HelpTexts(pub Vec<String>);
+
+/// Page 0's labels: (message id, SetTextAlign, x, y) as FUN_1008_1073 gives them.
+const KEYBOARD: [(i32, i32, i32, i32); 8] = [
+    (-0x25, TA_LEFT, 0x58, 0x4d),
+    (-0x26, TA_LEFT, 0xd5, 0x74),
+    (-0x27, TA_RIGHT, 0x16a, 0x86),
+    (-0x28, TA_RIGHT, 0x15e, 0x98),
+    (-0x29, TA_RIGHT, 0x2ab, 0x8c),
+    (-0x2a, TA_RIGHT, 0x279, 0x9d),
+    (-0x2c, TA_RIGHT, 0x2bc, 0x1ca),
+    (-0x2b, TA_LEFT, 0x1ce, 0x1ee),
+];
+const TA_LEFT: i32 = 0;
+const TA_RIGHT: i32 = 2;
+const TA_CENTER: i32 = 6;
+/// SetTextColor(0xd0d0d0), transparent background.
+const TEXT_COLOUR: u8 = 0xd0;
+/// The main window is the screen plus 64 pixels on every side (CreateWindowEx at -64, -64, size +128):
+/// the video's place in it, ((client - 640) / 2, (client - 480) / 2), is the text's origin + 64.
+const MARGIN: i32 = 64;
+
+impl HelpTexts {
+    pub const FIRST: i32 = -0x25;
+    pub const LAST: i32 = -0x2c - 18;
+
+    fn msg(&self, id: i32) -> &str {
+        self.0.get((Self::FIRST - id) as usize).map_or("", |s| s)
+    }
+
+    fn draw(&self, page: usize, out: &mut [u8]) {
+        if page == 0 {
+            for (id, align, x, y) in KEYBOARD {
+                text_out(out, self.msg(id), align, x - MARGIN, y - MARGIN);
+            }
+        } else {
+            text_out(out, self.msg(-0x2c - page as i32), TA_CENTER, 0x181 - MARGIN, 0x1b8 - MARGIN);
+        }
+    }
+}
+
+/// TextOut in Arial bold, cell height 16 (`helpfont`), clipped to the 640x480 picture.
+fn text_out(out: &mut [u8], text: &str, align: i32, x: i32, y: i32) {
+    let glyph = |c: char| &GLYPHS[(c as usize).checked_sub(0x20).filter(|&i| i < GLYPHS.len()).unwrap_or(0)];
+    let width: i32 = text.chars().map(|c| glyph(c).0 as i32).sum();
+    let mut x = match align {
+        TA_RIGHT => x - width,
+        TA_CENTER => x - width / 2,
+        _ => x,
+    };
+    let (w, h) = (SIZE.0 as i32, SIZE.1 as i32);
+    for c in text.chars() {
+        let (advance, left, rows) = glyph(c);
+        for (r, bits) in rows.iter().enumerate() {
+            for b in (0..16).filter(|b| bits & (0x8000 >> b) != 0) {
+                let (px, py) = (x + *left as i32 + b, y + r as i32);
+                if (0..w).contains(&px) && (0..h).contains(&py) {
+                    let at = ((py * w + px) * 3) as usize;
+                    out[at..at + 3].fill(TEXT_COLOUR);
+                }
+            }
+        }
+        x += *advance as i32;
+    }
 }
 
 impl Player {
@@ -60,7 +130,7 @@ impl Player {
             eprintln!("video {name}: {e}");
             return None;
         }
-        Some(Player { avi, kind, then, ticks: 0, page: 0, done: false, started_sound: false })
+        Some(Player { avi, kind, then, ticks: 0, page: 0, done: false, started_sound: false, help: None })
     }
 
     /// One 70 Hz frame.
@@ -140,6 +210,9 @@ impl Player {
             let src = &pic[(y / rep) * w * 3..(y / rep + 1) * w * 3];
             let at = ((y0 + y) * OW + x0) * 3;
             out[at..at + w * 3].copy_from_slice(src);
+        }
+        if let Some(t) = &self.help {
+            t.draw(self.page, out);
         }
     }
 }
