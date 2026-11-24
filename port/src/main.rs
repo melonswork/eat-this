@@ -669,7 +669,7 @@ impl Game {
             eprintln!("DOORS frame {} hero {:?}", self.frame + 1, hero_at);
         }
         self.level.cam = (self.camera.x, self.camera.y);
-        storm::bridge_sound(&self.world, self.level.sector.unwrap_or(0), self.level.cam, self.level.particles.now);
+        storm::bridge_sound(self.level.bg_proc(), &self.world, self.level.sector.unwrap_or(0), self.level.cam, self.level.particles.now);
         self.background_proc();
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, false, &mut cx);
@@ -866,7 +866,6 @@ impl Game {
             }
             self.hero_death_effects();
         }
-        self.level.storm_frame(&mut self.rng);
         self.level.rain_splashes(&self.world, (self.camera.x, self.camera.y));
         self.level.water_frame(&self.world);
         // START's foreground (FUN_1090_0ace): the ship the hero was thrown from is a platform
@@ -888,9 +887,10 @@ impl Game {
         }
     }
 
-    /// The level's background proc (*4c32, also run by LevelFirstFrame): GRANNY's collapse
+    /// The level's background proc (*4c32, also run by LevelFirstFrame): the storm, GRANNY's collapse
     /// (FUN_1088_a481) and its debris (FUN_1050_4ca5(2)).
     fn background_proc(&mut self) {
+        self.level.storm_frame(&mut self.rng);
         if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
             let cam = (self.camera.x, self.camera.y);
             for (a, b) in self.level.collapse_frame(&self.world, &mut self.rng, cam) {
@@ -2483,8 +2483,8 @@ fn load_world(data: &Path, map_path: &Path) -> Result<World, Box<dyn Error>> {
     sprites::set_level(groups, raw);
     sprites::set_clothes(script_lines(map_path).iter().any(|(k, v)| k.eq_ignore_ascii_case("HeroClothes") && !v.is_empty()));
     messages::set_level(map_path);
-    let bg = script_lines(map_path).iter().find(|(k, _)| k.eq_ignore_ascii_case("BackgroundProc")).and_then(|(_, v)| v.trim().parse().ok());
-    storm::set_background_proc(bg.unwrap_or(0));
+    let number = |key: &str| script_lines(map_path).iter().find(|(k, _)| k.eq_ignore_ascii_case(key)).and_then(|(_, v)| v.trim().parse().ok()).unwrap_or(0);
+    storm::set_background_proc(number("BackgroundProc"), number("ForegroundProc"));
     Ok(World::load(map_path, &data.join("TILES"))?)
 }
 

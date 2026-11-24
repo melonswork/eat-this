@@ -16,7 +16,7 @@
 
 use crate::actors::Env;
 use crate::level::Level;
-use crate::particles::{self, Particles};
+use crate::particles::Particles;
 use crate::sprites;
 use crate::trig;
 
@@ -306,8 +306,8 @@ impl Level {
                 }
                 o.set(0x3c, 0);
                 if o.w(0x36) < 1 {
-                    if particles::FRAME_SLACK && env.rng.random(2) == 0 {
-                        // FUN_1088_11a3(0): a lightning flash and thunder (4f0c > 10 only).
+                    if self.particles.rain > 10 && env.rng.random(2) == 0 {
+                        // FUN_1088_11a3(0): a lightning flash and thunder (in the rain, 4f0c > 10).
                         self.thunder(env.rng, 0);
                     }
                     env.fx.kills += 1;

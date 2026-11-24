@@ -1,0 +1,77 @@
+# Fires in the rain (1170:4f0c > 10: FUN_1050_19f8 / 18e6 age faster) and the lightning of a big
+# alien's death (FUN_1070_7eb2 -> FUN_1088_11a3(0)): CITYHS's storm starts at frame 300 and rains hard
+# from 640 on; then the gate is shot (FX12: flames on the floor), and a big alien put far right is
+# fought with the weapon-3 pick-up he starts on.
+level MAPS/CITYHS.MAP
+start 2240 1390
+cell 2 140 86 0xd06
+cell 2 143 84 0
+cell 2 145 86 0xd06
+cell 2 148 86 0xd06
+cell 2 166 83 0x31c
+mouse 20 115
+650
+1 left
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+5 lmb
+25
+30
+mouse 300 85
+130 right
+20
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
+200

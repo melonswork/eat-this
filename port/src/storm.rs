@@ -42,8 +42,8 @@ impl Level {
     /// FUN_1090_0567 (START's foreground, while the storm runs): the front drops that meet the
     /// top of a solid tile splash there (sprite 0x615, colour 0x10).
     pub fn rain_splashes(&mut self, world: &crate::world::World, cam: (i32, i32)) {
-        let n = self.storm.level / 0x20;
-        if self.storm.level <= 0 || n <= 0 {
+        let n = self.particles.rain;
+        if self.storm.level <= 0 || n <= 0 || self.fg_proc() != 1 {
             return;
         }
         for k in (0x1e..0x1e + n as usize).rev() {
@@ -86,11 +86,22 @@ impl Level {
         self.storm.due = self.now.wrapping_add(0x8c + rng.random(0x578) as u32);
     }
 
-    /// FUN_1090_04d7 (from START's foreground): the storm ages and thunders when it is due.
+    /// The background proc now: the script's, or the one command 0x15 switched to.
+    pub fn bg_proc(&self) -> u32 {
+        self.procs.map_or_else(|| BG_PROC.with(|c| c.get()).0, |p| p.0)
+    }
+
+    fn fg_proc(&self) -> u32 {
+        self.procs.map_or_else(|| BG_PROC.with(|c| c.get()).1, |p| p.1)
+    }
+
+    /// The background procs' FUN_1090_04d7 / 0418, right after the camera: the storm ages, sets how
+    /// hard it rains (4f0c) and thunders when it is due (proc 11 only rains).
     pub fn storm_frame(&mut self, rng: &mut PascalRandom) {
         // The background proc (the city's sky) drew the flash as it was before this.
         self.storm.sky_flash = self.storm.flash;
-        if self.storm.level <= 0 {
+        let proc_ = self.bg_proc();
+        if self.storm.level <= 0 || !matches!(proc_, 1 | 2 | 11 | 15 | 16) {
             return;
         }
         if self.storm.flash > 0 {
@@ -98,6 +109,10 @@ impl Level {
         }
         if self.storm.level < 0x3bf {
             self.storm.level += 1;
+        }
+        self.particles.rain = self.storm.level / 0x20;
+        if proc_ == 11 {
+            return;
         }
         // The rain's loop (handle 4de0), louder as the storm grows.
         let v = (self.storm.level * 0x100) / 0x3bf;
@@ -131,17 +146,18 @@ impl Level {
 
 thread_local! {
     /// The level script's `BackgroundProc=` (1170:189e's index), for the sounds of START's backdrop.
-    static BG_PROC: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// And its `ForegroundProc=` (18e2).
+    static BG_PROC: std::cell::Cell<(u32, u32)> = const { std::cell::Cell::new((0, 0)) };
 }
 
-pub fn set_background_proc(n: u32) {
-    BG_PROC.with(|c| c.set(n));
+pub fn set_background_proc(bg: u32, fg: u32) {
+    BG_PROC.with(|c| c.set((bg, fg)));
 }
 
 /// FUN_1090_0292's sound (procs 1 and 16): every 0x46 frames the train on the bridge rumbles
 /// over its length (sound 0x13, box from its first car), seen at half the camera's speed.
-pub fn bridge_sound(world: &crate::world::World, sector: usize, cam: (i32, i32), now: u32) {
-    if !matches!(BG_PROC.with(|c| c.get()), 1 | 16) || now % 0x46 != 0 {
+pub fn bridge_sound(bg: u32, world: &crate::world::World, sector: usize, cam: (i32, i32), now: u32) {
+    if !matches!(bg, 1 | 16) || now % 0x46 != 0 {
         return;
     }
     let by = world.sectors.get(sector).map_or(-1, |s| s.water[4]);

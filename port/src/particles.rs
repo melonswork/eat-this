@@ -135,6 +135,8 @@ pub struct Particles {
     pub pending: Vec<(u32, Particle)>,
     /// ScreenShakes of spawn effects (FUN_1040_60bb(091e)), applied by the frame loop.
     pub spawn_shakes: Vec<(i32, i32)>,
+    /// 1170:4f0c: how hard it rains (the storm / 0x20); over 10 fires go out sooner.
+    pub rain: i32,
     /// DAT_1170_617e, the level frame counter.
     pub now: u32,
     /// 1170:45b6: cleared by a death effect that keeps its particle alive.
@@ -1624,11 +1626,11 @@ impl Level {
                 }
             }
             0x19f8 => {
-                // FUN_1050_19f8: a long fire on the floor goes out without floor under it (it
-                // ages only when the game runs late, 4f0c > 10).
+                // FUN_1050_19f8: a long fire on the floor goes out without floor under it (the
+                // rain, 4f0c > 10, puts it out sooner).
                 if f.world.solidity_at(m.w(0xa) + 1, m.w(8)) & 0x211 == 0 {
                     m.set(0x24, m.w(0x22));
-                } else if FRAME_SLACK {
+                } else if self.particles.rain > 10 {
                     m.set(0x24, m.w(0x24) + 1);
                 }
             }
@@ -1837,7 +1839,7 @@ impl Level {
                 let (x, y) = (m.w(8), m.w(0xa));
                 if f.world.solidity_at(y + 1, x) & 0x211 == 0 {
                     m.set(0x24, m.w(0x22));
-                } else if SMOKE_AGES && m.w(0x24) < m.w(0x22) {
+                } else if self.particles.rain > 10 && m.w(0x24) < m.w(0x22) {
                     m.set(0x24, m.w(0x24) + 1);
                 }
             }
@@ -2378,6 +2380,7 @@ impl Level {
                         self.shell7_blast(f);
                         return;
                     }
+                    sound::play_at(0x6d, m.w(0x12), m.w(0x10));
                 }
                 m.set(0x3e, 0);
                 v.set(8, 1);
@@ -3058,10 +3061,6 @@ impl Level {
     }
 }
 
-/// 1170:4f0c > 10 (FUN_1050_18e6): lying smoke ages. 4f0c stays 0 while a demo plays.
-const SMOKE_AGES: bool = false;
-/// 1170:4f0c > 10, as above.
-pub const FRAME_SLACK: bool = false;
 /// 1170:16d9, the detail level (3 on the demos).
 const DETAIL: i32 = 3;
 
