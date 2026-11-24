@@ -1,0 +1,18 @@
+# The spiked ball pushed by shakes (FUN_1070_9a66: amplitude > 7): FOREST05's ball, its lever on as in
+# SPIKE1, the start on the branch moved onto a weapon-3 pick-up: rockets fired away from it shake it.
+level MAPS/FOREST05.MAP
+start 2340 1407
+cell 1 138 91 0x308
+cell 2 146 87 0xd06
+mouse 300 125
+20
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150

@@ -1,0 +1,22 @@
+# The hero on a big alien's shield (FUN_1070_7eb2 -> FUN_1070_00b6): a big alien is put at the left
+# end of FALL's pit, the start moved onto the ledge above it and a weapon-1 pick-up; the flames raise
+# its shield (state -200), the hero jumps onto it, stands, walks and jumps on it.
+level MAPS/FALL.MAP
+start 420 985
+cell 2 26 60 0xd04
+cell 2 26 61 0xd04
+cell 2 29 64 0x31c
+mouse 135 155
+10
+1 right
+60 rmb
+8 right
+10 up right
+16 right
+60
+4 left
+60
+12 up
+60
+20 right
+200
