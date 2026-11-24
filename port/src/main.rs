@@ -2257,6 +2257,26 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             println!("EFFECTS {seen:?}");
+            // Effects of the tiles the explodable ones step on to (function 2), all steps.
+            let mut steps = std::collections::BTreeMap::new();
+            for &c0 in &world.main().cells {
+                let mut c = c0;
+                for _ in 0..40 {
+                    if world.cell_function(c, 3) == 0 || world.cell_function(c, 1) & 0x80 == 0 {
+                        break;
+                    }
+                    let e = world.cell_function(c, 4) as i16;
+                    if e > 0 && !seen.contains(&("blast", e)) {
+                        steps.entry(e).or_insert((c0, c));
+                    }
+                    let off = world.cell_function(c, 2);
+                    if off == 0 || off == 0x7fff {
+                        break;
+                    }
+                    c = (c as i32 + off as i16 as i32) as u16;
+                }
+            }
+            println!("STEPFX {steps:x?}");
             if let Some(want) = std::env::var("ET_FX").ok().and_then(|v| v.parse::<i16>().ok()) {
                 let p = world.main();
                 for (i, &c) in p.cells.iter().enumerate() {
@@ -2265,6 +2285,27 @@ fn main() -> Result<(), Box<dyn Error>> {
                         println!("FX {want} tile {c:#x} f3 {:#x} at ({tx},{ty}) px ({},{})", world.cell_function(c, 3), tx * 16 + 8, ty * 16 + 8);
                     }
                 }
+            }
+        }
+        // ET_SOLID=tx,ty: the solidity around a cell ('.' none, '#' solid, '=' top only, '/' slope,
+        // '*' explodable, else its bits in hex).
+        if let Ok(v) = std::env::var("ET_SOLID") {
+            if let Some((a, b)) = v.split_once(',') {
+                let (cx, cy): (i32, i32) = (a.parse().unwrap_or(0), b.parse().unwrap_or(0));
+                for ty in cy - 12..cy + 13 {
+                    let row: String = (cx - 24..cx + 25)
+                        .map(|tx| match world.solidity_at(ty * 16 + 8, tx * 16 + 8) {
+                            0 => '.',
+                            s if s & 0x80 != 0 => '*',
+                            s if s & 0x20 != 0 => '/',
+                            s if s & 0xf == 0xf => '#',
+                            s if s & 0xf == 1 => '=',
+                            s => char::from_digit((s & 0xf) as u32, 16).unwrap_or('?'),
+                        })
+                        .collect();
+                    println!("SOLID {ty:4} {row}");
+                }
+                println!("SOLID x from {} px {}", cx - 24, (cx - 24) * 16);
             }
         }
         if let Ok(v) = std::env::var("ET_CELL") {

@@ -46,6 +46,9 @@ pub fn plain_sound(id: u16, y: i32, x: i32) {
 /// are the table at 1170:07b2 (filled at run time; `mise run trace -- ... --dump-mem 1170:07b2:200`).
 pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &mut PascalRandom, fx: &mut Effects) {
     plain_sound(id, y, x);
+    if std::env::var_os("ET_EFFECT").is_some() {
+        eprintln!("EFFECT {} id {id} at ({x},{y})", lv.now);
+    }
     match id {
         0 => {}
         7 => {
@@ -934,6 +937,24 @@ pub fn effect(lv: &mut Level, world: &mut World, id: u16, y: i32, x: i32, rng: &
                 let w = world.main().width;
                 lv.queue_tile_event(0x19, 0xffff, (((y - 0x10) >> 4) * w + (x >> 4)) as u16);
             }
+        }
+        60 => {
+            // FUN_1040_5f98: a bit of the beam flies off.
+            let ps = &mut lv.particles;
+            ps.p.group = 0;
+            ps.p.hits = 0x8000;
+            ps.p.on_death = 0x10;
+            ps.p.callback = 0x17f4;
+            let step = rng.random(8) + 4;
+            ps.spawn(0x755f, y - 4, x);
+            ps.last_mut().m.set(0x26, step);
+            let a = rng.random(0x101) + 0x1060;
+            let v = rng.random(0x21);
+            ps.throw(9, v, a);
+            ps.p.callback = 0;
+            ps.p.on_death = 0;
+            ps.p.hits = 0;
+            ps.p.group = 1;
         }
         61 => {
             // FUN_1040_600e: the cell blows up 0x14 frames later (tile -1).

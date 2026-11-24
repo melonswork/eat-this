@@ -1,0 +1,15 @@
+# Tile effect 46 (FUN_1040_4a06: the cross of function 60309 steps on, splinters, dust):
+# CITY01's crates at (59..60,68..69), mask 4, start moved left of them with a weapon-3 pick-up.
+level MAPS/CITY01.MAP
+start 900 1110
+cell 2 56 68 0xd06
+cell 2 56 69 0xd06
+mouse 310 110
+20
+1 right
+5 rmb
+30
+5 rmb
+30
+5 rmb
+100

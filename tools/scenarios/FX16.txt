@@ -1,0 +1,22 @@
+# Tile effect 36 (FUN_1040_3f9c: the back plane's cell goes, chips): GRANNY's hanging lamp at
+# (82,55), mask 7, start moved left of it: pistol shots up at it.
+level MAPS/GRANNY.MAP
+start 1260 970
+mouse 220 46
+20
+3 lmb
+15
+3 lmb
+15
+mouse 220 40
+3 lmb
+15
+mouse 220 34
+3 lmb
+15
+mouse 220 52
+3 lmb
+15
+mouse 220 28
+3 lmb
+100

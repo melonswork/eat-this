@@ -1,0 +1,8 @@
+# Tile effect 58 (FUN_1040_5e4e: crash, smoke, spray; the tile above blows up 0x19 frames later):
+# FALL's column at (33,56..64): an alien icon is put right of it, the start left; their fight blows
+# the barrel at the column's foot, whose blast takes the column (mask 0x80 is the grinder's).
+level MAPS/FALL.MAP
+start 480 1039
+cell 2 37 64 0x31d
+mouse 310 110
+400
