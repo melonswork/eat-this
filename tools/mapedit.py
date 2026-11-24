@@ -67,7 +67,7 @@ def main():
         pack = lambda t: b"".join(struct.pack("<H", int(v, 0) & 0xFFFF) for v in t.split(","))  # noqa: E731
         o, n = pack(old), pack(new)
         p = changed.get("OBJECTS") or get("OBJECTS")
-        at = [i for i in range(0, len(p) - len(o) + 1, 2) if p[i : i + len(o)] == o]
+        at = [i for i in range(len(p) - len(o) + 1) if p[i : i + len(o)] == o]
         if len(at) != 1 or len(o) != len(n):
             raise SystemExit(f"--object {old}: found {len(at)} times (want 1), {len(o)} -> {len(n)} bytes")
         p[at[0] : at[0] + len(n)] = n
