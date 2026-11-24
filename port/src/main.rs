@@ -722,7 +722,16 @@ impl Game {
             self.hero.exit_timer -= 1;
             if self.hero.exit_timer == 0 {
                 self.teleport();
+                // LevelFirstFrame's own HUD update (the one this frame shows).
+                let drawn = self.messages.drawn.clone();
+                self.messages.frame();
+                self.messages.drawn = drawn;
+                self.hero.status_bar();
             }
+        }
+        self.hero.fade_step();
+        if self.hero.fade == 0x1c {
+            self.hero.fade_size = 0x1f; // the teleport's frame shows LevelFirstFrame's HUD update
         }
         self.frame += 1;
         // GameFrame: FUN_10e0_04a4 (loops nobody kept stop), SoundUpdate.
@@ -813,6 +822,11 @@ impl Game {
             shake_amp: self.camera.shake_amplitude(),
         };
         self.level.update_actors(&mut env, window);
+        // An actor hit or killed the hero (FUN_1088_3c32): what flies off him does so at once.
+        self.hero_death_effects();
+        for (sprite, y, x) in std::mem::take(&mut self.hero.splats) {
+            self.level.blood_splat(&self.world, sprite, y, x);
+        }
         if std::mem::take(&mut fx.hero_bounce) {
             self.hero.bounce(-0x32, 10);
         }
@@ -908,6 +922,7 @@ impl Game {
         if !self.hero.teleport(&self.world, &self.level.teleports) {
             return;
         }
+        self.hero.fade = 0x1d; // 0x1e, less the step of LevelFirstFrame's own HUD update
         self.level.particles.drone.place(self.hero.y, self.hero.x);
         let mut fx = Effects::default();
         // FUN_1068_08ff: the old sector's triggers see him go.
@@ -1035,6 +1050,8 @@ struct Graphics {
     /// 1170:1b14..1b23: the level colours nearest to the 16 VGA colours (table 1170:1b24), among
     /// colours 1..=ForegroundColors (LevelLoad, after FUN_10f0_183d).
     vga: [u8; 16],
+    /// 1170:465a: three reds (and a 0), see `Painter::reds`.
+    reds: [u8; 4],
 }
 
 impl Graphics {
@@ -1150,6 +1167,7 @@ impl Graphics {
         .rgb();
         Ok(Graphics {
             background: bg::Background {
+                fore: script.as_ref().map_or(1, |s| s.foreground_proc),
                 proc_: script.map_or(0, |s| s.background_proc),
                 picture,
                 groups,
@@ -1180,6 +1198,16 @@ impl Graphics {
                     // FUN_10f0_183d leaves only colours 1..=ForegroundColors free for FUN_10f0_6039.
                     (1..=fg_colours).min_by_key(|&i| (d(colors6[i]), i)).unwrap_or(0) as u8
                 })
+            },
+            reds: {
+                let near = |r0: i64| {
+                    let d = |c: [u8; 3]| {
+                        let (r, g, b) = (r0 - c[0] as i64, c[1] as i64, c[2] as i64);
+                        (r * r + g * g).pow(2) + b.pow(4)
+                    };
+                    (1..=fg_colours).min_by_key(|&i| (d(colors6[i]), i)).unwrap_or(0) as u8
+                };
+                [near(0x1e), near(0x2e), near(0x3e), 0]
             },
             rain_colour: {
                 // FUN_10f0_6039(b, g, r): the smallest (dr^2 + dg^2)^2 + db^4, the first one.
@@ -1229,6 +1257,8 @@ impl Graphics {
                 p.mode = 0x20;
                 p.sprite(s, 0xf9 - h, 0x68);
                 if 0xf9 - h < 0 {
+                    // The wrapped one runs half the film ahead.
+                    let s = 0x7d00 + ((frame / 4 + n as u32 / 2) % n as u32) as i32;
                     p.sprite(s, 0x239 - h, 0x68);
                 }
             }
@@ -1322,6 +1352,7 @@ impl Graphics {
             flash: self.vga[7],
             black: self.vga[0],
             vga: self.vga,
+            reds: self.reds,
             clip: render::SCREEN,
         };
         if ship != (0, 0) {
@@ -1329,6 +1360,12 @@ impl Graphics {
             // lights over it (mode 0x28).
             p.at(0x3700, ship.0, ship.1);
             p.at_mode(0x28, 0x3800, ship.0, ship.1);
+        }
+        if g.hero.door_frame != hero::NONE {
+            // FUN_10a8_0dab: the hero walking into an exit, behind the doors.
+            p.hflip = g.hero.facing == -1;
+            p.at(g.hero.door_frame, g.hero.x, g.hero.y);
+            p.hflip = false;
         }
         draw::doors(&mut p, &g.level);
         draw::decals(&mut p, &g.level);
@@ -1347,8 +1384,21 @@ impl Graphics {
             }
         }
         // The level's foreground proc: the water, the sector's foreground decor (list +0x2a).
-        draw::water(&mut p, &g.level, &g.world);
-        self.decor(fb, g, sector, true, (cam_x, cam_y), frame);
+        // (Table 1170:18e2: 0 decor, 1 decor and water, 2 nothing, 3 water, 4 water and decor, 5
+        // the grinder, 6 girders; script command 0x15 may switch it.)
+        let fp = g.level.procs.map_or(self.background.fore, |p| p.1);
+        if matches!(fp, 1 | 3 | 4) {
+            draw::water(&mut p, &g.level, &g.world);
+        }
+        if matches!(fp, 0 | 1 | 4) {
+            self.decor(fb, g, sector, true, (cam_x, cam_y), frame);
+        }
+        if fp == 6 {
+            // FUN_1090_1d2a: extra map 8 (girders) in front, twice as fast, repeated down.
+            if let Some(Some(pl)) = self.extra.first() {
+                self.layer(fb, g, pl, 2, (8, cam_y * 2 - 0x80), frame);
+            }
+        }
         if g.level.storm.level > 0 {
             // FUN_1090_0567 (START's foreground): the front drops, and a lightning flash of kind
             // 0 tints the whole screen (tint row 3) three frames in six.
@@ -1636,6 +1686,7 @@ impl Graphics {
             flash: self.vga[7],
             black: self.vga[0],
             vga: self.vga,
+            reds: self.reds,
             clip: render::SCREEN,
         }
     }
@@ -1661,6 +1712,7 @@ impl Graphics {
             flash: self.vga[7],
             black: self.vga[0],
             vga: self.vga,
+            reds: self.reds,
             clip: render::SCREEN,
         };
         let got = level::TALLY.with(|t| t.get());

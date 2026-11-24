@@ -47,7 +47,7 @@ pub const KNOCKED_DOWN: i32 = -200;
 
 /// gHeroGround kind for an ordinary floor (HeroReset sets it; the heavy-landing test checks it).
 const FLAT_FLOOR: i32 = 9;
-const NONE: i32 = 0x7fff;
+pub const NONE: i32 = 0x7fff;
 const NO_TURN: i32 = 0xff;
 const ON_GROUND_VY: i32 = 0x7fff; // HeroResetFallSpeed
 const HEIGHT: i32 = 0x2a;
@@ -133,6 +133,12 @@ pub struct Hero {
     pub pickups: Vec<((i32, i32), u16, u16, i32, i32)>,
     /// 1170:4e62: counts down to the teleport (FUN_1088_517a) at the end of the frame it hits 0.
     pub exit_timer: i32,
+    /// The sprite he walks into an exit with, drawn by the door module (FUN_10a8_0dab).
+    pub door_frame: i32,
+    /// 1170:536a: the screen's pixelation (FUN_1080_007c), -0x1e..0 walking out through an exit,
+    /// 0x1e..0 after a teleport; `fade_size` is the block size of this frame's. Only drawing.
+    pub fade: i32,
+    pub fade_size: i32,
     /// 1170:4e60: what GameFrame does after this frame (10 restart the level, 100 + n the level
     /// is over through a teleport record that leaves it, 0x1e back to the menu).
     pub level_end: i32,
@@ -330,6 +336,9 @@ impl Hero {
             weapons: WEAPON_AMMO.map(|(pickup, max)| Weapon { pickup, max, next: 0, ammo: 0, owned: false }),
             pickups: Vec::new(),
             exit_timer: 0,
+            door_frame: NONE,
+            fade: 0,
+            fade_size: 0,
             level_end: 0,
             exit_kind: 0,
             slope: -1,
@@ -617,7 +626,7 @@ impl Hero {
         if self.ground > 0 && self.vy >= 0 && self.state >= 0 {
             self.vy = ON_GROUND_VY;
             if self.state > 0 {
-                self.land(w, rng);
+                self.land(w, ps, lv.wind, rng);
             }
         }
 
@@ -998,7 +1007,9 @@ impl Hero {
             if len - 1 == self.anim {
                 self.exit_timer = 2;
             }
-            // (len - anim == 0x1d: 1170:536a = -0x1e starts the fade.)
+            if len - self.anim == 0x1d {
+                self.fade = -0x1e;
+            }
             self.turn = NO_TURN;
             self.anim += 1;
             self.x += (exit_middle(w, self.y, self.x) + (self.facing == -1) as i32 - self.x).signum();
@@ -1168,7 +1179,7 @@ impl Hero {
                 self.shakes.push((8, 4));
                 sound::play_at(0x24, self.y, self.x);
                 let n = rng.random(6) + 1;
-                spawn_dust(w, n, self.y, self.x, rng);
+                spawn_dust(w, ps, lv.wind, 10, n, self.y, self.x, rng);
             }
         }
         if self.state == PIPE_HANG {
@@ -2058,9 +2069,21 @@ impl Hero {
         moved
     }
 
+    /// FUN_1088_4b64: a step of the pixelation.
+    pub fn fade_step(&mut self) {
+        self.fade_size = match self.fade {
+            0 => 0,
+            f if f < 0 => f + 0x21,
+            f => f + 1,
+        };
+        self.fade -= self.fade.signum();
+    }
+
     /// The start of FUN_10a8_0dab: walking into an exit, the door module draws him.
     pub fn hide_in_exit(&mut self) {
+        self.door_frame = NONE;
         if self.state == EXIT && self.frame != NONE {
+            self.door_frame = self.frame;
             self.frame = NONE;
             self.gun.frame2 = NONE;
         }
@@ -2373,11 +2396,11 @@ impl Hero {
     }
 
     /// The landing block at the top of HeroUpdate.
-    fn land(&mut self, w: &World, rng: &mut PascalRandom) {
+    fn land(&mut self, w: &World, ps: &mut crate::particles::Particles, wind: i32, rng: &mut PascalRandom) {
         let d = self.fall;
         if d > 0x1f {
             let n = rng.random((d / 16 + 1).min(8) as u16);
-            spawn_dust(w, n, self.y, self.x, rng);
+            spawn_dust(w, ps, wind, 10, n, self.y, self.x, rng);
         }
         if d >= FATAL_FALL || self.prev_state == KNOCKED_BACK || self.launch > 0 {
             self.state = KNOCKED_DOWN;
@@ -2420,6 +2443,17 @@ impl Hero {
         }
         if d > 0x60 {
             self.shakes.push((8, (d / 0x10 - 4).min(8)));
+        }
+        if d >= 0x40
+            && self.ground == 9
+            && w.solidity_at(self.y + 1, self.x - 8) & 0x2201 != 0
+            && w.solidity_at(self.y + 1, self.x + 8) & 0x2201 != 0
+        {
+            ps.p.callback = 0x2192;
+            ps.p.colour = 0x10;
+            ps.spawn_seq(0x6d00, 2, 0x13, self.y, self.x, 1); // FUN_1040_66d4
+            ps.p.colour = 0;
+            ps.p.callback = 0;
         }
         // A thud, or on a soft floor (gHeroGround 9) from high up a splash (and a puff, 66d4).
         sound::play_at(if d < 0x40 || self.ground != 9 { 8 } else { 4 }, self.y, self.x);
@@ -2979,6 +3013,7 @@ impl Hero {
             self.climb = 5;
             self.y -= 4;
         }
+        self.gun.frame2 = NONE;
         (dx, 0)
     }
 
@@ -3135,23 +3170,24 @@ impl Hero {
     }
 }
 
-/// SpawnDust (1040:1e04): `count` leaf particles, five Random() calls each, on "Send leaves" tiles.
-/// SpawnDust for the other modules.
-pub fn spawn_dust_pub(w: &World, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
-    spawn_dust(w, count, y, x, rng);
-}
-
-fn spawn_dust(w: &World, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
+/// SpawnDust(x, y, count, speed) (1040:1e04): `count` leaves blown up from a "Send leaves" tile
+/// (drifting, `wind` = 4f0e), five Random() calls each.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_dust(w: &World, ps: &mut crate::particles::Particles, wind: i32, speed: i32, count: i32, y: i32, x: i32, rng: &mut PascalRandom) {
     if w.tile_function_at(y, x) != LEAVES {
         return;
     }
     for _ in 0..count {
-        rng.random(5);
-        rng.random(0x501);
-        rng.random(2);
-        rng.random(0x11);
-        rng.random(10);
+        ps.p.hits = 0x8000;
+        ps.p.delay = rng.random(5);
+        let r = rng.random(0x501);
+        let sprite = rng.random(2) + 0x3319;
+        ps.spawn(sprite, y, x - 0x10 + r * 0x20 / 0x500);
+        let v = speed + rng.random(0x11);
+        let g = rng.random(10) + 0x2a;
+        ps.drift(g, v, (wind + 0x820 - r).rem_euclid(0x1680));
     }
+    (ps.p.hits, ps.p.delay) = (0, 0);
 }
 
 /// FUN_1088_5082(door, y, x): an exit's function 2 (main plane, else plane 2), -1 for none or

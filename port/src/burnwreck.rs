@@ -105,7 +105,7 @@ pub fn draw(p: &mut crate::render::Painter, o: &Obj) {
     let now = p.frame;
     let age = now as i64 - stamp(o);
     let grown = age >= 0x690;
-    let scale = if grown { ((((age - 0x690) / 4) + 0x100) as u16).min(0x200) as i32 } else { 0x100 };
+    let scale = if grown { ((((age - 0x690) / if o.w(10) == 0 { 4 } else { 3 }) + 0x100) as u16).min(0x200) as i32 } else { 0x100 };
     if o.w(10) == 0 {
         p.flame(scale, scale, now, x + 2, y - 2);
     } else {

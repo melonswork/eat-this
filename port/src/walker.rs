@@ -443,7 +443,8 @@ impl Level {
             if o.w(0x34) > 0 {
                 looks.push(Obj::look(mount, x, y).flip(flip_m).flash(o.w(0x28) > 0));
             }
-            let rx = if o.w(0x2e) > 0 { x - o.w(0x20) * o.w(0x2e) } else { x };
+            // (Counted down just before it is drawn.)
+            let rx = x - o.w(0x20) * (o.w(0x2e) - 1).max(0);
             looks.push(Obj::look(rider, rx, y + off).flip(flip_r).flash(o.w(0x26) > 0));
             o.looks = looks;
         }

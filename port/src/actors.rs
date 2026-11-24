@@ -248,7 +248,13 @@ impl Level {
             0x13e2 => self.gunship(id, env),
             crate::gunship::WRECK => self.wreck(id, env),
             0x1428 => self.alien(id, env),
-            0x1432 => self.bigali(id, env),
+            0x1432 => {
+                self.bigali(id, env);
+                // Its shield's draw takes Random() from here on, and puts the seed back.
+                if let Some(o) = self.objects[id].as_mut() {
+                    o.looks = vec![crate::objects::Obj::look(-1, env.rng.seed as i32, 0)];
+                }
+            }
             0x141e => self.steam(id, env),
             crate::burnwreck::KIND => self.burnwreck(id, env),
             0x14fa => self.plant(id, env),
@@ -319,6 +325,11 @@ impl Level {
             }
             unbounded(o);
         }
+        // Drawn here, before it ticks and falls.
+        let now = self.now;
+        let o = self.o(id);
+        let s = if o.w(0x20) == 0 { 0x4c00 + ((now >> 3) & 1) as i32 } else { 0x4c02 - ((o.w(0x22) >> 3) & 1) };
+        o.looks = vec![crate::objects::Obj::look(s, x, y)];
         if o.w(0x20) == 0 {
             o.set(2, x - 0x50);
             o.set(6, x + 0x50);
@@ -554,7 +565,7 @@ impl Level {
             ps.blast(2, 0xc0, 7, 0x1e, 0x3e, -0x3e, -0x3e, y, x);
             ps.p.delay = 0;
             let n = env.rng.random(6);
-            crate::hero::spawn_dust_pub(env.world, n, y, x, env.rng);
+            crate::hero::spawn_dust(env.world, &mut self.particles, self.wind, 0x10, n, y, x, env.rng);
         }
         self.falling_critter(y, x, env);
         self.remove_current(id);
@@ -722,11 +733,14 @@ impl Level {
         };
         // Slopes.
         let mut slope_y = 0x7fff;
+        // (gLastTileCell: the cell that was a slope.)
+        let mut slope_cell = w.cell_at(1, y + 1, x).unwrap_or(0);
         let s = w.solidity_at(y + 1, x);
         if s & 0x20 != 0 {
             slope_y = slope_height(w, x, w.cell_at(1, y + 1, x).unwrap_or(0)) + ((y + 1) & !15);
         } else if w.solidity_at(y - 1, x) & 0x20 != 0 {
-            slope_y = slope_height(w, x, w.cell_at(1, y - 1, x).unwrap_or(0)) + ((y - 1) & !15);
+            slope_cell = w.cell_at(1, y - 1, x).unwrap_or(0);
+            slope_y = slope_height(w, x, slope_cell) + ((y - 1) & !15);
         }
         if y + 2 < slope_y {
             let u = y + 1;
@@ -779,8 +793,7 @@ impl Level {
             let o = self.o(id);
             o.set(0x10, slope_y);
             o.set(0x1c, 5);
-            let c = w.cell_at(1, y + 1, x).unwrap_or(0);
-            o.set(0x1e, w.cell_function(c, 2) as i16 as i32);
+            o.set(0x1e, w.cell_function(slope_cell, 2) as i16 as i32);
         }
         let (x, y) = {
             let o = self.objects[id].as_ref().unwrap();

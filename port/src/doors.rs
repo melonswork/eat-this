@@ -52,6 +52,8 @@ pub struct Door {
     pub kind: usize,   // +0x12: function 4 of its cells
     pub open: i32,     // +0x13: 1 opening, 0 closing
     pub auto: bool,    // +0x14
+    /// Its progress after this frame's update (what an alien behind it is lit by).
+    pub next: i32,
 }
 
 fn fn_at(w: &World, plane: usize, y: i32, x: i32) -> u16 {
@@ -151,6 +153,7 @@ impl Level {
             kind,
             open,
             auto,
+            next: 0,
         };
         if !first {
             d.progress = if closed { full - speed } else { speed };
@@ -249,6 +252,9 @@ impl Level {
             } else {
                 speed + d.progress
             };
+            if let Some(drawn) = self.doors_drawn.iter_mut().find(|o| o.cell == d.cell) {
+                drawn.next = p;
+            }
             if d.monster != 0 && p == 0 {
                 let kind = if d.monster == 61400 { 0x1428 } else { 0x1432 };
                 let (x, y) = (d.cx, (d.y + d.h) * 0x10 - 1);

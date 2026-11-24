@@ -136,6 +136,8 @@ pub struct Painter<'a> {
     pub black: u8,
     /// 1170:1b14..1b23: the level's colours nearest to the 16 VGA colours.
     pub vga: [u8; 16],
+    /// 1170:465a: the colours nearest to three reds (30, 46, 62 of 63), and 0.
+    pub reds: [u8; 4],
     /// 1170:1aca..1ad0: the clip rectangle (left, top, right, bottom), inclusive.
     pub clip: (i32, i32, i32, i32),
 }
@@ -167,9 +169,7 @@ impl<'a> Painter<'a> {
         if id < 0 || id == 0x7fff {
             return;
         }
-        if std::env::var("ET_DRAWLOG").is_ok() {
-            eprintln!("sprite {id:#06x} at ({x},{y}) mode {:#x} flip {}", self.mode, self.hflip);
-        }
+        self.log("sprite", id, x, y, "");
         let bank = self.bank;
         bank.with(id, |s| self.put(s, x, y));
     }
@@ -196,12 +196,39 @@ impl<'a> Painter<'a> {
         self.mode = 0;
     }
 
+    /// A beam's pixel at screen (x, y): blended through PalMix over the background colours (as
+    /// the lasers do).
+    pub fn glow(&mut self, x: i32, y: i32, c: u8) {
+        let Some(mix) = self.table(Mix::Level) else { return };
+        if (0..W).contains(&x) && (0..H).contains(&y) {
+            let d = &mut self.fb[(y * W + x) as usize];
+            if *d <= self.fg {
+                *d = mix.get(c as usize * 256 + *d as usize).copied().unwrap_or(c);
+            }
+        }
+    }
+
+    /// The same, `c` itself.
+    pub fn dot(&mut self, x: i32, y: i32, c: u8) {
+        if (0..W).contains(&x) && (0..H).contains(&y) && self.fb[(y * W + x) as usize] <= self.fg {
+            self.fb[(y * W + x) as usize] = c;
+        }
+    }
+
+    /// ET_DRAWLOG=1: what is drawn, as `tools/dumpframe.py --draws` lists it.
+    fn log(&self, what: &str, id: i32, x: i32, y: i32, more: &str) {
+        if std::env::var_os("ET_DRAWLOG").is_some() {
+            eprintln!("{what} {id:#06x} at ({x}, {y}) mode {:#x} colour {:#x} flips {}{}{more}", self.mode, self.colour, self.hflip as u8, self.vflip as u8);
+        }
+    }
+
     /// `FUN_10f0_302b(ystep, xstep, id, y, x)`: sprite `id` scaled, reading `xstep` / `ystep`
     /// source pixels (8.8 fixed point, 0x100 = 1:1) per screen pixel, anchor at screen (x, y).
     pub fn scaled(&mut self, id: i32, x: i32, y: i32, xstep: i32, ystep: i32) {
         if id < 0 || id == 0x7fff || xstep <= 0 || ystep <= 0 {
             return;
         }
+        self.log("scaled", id, x, y, &format!(" steps {xstep:#x} {ystep:#x}"));
         let bank = self.bank;
         bank.with(id, |s| {
             let w = (s.width * 0x100) / xstep;
@@ -209,6 +236,7 @@ impl<'a> Painter<'a> {
             if w <= 0 || h <= 0 {
                 return;
             }
+            let hot_x = if self.hflip { ((s.hotspot.0 - 1) * 0x100) / xstep + 1 } else { (s.hotspot.0 * 0x100) / xstep };
             let mut px = vec![0u8; (w * h) as usize];
             for yy in 0..h {
                 let sy0 = ((yy * ystep) >> 8).min(s.height - 1);
@@ -221,7 +249,8 @@ impl<'a> Painter<'a> {
                 width: w,
                 height: h,
                 // 10f0:3080: the top is ((hot_y - 1) * 0x100) / ystep + 1.
-                hotspot: ((s.hotspot.0 * 0x100) / xstep, ((s.hotspot.1 - 1) * 0x100) / ystep + 1),
+                // (10f0:338b: the mirrored one rounds its x the same way.)
+                hotspot: (hot_x, ((s.hotspot.1 - 1) * 0x100) / ystep + 1),
                 pixels: px,
                 extra: Vec::new(),
             };
@@ -258,12 +287,15 @@ impl<'a> Painter<'a> {
         if id < 0 || id == 0x7fff {
             return;
         }
+        self.log("half", id, x, y, "");
         let bank = self.bank;
         bank.with(id, |s| {
             let (w, h) = (s.width >> 1, s.height >> 1);
             if w <= 0 || h <= 0 {
                 return;
             }
+            let left = x + s.hotspot.0 / 2;
+            let cut = left < self.clip.0 || left + w > self.clip.2 + 1;
             let mut px = vec![0u8; (w * h) as usize];
             for yy in 0..h {
                 // The row's span (its first opaque pixel, its opaque width): screen pixel
@@ -271,10 +303,12 @@ impl<'a> Painter<'a> {
                 let row = &s.pixels[(yy * 2 * s.width) as usize..((yy * 2 + 1) * s.width) as usize];
                 let Some(start) = row.iter().position(|&c| c != 0) else { continue };
                 let end = row.iter().rposition(|&c| c != 0).unwrap_or(start) + 1;
+                // Clipped left or right, every row is read from an even pixel.
+                let from = if cut { start & !1 } else { start };
                 for k in 0..((end - start) >> 1) {
                     let xx = (start >> 1) + k;
                     if (xx as i32) < w {
-                        px[(yy * w) as usize + xx] = row[start + 2 * k];
+                        px[(yy * w) as usize + xx] = row[from + 2 * k];
                     }
                 }
             }
@@ -363,40 +397,147 @@ impl<'a> Painter<'a> {
     }
 
     /// `FUN_10f0_3da`: a one-pixel line in colour `c` between two screen points.
-    pub fn line(&mut self, (x1, y1): (i32, i32), (x2, y2): (i32, i32), c: u8) {
-        let n = (x2 - x1).abs().max((y2 - y1).abs()).max(1);
-        for i in 0..=n {
-            let x = x1 + (x2 - x1) * i / n;
-            let y = y1 + (y2 - y1) * i / n;
-            let (c0, c1, c2, c3) = self.clip;
-            if x >= c0 && x <= c2 && y >= c1 && y <= c3 {
+    pub fn line(&mut self, (mut x1, mut y1): (i32, i32), (mut x2, mut y2): (i32, i32), c: u8) {
+        let (l, t, r, b) = self.clip;
+        let out = |x1: i32, y1: i32, x2: i32, y2: i32| x1.min(x2) > r || x1.max(x2) < l || y1.min(y2) > b || y1.max(y2) < t;
+        if out(x1, y1, x2, y2) {
+            return;
+        }
+        if x1 != x2 {
+            for (a, sign) in [(l, 1), (r, -1)] {
+                if (x1 - a) * sign < 0 {
+                    y1 += (a - x1) * (y2 - y1) / (x2 - x1);
+                    if out(l, y1, l, y2) {
+                        return;
+                    }
+                    x1 = a;
+                }
+            }
+            for (a, sign) in [(l, 1), (r, -1)] {
+                if x1 != x2 && (x2 - a) * sign < 0 {
+                    y2 += (a - x2) * (y2 - y1) / (x2 - x1);
+                    if out(l, y1, l, y2) {
+                        return;
+                    }
+                    x2 = a;
+                }
+            }
+        }
+        if y1 != y2 {
+            for (a, sign) in [(t, 1), (b, -1)] {
+                if (y1 - a) * sign < 0 {
+                    x1 += (a - y1) * (x2 - x1) / (y2 - y1);
+                    if out(x1, t, x2, t) {
+                        return;
+                    }
+                    y1 = a;
+                }
+            }
+            for (a, sign) in [(t, 1), (b, -1)] {
+                if y1 != y2 && (y2 - a) * sign < 0 {
+                    x2 += (a - y2) * (x2 - x1) / (y2 - y1);
+                    if out(x1, t, x2, t) {
+                        return;
+                    }
+                    y2 = a;
+                }
+            }
+        }
+        // A 16-bit fraction starting one step in; its carry moves the minor axis.
+        let (w, h) = ((x2 - x1).abs() + 1, (y2 - y1).abs() + 1);
+        let wide = h < w;
+        if (wide && x2 < x1) || (!wide && y2 < y1) {
+            (x1, y1, x2, y2) = (x2, y2, x1, y1);
+        }
+        let (n, m) = if wide { (w, h) } else { (h, w) };
+        let step = ((m as u32) << 16) / (n as u32 + 1);
+        let mut f = step as u16;
+        let (mut x, mut y) = (x1, y1);
+        for _ in 0..n {
+            if (0..W).contains(&x) && (0..H).contains(&y) {
                 self.fb[(y * W + x) as usize] = c;
+            }
+            let (next, carry) = f.overflowing_add(step as u16);
+            f = next;
+            if wide {
+                x += 1;
+                y += if carry { (y2 - y1).signum() } else { 0 };
+            } else {
+                y += 1;
+                x += if carry { (x2 - x1).signum() } else { 0 };
             }
         }
     }
 }
 
-/// FUN_10d0_01e4 (plain fill): a polygon filled with colour `c`, clipped to the screen; each
-/// scanline from the leftmost to the rightmost edge crossing at the row's centre.
+/// FUN_10d0_01e4 (plain fill): a convex polygon in colour `c`: its left and right edge chains
+/// stepped a scanline at a time (FUN_10d0_0002), filled between (FUN_10d0_00cc; the right edge is
+/// one pixel in, the bottom row out, and without a flat top the top row too).
 pub fn fill_polygon(fb: &mut [u8], pts: &[(i32, i32)], c: u8) {
-    let (top, bottom) = pts.iter().fold((i32::MAX, i32::MIN), |(t, b), p| (t.min(p.1), b.max(p.1)));
-    for y in top.max(0)..bottom.min(H) {
-        let fy = y as f64 + 0.5;
-        let mut xs: Vec<f64> = Vec::new();
-        for i in 0..pts.len() {
-            let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
-            let (ya, yb) = (a.1 as f64, b.1 as f64);
-            if (ya <= fy && fy < yb) || (yb <= fy && fy < ya) {
-                xs.push(a.0 as f64 + (fy - ya) * (b.0 - a.0) as f64 / (yb - ya));
-            }
+    let n = pts.len();
+    let top = pts.iter().map(|p| p.1).min().unwrap_or(0);
+    let bottom = pts.iter().map(|p| p.1).max().unwrap_or(0);
+    if n == 0 || top == bottom {
+        return;
+    }
+    let last = pts.iter().position(|p| p.1 == bottom).unwrap_or(0);
+    let tops = || (0..n).filter(|&i| pts[i].1 == top);
+    let mut left = tops().min_by_key(|&i| pts[i].0).unwrap_or(0);
+    let right = tops().max_by_key(|&i| pts[i].0).unwrap_or(0);
+    let flat = pts[left].0 != pts[right].0;
+    let step = |i: usize, fwd: bool| if fwd { (i + 1) % n } else { (i + n - 1) % n };
+    // The way round the left chain goes.
+    let fwd = if flat {
+        pts[step(left, true)].1 != top
+    } else {
+        left = right;
+        let (v, a, b) = (pts[left], pts[step(left, true)], pts[step(left, false)]);
+        i64::from(a.0 - v.0) * i64::from(b.1 - v.1) < i64::from(b.0 - v.0) * i64::from(a.1 - v.1)
+    };
+    let chain = |from: usize, fwd: bool, off: i32| {
+        let mut out = Vec::new();
+        let mut i = from;
+        let mut skip = !flat;
+        while i != last {
+            let k = step(i, fwd);
+            edge(&mut out, (pts[i].0 + off, pts[i].1), (pts[k].0 + off, pts[k].1), skip);
+            skip = false;
+            i = k;
         }
-        if xs.len() < 2 {
+        out
+    };
+    let (l, r) = (chain(left, fwd, 0), chain(right, !fwd, -1));
+    let y0 = top + 1 - i32::from(flat);
+    for (i, (&xl, &xr)) in l.iter().zip(&r).enumerate() {
+        let y = y0 + i as i32;
+        if !(0..H).contains(&y) {
             continue;
         }
-        let l = xs.iter().cloned().fold(f64::MAX, f64::min).round() as i32;
-        let r = xs.iter().cloned().fold(f64::MIN, f64::max).round() as i32 - 1;
-        for x in l.max(0)..=r.min(W - 1) {
+        for x in xl.max(0)..=xr.min(W - 1) {
             fb[(y * W + x) as usize] = c;
+        }
+    }
+}
+
+/// FUN_10d0_0002: the x of each scanline of an edge going down (not the last).
+fn edge(out: &mut Vec<i32>, (x1, y1): (i32, i32), (x2, y2): (i32, i32), skip: bool) {
+    let dy = y2 - y1;
+    if dy <= 0 {
+        return;
+    }
+    let dx = x2 - x1;
+    let (dir, adx) = (if dx < 0 { -1 } else { 1 }, dx.abs());
+    let mut err = if dx < 0 { 1 - dy } else { 0 };
+    let mut x = x1;
+    for i in 0..dy {
+        if i > 0 || !skip {
+            out.push(x);
+        }
+        x += adx / dy * dir;
+        err += adx % dy;
+        if err > 0 {
+            x += dir;
+            err -= dy;
         }
     }
 }

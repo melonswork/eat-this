@@ -252,6 +252,8 @@ pub struct Script {
     pub foreground_colors: Option<usize>,
     /// `BackgroundProc=`: which of the original's background routines runs (see bg.rs).
     pub background_proc: u32,
+    /// `ForegroundProc=`.
+    pub foreground_proc: u32,
     /// `LoadSpriteGroup=` lines in order, blank ones included (they still take a slot; the first
     /// slot is group 0x32 in the original's numbering).
     pub sprite_groups: Vec<String>,
@@ -268,6 +270,7 @@ impl Script {
             background: None,
             foreground_colors: None,
             background_proc: 0,
+            foreground_proc: 1,
             sprite_groups: Vec::new(),
             palmix: None,
             palmix_light: None,
@@ -281,6 +284,7 @@ impl Script {
             let value = value.trim();
             match key.trim().to_ascii_lowercase().as_str() {
                 "background" if !value.is_empty() => s.background = Some(value.to_string()),
+                "foregroundproc" => s.foreground_proc = value.parse().unwrap_or(0),
                 "backgroundproc" => s.background_proc = value.parse().unwrap_or(0),
                 "palmix" if !value.is_empty() => s.palmix = Some(value.to_string()),
                 "palmixlight" if !value.is_empty() => s.palmix_light = Some(value.to_string()),

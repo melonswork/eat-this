@@ -305,12 +305,28 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   bubbles' wobble, platforms clipped to w21..w24 (FUN_1078_0968), door kind 7's lid 0x26, START's rain layers
   (0x1e.. at 617e*4, 0x3c.. at 617e*5; the splash test uses the *4 layer), smoke 2192 half size, sinking blocks 1e16
   (`draw::tile_at` = FUN_10f0_445a). `--shot` frames, the Painter's `vga` array, `ET_DOORDRAW`/`ET_DOORNOW`.
-- Still different: FOREST03's top windows (LEVEL2_2 300: the original also has opaque kind-2 tile 0x1ba in its main
-  plane there, yet shows the forest); FX2 (CITY_I01) shows the movie 99 frames ahead of (617e/4) % 198 though the
-  CD demos and CITY02 match; TANKGRAB1's red bits (callback 23b7, same code: their motion differs somewhere);
-  small leftovers (<= 150 px) in PATHPLAT1 1083, START 3000, WEAPON3 235, TANK1/TANK2, CARRIER1/SPLASH1 early
-  (girder over the carrier's hull), LEVEL1_2 1600/6600, FOREST04 20300; doors' emerging aliens (0dab, mode 0x24
-  sprites 0x570a/0x5b4c) not drawn; the other typed cheats; MOVIE cheat's movie2.spr.
+- Fixed 2026-11-23 (third pass, branch claude/render-gaps3): particles are drawn only if 4ca5 drew them this frame
+  (`Particle::drawn`: not one spawned after its group's update, nor one that hit something), bounces draw where they
+  hit (`draw_now`/`draw_bounce`/`draw_rolling`: FUN_1050_4acb and the death effects' own draws); 1168:1083 of 617e is
+  `shr`, not a division (`draw::shr`: pick-ups, mines, drone light, sentry, small robot); script commands 0x0c/0x0f
+  (platform rectangle), 0x11, 0x17, 0x19, 0x1a (0x12, the music volume, is still skipped); SpawnDust's leaves are
+  real particles; walking into exits: the hero drawn by 0dab (`Hero::door_frame`), the screen's pixelation
+  (`Hero::fade`, 1170:536a, FUN_1080_007c = `draw::pixelate`), aliens lit behind opening doors; the line routine
+  03da, half-size sprites at the screen's sides, rotating chains 1e88/2079, the movie screen's wrapped copy (half
+  the film ahead), carrier light/flames; a death by an actor's hit spawns its gibs at once; a landed platform's
+  scripts shake at once.
+- `python3 tools/drawdiff.py DEMO FRAME` = the sprites the original draws in a frame (dumpframe `--draws`, cached in
+  work/frames/<DEMO>/frame<N>.draws) against the port's ET_DRAWLOG: the quickest way to name a pixel difference.
+  It lists the sky (bg.rs) and platform/tile draws as one-sided; pixels, lines and polygons aren't sprites.
+  Also from a sweep of the CD demos (every ~300 frames): the hero's health (4e6c) is now the original's frame by frame in
+  all seven demos (FUN_1050_4b17 divides by the WRONG edge when the target is left of the blast: more than full damage);
+  objects on a slope keep `gLastTileCell` (the y-1 cell when y+1 isn't one); messages split at the FIRST comma with a bad
+  language = 0; a teleport runs an extra HUD update; foreground procs (1170:18e2) by number, 6 = girders (1090:1d2a);
+  beams 465a (`Painter::reds`: hovering machine, sentry, big alien's shield, the last under the running RandSeed);
+  running blood splats; landing dust; FUN_10d0_01e4's polygon filler; 302b mirrored.
+- State: every sampled frame is pixel-exact: all scenarios (5 frames each) and ~790 frames of the seven CD demos, but for
+  one pixel of a flame (LEVEL2_1 11467 and 11778, at (186, 154..159)). Not drawn/ported: script command 0x12 (music
+  volume), the typed cheats but SCAN, the MOVIE cheat's movie2.spr; GRANNY's building (COLLAPSE2) isn't an oracle.
   Debug: `ET_DRAWLOG=1` lists every sprite drawn, `ET_DRAW=1` the actor kinds without a draw, `ET_DECOR=1`,
   `ET_MSG=1` the messages shown, `ET_HEALTH=1` the health each frame, `ET_NOPROCS=1` ignores command 0x15,
   `ET_AUTOMAP=1`, `ET_TOTALS=1`; `--bg-only` stops where dumpframe's .bg does (first FUN_1068_09bf), but the
