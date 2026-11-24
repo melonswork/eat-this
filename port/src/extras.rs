@@ -26,6 +26,8 @@ pub struct Extras {
     pub aim: i32,
     /// Percentage.
     pub rumble: i32,
+    /// A DualSense's adaptive triggers: percentage.
+    pub triggers: i32,
     pub rewind: i32,
     /// Record every level started.
     pub record: i32,
@@ -49,6 +51,7 @@ impl Default for Extras {
             wide_sim: 0,
             aim: 1,
             rumble: 60,
+            triggers: 100,
             rewind: 0,
             record: 0,
             slot: 1,
@@ -76,6 +79,7 @@ impl Extras {
             ("WideSimulation".into(), &mut self.wide_sim, 0, 1),
             ("Aim".into(), &mut self.aim, 0, 1),
             ("Rumble".into(), &mut self.rumble, 0, 100),
+            ("Triggers".into(), &mut self.triggers, 0, 100),
             ("Rewinding".into(), &mut self.rewind, 0, 1),
             ("Record".into(), &mut self.record, 0, 1),
             ("Slot".into(), &mut self.slot, 1, 9),

@@ -17,6 +17,10 @@ Where the result differs from the plan below:
 - **16:10** is the original's own shape, so widescreen is 16:9 (+36 columns) or 21:9 (+148). Columns outside the hero's
   sector are black. The view moves over at a sector's edge instead.
 - **Recordings** hold no weapon keys (1-0, PgUp, PgDn), because the original's format doesn't: Tab switches weapons.
+- **DualSense triggers** (added later): `dualsense.rs` turns the two shoot buttons' state into the controller's own trigger
+  effects (USB or Bluetooth, DualSense and DualSense Edge; Options > Extras > Controls sets the strength, 0 is off). Guns
+  break, launchers are stiff and kick, the flame thrower and the automatic weapons rattle while they fire, an empty weapon
+  is slack. Not felt on a real controller: the bytes are unit-tested and `ET_HAPTICS=1` with `--rerecord` lists the effects.
 - Not tried with a physical controller: its inputs were tested through the scripted front end, the rumble not at all.
 
 Code: `session.rs` (input log, states, rewind, recordings), `gpu.rs`, `scale.rs`, `light.rs`, `pad.rs`, `extras.rs`,

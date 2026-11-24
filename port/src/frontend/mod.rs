@@ -17,7 +17,7 @@ use crate::palette::Pal6;
 use crate::picture::Picture;
 use crate::extras::Extras;
 use crate::session::{self, Input, Log, Session};
-use crate::{Game, Graphics, gpu, light, pad, render, sound};
+use crate::{Game, Graphics, dualsense, gpu, light, pad, render, sound};
 use gfx::{Gfx, MENU_FONT, Mode, W, H};
 use menu::{Id, Kind, Menu, Ui};
 use std::collections::HashMap;
@@ -94,6 +94,9 @@ pub struct FrontEnd {
     pad_prev: pad::State,
     /// What the controller should do now (low, high).
     rumble: (f32, f32),
+    /// And a DualSense's (left, right) triggers.
+    triggers: [dualsense::Effect; 2],
+    haptics: dualsense::Haptics,
     /// The menu item waiting for its new key or button.
     capture: Option<(Id, usize)>,
     /// The last frame's view: its left margin and width.
@@ -171,6 +174,8 @@ impl FrontEnd {
             pad: pad::State::default(),
             pad_prev: pad::State::default(),
             rumble: (0.0, 0.0),
+            triggers: Default::default(),
+            haptics: Default::default(),
             capture: None,
             drawn: (0, W),
             notice: (String::new(), 0),
@@ -535,6 +540,7 @@ impl FrontEnd {
         let log = Log { map: map.to_path_buf(), seed, tries: 0, record, frames: Vec::new() };
         self.session = live.then(|| Session::new(log));
         self.weapon = None;
+        self.haptics = Default::default();
         crate::level_music(map);
         let left = game.view_left(self.x.margin());
         self.level = Some(Running { game, gfx, map: map.to_path_buf(), left });
@@ -1229,6 +1235,7 @@ pub fn run(data: &Path, scale: u32, mute: bool) -> Result<(), Box<dyn Error>> {
             fe.tick(&|sc: Scancode| ks.is_scancode_pressed(sc), lmb, rmb, &mut evs);
             let k = fe.x.rumble as f32 / 100.0;
             controller.rumble(fe.rumble.0 * k, fe.rumble.1 * k, 60);
+            controller.triggers(fe.triggers.map(|t| t.scaled(fe.x.triggers)));
             if let Some(dev) = audio.as_mut() {
                 let mut m = dev.lock();
                 for e in evs {
@@ -1333,7 +1340,7 @@ fn shot(data: &Path, script: &str) -> Result<(), Box<dyn Error>> {
                     let mut h = DefaultHasher::new();
                     session::fingerprint(&r.game).hash(&mut h);
                     let m = fe.aim();
-                    println!("frame {} hero ({}, {}) weapon {} mouse {m:?} state {:016x} in game {}", r.game.frame, r.game.hero.x, r.game.hero.y, r.game.hero.weapon, h.finish(), fe.in_game);
+                    println!("frame {} hero ({}, {}) weapon {} mouse {m:?} state {:016x} in game {} triggers {:?}", r.game.frame, r.game.hero.x, r.game.hero.y, r.game.hero.weapon, h.finish(), fe.in_game, fe.triggers);
                 }
             }
             "pad" => {
@@ -1452,6 +1459,8 @@ impl FrontEnd {
     /// One 70 Hz frame (GameFrame): the level or the menus; the sound events go to `evs`.
     fn tick(&mut self, pressed: &dyn Fn(sdl2::keyboard::Scancode) -> bool, lmb: bool, rmb: bool, evs: &mut Vec<sound::Ev>) {
         use sdl2::keyboard::Scancode;
+        self.rumble = (0.0, 0.0);
+        self.triggers = Default::default();
         self.pad_edges();
         if let Some(v) = self.video.as_mut() {
             evs.append(&mut self.video_evs);
@@ -1465,7 +1474,6 @@ impl FrontEnd {
         evs.append(&mut self.video_evs);
         self.frame += 1;
         self.notice.1 -= 1;
-        self.rumble = (0.0, 0.0);
         // The mouse buttons as GameFrame counts them: 1 the frame they go down, then 2.
         let i = &mut self.ui.input;
         i.lmb = if lmb { if i.lmb >= 1 { 2 } else { 1 } } else { 0 };
@@ -1515,6 +1523,9 @@ impl FrontEnd {
                 }
             }
             self.rumble = pad::feel(&r.game, health);
+            if self.session.is_some() {
+                self.triggers = self.haptics.update(&r.game, &self.pad, &self.x.pad);
+            }
             let left = r.game.view_left(margin);
             r.left += (left - r.left).clamp(-2, 2);
             evs.extend(r.game.sound.drain(..));
@@ -1793,6 +1804,7 @@ impl FrontEnd {
         self.level = Some(Running { game, gfx, map: log.map.clone(), left });
         self.session = Some(Session::new(log));
         self.weapon = None;
+        self.haptics = Default::default();
         self.menu(Id::Stats).b = 0x7fff;
         self.level_state = 2;
         self.in_game = true;
@@ -1811,6 +1823,7 @@ impl FrontEnd {
         }
         self.last_rewind = true;
         self.weapon = None;
+        self.haptics = Default::default();
         evs.extend(sound::end_frame());
         self.notice = ("<<".to_string(), 2);
         true
@@ -1834,7 +1847,7 @@ impl FrontEnd {
         for (id, y, spacing, labels) in [
             (Id::Extras, 0x56, 0x10, 5),
             (Id::XPicture, 0x38, 0x10, 8),
-            (Id::XControls, 0x4a, 0x10, 6),
+            (Id::XControls, 0x42, 0x10, 7),
             (Id::XKeys, 0x26, 0xd, 12),
             (Id::XPad, 0x30, 0xe, 9),
             (Id::XStates, 0x5a, 0x10, 4),
@@ -1847,6 +1860,7 @@ impl FrontEnd {
                     (Id::XPicture, 3) => Some(("GLOW", self.x.glow)),
                     (Id::XPicture, 4) => Some(("LIGHT", self.x.light)),
                     (Id::XControls, 1) => Some(("RUMBLE", self.x.rumble)),
+                    (Id::XControls, 2) => Some(("DUALSENSE TRIGGERS", self.x.triggers)),
                     _ => None,
                 };
                 match t {
@@ -1856,6 +1870,9 @@ impl FrontEnd {
             }
             if id == Id::XPicture {
                 m.align(3, 4);
+            }
+            if id == Id::XControls {
+                m.align(2, 1);
             }
             self.menus.insert(id, m);
         }
@@ -1881,6 +1898,7 @@ impl FrontEnd {
             ],
             Id::XControls => vec![
                 format!("STICK AIMS: {}", ["FREELY", "AROUND THE HERO"][x.aim as usize]),
+                String::new(),
                 String::new(),
                 format!("REWINDING: {}", on(x.rewind)),
                 "KEYS".into(),
@@ -1928,7 +1946,7 @@ impl FrontEnd {
         let v: Vec<i32> = m.items.iter().map(|i| i.value()).collect();
         match id {
             Id::XPicture => (self.x.glow, self.x.light) = (v[3], v[4]),
-            Id::XControls => self.x.rumble = v[1],
+            Id::XControls => (self.x.rumble, self.x.triggers) = (v[1], v[2]),
             _ => {}
         }
         if !act || sel < 0 {
@@ -1951,9 +1969,9 @@ impl FrontEnd {
             (Id::XPicture, 5) => x.wide = (x.wide + 1) % 3,
             (Id::XPicture, 6) => x.wide_sim ^= 1,
             (Id::XControls, 0) => x.aim ^= 1,
-            (Id::XControls, 2) => x.rewind ^= 1,
-            (Id::XControls, 3) => return self.show(Id::XKeys),
-            (Id::XControls, 4) => return self.show(Id::XPad),
+            (Id::XControls, 3) => x.rewind ^= 1,
+            (Id::XControls, 4) => return self.show(Id::XKeys),
+            (Id::XControls, 5) => return self.show(Id::XPad),
             (Id::XKeys | Id::XPad, k) => self.capture = Some((id, k as usize)),
             (Id::XStates, 0) => x.slot = x.slot % 9 + 1,
             (Id::XStates, 1) => self.save_state(),

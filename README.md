@@ -38,7 +38,7 @@ demos never show are recorded with the original game itself (`tools/mkdemo.py`).
 
 **Extras** (Options > Extras): upscaling and CRT shaders, glow, widescreen, rewind (Backspace) and
 recordings, all off by default; save states (F8/F9, F10 for the slot), remappable keys, and game
-controllers, which work when plugged in. See [`docs/extras.md`](docs/extras.md).
+controllers, which work when plugged in (with adaptive triggers on a DualSense). See [`docs/extras.md`](docs/extras.md).
 
 ## Build and run
 

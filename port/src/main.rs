@@ -23,6 +23,7 @@ mod data;
 mod decals;
 mod doors;
 mod drone;
+mod dualsense;
 mod demo;
 mod draw;
 mod effects;
@@ -2092,6 +2093,7 @@ fn run_window(
     let mut out = gpu::Output::new(&video, "Eat This", W as u32 * scale, H as u32 * scale, false)?;
     let extras = extras::Extras::load();
     let mut controller = pad::Pad::new(&sdl);
+    let mut haptics = dualsense::Haptics::default();
     let mut events = sdl.event_pump()?;
     let mut fb = vec![0u8; (W * H) as usize];
     let mut rgb = vec![0u8; (W * H * 3) as usize];
@@ -2172,7 +2174,14 @@ fn run_window(
                 }
             }
             if !game.demo_done() {
+                let health = game.hero.health;
                 game.step(keys);
+                if game.demo.is_none() {
+                    let k = extras.rumble as f32 / 100.0;
+                    let (low, high) = pad::feel(&game, health);
+                    controller.rumble(low * k, high * k, 60);
+                    controller.triggers(haptics.update(&game, &state, &extras.pad).map(|t| t.scaled(extras.triggers)));
+                }
             }
             if let Some(dev) = audio.as_mut() {
                 let mut m = dev.lock();

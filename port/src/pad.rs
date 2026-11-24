@@ -1,11 +1,16 @@
 //! Extras: game controllers. A controller becomes the inputs the original reads (the nine keys,
 //! the cursor, the weapon keys), so the simulation can't tell the difference.
 
+use crate::dualsense::{self, Effect};
 use sdl2::controller::{Axis, Button as B, GameController};
 
 pub const BUTTONS: [&str; 12] = ["NONE", "A", "B", "X", "Y", "LB", "RB", "LT", "RT", "L3", "R3", "BACK"];
 pub const ACTIONS: [&str; 8] = ["FIRE", "SECOND FIRE", "JUMP", "CROUCH", "PREVIOUS WEAPON", "NEXT WEAPON", "REWIND", "SWITCH WEAPON"];
 pub const DEFAULTS: [i32; ACTIONS.len()] = [8, 7, 1, 2, 5, 6, 11, 4];
+
+/// `BUTTONS` indices of the triggers.
+pub const LT: i32 = 7;
+pub const RT: i32 = 8;
 
 pub const FIRE: usize = 0;
 pub const ALT: usize = 1;
@@ -77,12 +82,15 @@ pub struct Pad {
     ctl: Option<GameController>,
     /// No more rumbling than needed: the last strength.
     last: (u16, u16),
+    /// A DualSense's triggers as last set (None: not yet).
+    triggers: Option<[Effect; 2]>,
+    dualsense: bool,
 }
 
 impl Pad {
     pub fn new(sdl: &sdl2::Sdl) -> Pad {
         let sys = sdl.game_controller().map_err(|e| eprintln!("no controllers: {e}")).ok();
-        let mut p = Pad { sys, ctl: None, last: (0, 0) };
+        let mut p = Pad { sys, ctl: None, last: (0, 0), triggers: None, dualsense: false };
         p.find();
         p
     }
@@ -90,6 +98,28 @@ impl Pad {
     fn find(&mut self) {
         let Some(s) = &self.sys else { return };
         self.ctl = (0..s.num_joysticks().unwrap_or(0)).filter(|&i| s.is_game_controller(i)).find_map(|i| s.open(i).ok());
+        self.triggers = None;
+        self.last = (0, 0);
+        self.dualsense = self.ctl.as_ref().is_some_and(|c| {
+            c.vendor_id() == Some(dualsense::SONY) && c.product_id().is_some_and(|p| dualsense::PRODUCTS.contains(&p))
+        });
+    }
+
+    /// A DualSense's (left, right) triggers; nothing on other controllers.
+    pub fn triggers(&mut self, t: [Effect; 2]) {
+        // A controller is left alone until there is something to feel.
+        if !self.dualsense || self.triggers.unwrap_or_default() == t {
+            return;
+        }
+        if let Some(c) = &mut self.ctl {
+            match c.send_effect(&dualsense::packet(t)) {
+                Ok(()) => self.triggers = Some(t),
+                Err(e) => {
+                    eprintln!("no trigger effects: {e}");
+                    self.dualsense = false;
+                }
+            }
+        }
     }
 
     /// Hot-plugging.
@@ -143,6 +173,13 @@ impl Pad {
         if let Some(c) = &mut self.ctl {
             let _ = c.set_rumble(v.0, v.1, ms);
         }
+    }
+}
+
+impl Drop for Pad {
+    /// The triggers don't stay stiff after the game.
+    fn drop(&mut self) {
+        self.triggers([Effect::Off; 2]);
     }
 }
 

@@ -266,10 +266,22 @@ pub fn rerecord(data: &Path, map: &Path, d: &demo::Demo, root: &Path) -> Result<
     let log = Log { map: map.to_path_buf(), seed: 0, tries: 0, record: Some((m.0 as i32, m.1 as i32)), frames: Vec::new() };
     let mut game = log.start(data)?;
     let mut s = Session::new(log);
+    let debug = std::env::var_os("ET_HAPTICS").is_some();
+    let (mut haptics, mut last) = (crate::dualsense::Haptics::default(), Default::default());
     for f in 0..d.frames {
         let (keys, mouse) = d.input(f);
         s.step(&mut game, Input { keys, mouse, weapon: -1, wide: 0 });
         game.sound.clear();
+        if debug {
+            // ET_HAPTICS=1: what a DualSense's triggers would do.
+            let mut pad = crate::pad::State::default();
+            (pad.held[8], pad.held[7]) = (keys[4] > 0, keys[5] > 0);
+            let t = haptics.update(&game, &pad, &crate::pad::DEFAULTS);
+            if t != last {
+                println!("{} weapon {} ammo {:?} L2 {:?} R2 {:?}", game.frame, game.hero.weapon, game.hero.weapons.map(|w| w.ammo), t[0], t[1]);
+                last = t;
+            }
+        }
         if game.restart || game.level_over {
             break;
         }
