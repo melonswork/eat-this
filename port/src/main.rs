@@ -2285,6 +2285,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
+        // ET_TILES=A,B: the tiles of the level's groups whose function 0 is A..B (solidity, functions 2..4).
+        if let Some((a, b)) = std::env::var("ET_TILES").ok().and_then(|v| v.split_once(',').and_then(|(a, b)| Some((a.parse::<u16>().ok()?, b.parse::<u16>().ok()?)))) {
+            for c in 1..0x2000u16 {
+                let f = world.cell_function(c, 0);
+                if f >= a && f <= b {
+                    println!("TILE {c:#x} f0 {f} f1 {:#x} f2 {} f3 {:#x} f4 {}", world.cell_function(c, 1), world.cell_function(c, 2) as i16, world.cell_function(c, 3), world.cell_function(c, 4));
+                }
+            }
+        }
         // ET_SOLID=tx,ty: the solidity around a cell ('.' none, '#' solid, '=' top only, '/' slope,
         // '*' explodable, else its bits in hex).
         if let Ok(v) = std::env::var("ET_SOLID") {

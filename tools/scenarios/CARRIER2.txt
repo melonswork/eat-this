@@ -1,0 +1,9 @@
+# The carrier's blast in the air (FUN_1070_0b70: its physics return 2 on a trap tile, function 8000):
+# CITY_LIB's room above the trap strip, a carrier icon put in its middle, trap tiles (0x15c8) in its way.
+level MAPS/CITY_LIB.MAP
+start 650 1560
+cell 2 44 95 0x31f
+cell 1 41 94 0x15c8
+cell 1 41 95 0x15c8
+mouse 300 40
+150
