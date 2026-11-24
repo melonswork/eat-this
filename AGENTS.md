@@ -35,6 +35,7 @@ work/cd/BIN), `start X Y` / `cell PLANE TX TY VALUE` (patch the demo's COPY of t
 start in MAP HEADER, a cell; tools/mapedit.py, a literal-only LZW the original reads fine), `name X`, `mouse X Y` (game-screen pixels, from the next frame on), `N keys...` (hold
 these for N frames; none = all up). Keys: up down left right fire alt key6 key7 switch (gKeyMap),
 kp8 kp2 kp4 kp6 kp0 (numpad: these report 0 on release; BROYEUR was played with them), lmb rmb.
+`record W,W,...` appends an OBJECTS record.
 Script frame i = game frame i+1 = port frame i. `mkdemo.py LEVEL --from-rec X.REC` prints a script
 replaying a recording: re-recording BROYEUR, HYDRO_02 and CITY01 that way gives their exact input
 streams and EVERY CHECK, so the method is the original's own.
@@ -83,6 +84,8 @@ streams and EVERY CHECK, so the method is the original's own.
 | `CARRIER1` | CITY02, start moved to (1020,1039) | the carrier 0x14be (FUN_1070_0cce, `carrier.rs`): flies bobbing, drops its three aliens by distance, shot down it falls and crashes (0a34: dust, plates, blast); water splashes of aliens and the hero (FUN_1070_0105) | exact |
 | `WALLGUN1` | FOREST02, start moved to (650,1340) | the gun turret 0x13ec (FUN_1070_2550, `wallgun.rs`) by the trunk: fires on its cycle, ~110 pistol shots kill it (smoke, gun pieces) and break it (-0x80: plates, pieces with effect 65 = FUN_1040_105d) | exact |
 | `PATHPLAT1` | CITY_I01, start moved onto a platform (2680,1135) | path platforms (OBJECTS type 100, kind 0, `platobj::update_path` = FUN_1060_0819): mode 4 loops round the rectangle carrying the hero, jumps on it, steps off | exact |
+| `WEIGHTPLAT1..3` | CITY_I01 (3: FOREST02), `record` lines added | platforms that drop under his weight (OBJECTS 102): riding, dropping, rising, left early, defaults, the rope of row 2 | exact |
+| `BLINKPLAT1` | CITY_I01, `record` lines added | platforms that come and go (OBJECTS 103); a 6-word record's phase read past its end | exact |
 | `WEIGHT1` | CITY_I03, start moved to (1960,881) | the falling weight (icon 61000, kind 0x13a6, FUN_1068_215e, `weight.rs`): drops on the hero (hit kind 2, knocked flat), breaks the plank bridge (effect 50, nested FUN_1088_1364 negative-tile blasts), he falls through (any state < 1 but -1..-5 falls) | exact |
 | `PUMPDOOR1` | CITY_I04, start moved to (380,863) | the pumping door 0x14b4 (FUN_1070_a0bd, `Level::door_pump` = FUN_10a8_11e9); no Random involved, only the hero's walk through it checks it | exact |
 | `SLAB1` | GRANNY, start moved to (1060,975) | the falling sign 0x14a0 (FUN_1068_1f3c, `Level::slab`): walks under it, it drops and knocks him flat (hit kind 2), he climbs on it | exact |
