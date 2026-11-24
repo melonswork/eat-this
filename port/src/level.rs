@@ -168,7 +168,7 @@ pub struct Level {
     pub enemies_made: i32,
     /// Script command 0x15: the background and foreground procs (1170:189e / 18e2 indices) in
     /// place of the script's until the hero changes sector (FUN_1088_1280 restores 4c2a..4c30).
-    /// Only the renderer follows it: the procs' simulation parts (storm, collapse) are not switched.
+    /// The renderer and the storm follow it (`bg_proc`), the collapse doesn't.
     pub procs: Option<(u32, u32)>,
     /// gHeroX as the objects and effects see it this frame.
     pub hero_x: i32,

@@ -147,6 +147,10 @@ pub struct Hero {
     exit_kind: i32,
     /// 1170:5123: 3 while a lever is in reach this frame (then 1: Up jumps again).
     lever_reach: i32,
+    /// 1170:5124: 4 while something is in reach to use with Down (a platform he drives).
+    down_reach: i32,
+    /// 1170:511d: the use pose was started with Down.
+    use_down: bool,
     /// 1170:4e20: frames Down has been held while crouching still (to 0x10).
     down_timer: i32,
     /// 1170:4e24: > 0 while sliding down a slope on his belly.
@@ -347,6 +351,8 @@ impl Hero {
             prev: (x, y),
             push: None,
             lever_reach: 0,
+            down_reach: 0,
+            use_down: false,
             down_timer: 0,
             sliding: 0,
             use_count: 0,
@@ -439,6 +445,21 @@ impl Hero {
 
     pub fn ground(&self) -> i32 {
         self.ground
+    }
+
+    /// HeroUseObject(down, reach).
+    fn use_object(&mut self, down: bool, reach: i32) {
+        let kind = reach & 0xfe;
+        if self.state == GROUND || self.state == USE {
+            self.use_down = down;
+            if self.state == GROUND || kind != self.turn_kind {
+                self.state = USE;
+                self.turn_kind = kind;
+                self.turn = if kind == 2 { -11 } else { 2 };
+                self.use_count = 0;
+                self.released[UP] = false;
+            }
+        }
     }
 
     /// HeroStand (1088:0432).
@@ -705,7 +726,9 @@ impl Hero {
             }
         }
 
-        if held(DOWN) && self.state == GROUND {
+        if held(DOWN) && self.down_reach >= 2 {
+            self.use_object(true, self.down_reach);
+        } else if held(DOWN) && self.state == GROUND {
             self.crouch_down();
         }
 
@@ -1019,14 +1042,7 @@ impl Hero {
 
         if held(UP) && self.released[UP] && self.lever_reach >= 2 {
             // HeroUseObject(0, 5123).
-            let kind = self.lever_reach & 0xfe;
-            if self.state == GROUND || (self.state == USE && kind != self.turn_kind) {
-                self.state = USE;
-                self.turn_kind = kind;
-                self.turn = if kind == 2 { -11 } else { 2 };
-                self.use_count = 0;
-                self.released[UP] = false;
-            }
+            self.use_object(false, self.lever_reach);
         } else if held(UP) && self.released[UP] && self.state == GROUND {
             // Reach for a ledge above first (FUN_1088_3e0d), else jump.
             let (ndx, ndy) = self.grab_ledge(w, lv, self.y - 0x30, dx, dy);
@@ -1143,7 +1159,7 @@ impl Hero {
                     self.frame = self.use_frame;
                 }
             }
-            if !held(UP) || self.lever_reach == 0 {
+            if (!held(UP) || self.lever_reach == 0) && (!held(DOWN) || self.down_reach == 0) {
                 self.stand();
             }
             self.gun.shooting = false;
@@ -1384,6 +1400,7 @@ impl Hero {
         self.ground = 0;
         self.head_blocked = 0;
         self.lever_reach &= 1;
+        self.down_reach &= 1;
         (dx, dy) = self.run_platforms(w, lv, &input, cam, ps, rng, plat_objs, dx, dy);
         // Something solid beside him (a springboard he walked into) caps the carry.
         if dx < self.lim.0 {
@@ -1434,6 +1451,9 @@ impl Hero {
                 half_width: self.half_width,
                 prev_ground: self.prev_ground,
                 ground: None,
+                reach: (self.lever_reach, self.down_reach),
+                use_count: self.use_count,
+                use_down: self.use_down,
             };
             let hero_sector = lv.sector.unwrap_or(0);
             let sectors: &[usize] = if hero_sector == 0 { &[0] } else { &[0, hero_sector] };
@@ -1446,7 +1466,7 @@ impl Hero {
                             crate::platobj::update_lift(p, &mut side, w, rng, input[DOWN] > 0, &mut released, &mut self.shakes);
                             self.released[DOWN] = released;
                         } else if p.kind == 0 {
-                            crate::platobj::update_path(p, &mut side, w);
+                            crate::platobj::update_path(p, &mut side, ps.now, w);
                         } else {
                             crate::platobj::update(p, &mut side, ps.now, w);
                         }
@@ -1454,6 +1474,7 @@ impl Hero {
                 }
             }
             (dx, dy) = (side.dx, side.dy);
+            (self.lever_reach, self.down_reach) = side.reach;
             if let Some(g) = side.ground {
                 self.ground = g;
             }

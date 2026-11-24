@@ -1,0 +1,24 @@
+# A path platform the hero drives (FUN_1060_0819, mode 0x82: Up / Down in its middle, the use pose):
+# CITY_I01's platform record patched (mode 14 of the table 1170:0a68, a 48 px row, a path going up).
+level MAPS/CITY_I01.MAP
+start 2722 1146
+object 100,0,5,3,2672,1136,2608,1136,2608,688,2672,688 100,14,1,3,2700,1150,2700,1130,2700,1110,2700,1080
+mouse 200 100
+30
+40 up
+30
+40 down
+20
+60 up
+20
+60 down
+4 right
+40 up
+60
+4 left
+20 up
+40 down
+4 left
+60
+10 up
+60

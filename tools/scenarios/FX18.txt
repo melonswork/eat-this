@@ -1,0 +1,16 @@
+# Tile effect 61 (FUN_1040_600e: the cell blows up 0x14 frames later, tile -1): CITY_I03's crossing
+# beams at (286..291,15..22), mask 4; start moved left of them on a weapon-3 pick-up.
+level MAPS/CITY_I03.MAP
+start 4500 367
+cell 2 281 22 0xd06
+mouse 260 80
+20
+1 right
+5 rmb
+40
+5 rmb
+40
+5 rmb
+40
+5 rmb
+150

@@ -1,0 +1,12 @@
+# Tile effect 86 (FUN_1040_3557: the 2x2 block of function 60309 steps on by 2, dust): CITY03's
+# block at (98..99,42..43), mask 4; start moved left of it on a weapon-3 pick-up.
+level MAPS/CITY03.MAP
+start 1530 703
+cell 2 95 43 0xd06
+mouse 300 130
+20
+1 right
+5 rmb
+40
+5 rmb
+100

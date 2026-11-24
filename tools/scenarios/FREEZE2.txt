@@ -1,0 +1,24 @@
+# Frozen aliens (FUN_1070_5fda -> 564d, mask 0x400; the statues -0xd2 and -0x140): an alien and a big alien are put right of
+# GRANNY's start, moved onto a weapon-5 pick-up: rockets freeze them, pistol and rockets shatter.
+level MAPS/GRANNY.MAP
+start 400 511
+cell 2 25 31 0xd08
+cell 2 31 31 0x31d
+cell 2 35 31 0x31c
+mouse 310 120
+20
+1 right
+5 rmb
+40
+5 rmb
+40
+60 lmb
+5 rmb
+40
+5 rmb
+40
+80 lmb
+5 rmb
+40
+5 rmb
+100

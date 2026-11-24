@@ -110,8 +110,9 @@ impl crate::level::Level {
         };
         self.particles.p.aim_level = 0x100;
         self.particles.p.aim_level2 = 0x100;
-        if env.shake_started {
-            let n = (env.shake_amp * 0x10 - 0xc + env.rng.random(0x18)).max(0x40);
+        let (started, amp) = env.shake_now();
+        if started {
+            let n = (amp * 0x10 - 0xc + env.rng.random(0x18)).max(0x40);
             self.statue_push(id, n);
             if self.o(id).w(0x24) == n && env.rng.random(2) == 0 {
                 let o = self.o(id);
@@ -131,12 +132,12 @@ impl crate::level::Level {
     }
 }
 
-/// FUN_1068_0f32's draw: the sprite through tint row 2 (icy), squashed and stretched by the wobble.
+/// FUN_1068_0f32's draw: the sprite through the level mix table (glassy), squashed and stretched by the wobble.
 pub fn draw_statue(p: &mut crate::render::Painter, o: &crate::objects::Obj, sprite: i32) {
     let a = ((o.w(0x22) * 0x80) as i64).rem_euclid(0x1680) as i32;
     let w = (crate::trig::sin(a) * ((o.uw(0x24) >> 1) as i32)) / 0x4000;
     p.mode = 0x10;
-    p.mix = crate::render::Mix::Tint;
+    p.mix = crate::render::Mix::Level; // the scaled blitter's mode 0x10 (10f0:2fbb) reads PalMix (1b0e)
     p.colour = 2;
     p.hflip = o.w(0x20) < 0;
     p.scaled_at(0x120 - (w << 1) / 3, w + 0x100, sprite, o.w(0xe), o.w(0x10));

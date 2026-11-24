@@ -1,0 +1,44 @@
+# A big alien frozen by weapon 5 (FUN_1070_7eb2: mask 0x400 -> state -0x140, the statue) and shattered
+# (FUN_1070_564d): CITYHS's corridor, a big alien put at its right end, weapon-5 pick-ups at the start.
+level MAPS/CITYHS.MAP
+start 2240 1390
+cell 2 143 84 0
+cell 2 140 86 0xd08
+cell 2 145 86 0xd08
+cell 2 148 86 0xd08
+cell 2 166 83 0x31c
+20
+mouse 300 85
+130 right
+20
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
+5 rmb
+30
+5 rmb
+30
+5 rmb
+150
+200

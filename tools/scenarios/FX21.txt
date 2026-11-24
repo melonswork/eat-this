@@ -1,0 +1,7 @@
+# Tile effect 71 (FUN_1040_6861 from 4bdf: the block bursts, bits, smoke, a big shake): CITY_I02's
+# block at (103..105,4..5), mask 0x100 = the hero's start inside it (the end of LevelFirstFrame;
+# the tank's ram is the other one with that mask).
+level MAPS/CITY_I02.MAP
+start 1672 92
+mouse 20 40
+150

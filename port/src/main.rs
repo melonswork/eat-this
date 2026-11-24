@@ -706,7 +706,7 @@ impl Game {
             eprintln!("DOORS frame {} hero {:?}", self.frame + 1, hero_at);
         }
         self.level.cam = (self.camera.x, self.camera.y);
-        storm::bridge_sound(&self.world, self.level.sector.unwrap_or(0), self.level.cam, self.level.particles.now);
+        storm::bridge_sound(self.level.bg_proc(), &self.world, self.level.sector.unwrap_or(0), self.level.cam, self.level.particles.now);
         self.background_proc();
         let mut cx = factory::Ctx { hero_x: self.hero.x, rng: &mut self.rng };
         self.level.update_doors(&mut self.world, hero_at, false, &mut cx);
@@ -808,8 +808,7 @@ impl Game {
                 noise,
                 camera: cam,
                 hero_obj: &mut self.hero,
-                shake_started: self.camera.shake_started(),
-                shake_amp: self.camera.shake_amplitude(),
+                shake: self.camera.vertical,
             };
             self.level.update_decals(&mut env, window);
         }
@@ -855,8 +854,7 @@ impl Game {
             noise,
             camera: cam,
             hero_obj: &mut self.hero,
-            shake_started: self.camera.shake_started(),
-            shake_amp: self.camera.shake_amplitude(),
+            shake: self.camera.vertical,
         };
         self.level.update_actors(&mut env, window);
         // An actor hit or killed the hero (FUN_1088_3c32): what flies off him does so at once.
@@ -905,7 +903,6 @@ impl Game {
             }
             self.hero_death_effects();
         }
-        self.level.storm_frame(&mut self.rng);
         self.level.rain_splashes(&self.world, (self.camera.x, self.camera.y));
         self.level.water_frame(&self.world);
         // START's foreground (FUN_1090_0ace): the ship the hero was thrown from is a platform
@@ -927,9 +924,10 @@ impl Game {
         }
     }
 
-    /// The level's background proc (*4c32, also run by LevelFirstFrame): GRANNY's collapse
+    /// The level's background proc (*4c32, also run by LevelFirstFrame): the storm, GRANNY's collapse
     /// (FUN_1088_a481) and its debris (FUN_1050_4ca5(2)).
     fn background_proc(&mut self) {
+        self.level.storm_frame(&mut self.rng);
         if self.level.collapse.as_ref().is_some_and(|c| c.x != 0x7fff) {
             let cam = (self.camera.x, self.camera.y);
             for (a, b) in self.level.collapse_frame(&self.world, &mut self.rng, cam) {
@@ -2348,6 +2346,26 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             println!("EFFECTS {seen:?}");
+            // Effects of the tiles the explodable ones step on to (function 2), all steps.
+            let mut steps = std::collections::BTreeMap::new();
+            for &c0 in &world.main().cells {
+                let mut c = c0;
+                for _ in 0..40 {
+                    if world.cell_function(c, 3) == 0 || world.cell_function(c, 1) & 0x80 == 0 {
+                        break;
+                    }
+                    let e = world.cell_function(c, 4) as i16;
+                    if e > 0 && !seen.contains(&("blast", e)) {
+                        steps.entry(e).or_insert((c0, c));
+                    }
+                    let off = world.cell_function(c, 2);
+                    if off == 0 || off == 0x7fff {
+                        break;
+                    }
+                    c = (c as i32 + off as i16 as i32) as u16;
+                }
+            }
+            println!("STEPFX {steps:x?}");
             if let Some(want) = std::env::var("ET_FX").ok().and_then(|v| v.parse::<i16>().ok()) {
                 let p = world.main();
                 for (i, &c) in p.cells.iter().enumerate() {
@@ -2356,6 +2374,36 @@ fn main() -> Result<(), Box<dyn Error>> {
                         println!("FX {want} tile {c:#x} f3 {:#x} at ({tx},{ty}) px ({},{})", world.cell_function(c, 3), tx * 16 + 8, ty * 16 + 8);
                     }
                 }
+            }
+        }
+        // ET_TILES=A,B: the tiles of the level's groups whose function 0 is A..B (solidity, functions 2..4).
+        if let Some((a, b)) = std::env::var("ET_TILES").ok().and_then(|v| v.split_once(',').and_then(|(a, b)| Some((a.parse::<u16>().ok()?, b.parse::<u16>().ok()?)))) {
+            for c in 1..0x2000u16 {
+                let f = world.cell_function(c, 0);
+                if f >= a && f <= b {
+                    println!("TILE {c:#x} f0 {f} f1 {:#x} f2 {} f3 {:#x} f4 {}", world.cell_function(c, 1), world.cell_function(c, 2) as i16, world.cell_function(c, 3), world.cell_function(c, 4));
+                }
+            }
+        }
+        // ET_SOLID=tx,ty: the solidity around a cell ('.' none, '#' solid, '=' top only, '/' slope,
+        // '*' explodable, else its bits in hex).
+        if let Ok(v) = std::env::var("ET_SOLID") {
+            if let Some((a, b)) = v.split_once(',') {
+                let (cx, cy): (i32, i32) = (a.parse().unwrap_or(0), b.parse().unwrap_or(0));
+                for ty in cy - 12..cy + 13 {
+                    let row: String = (cx - 24..cx + 25)
+                        .map(|tx| match world.solidity_at(ty * 16 + 8, tx * 16 + 8) {
+                            0 => '.',
+                            s if s & 0x80 != 0 => '*',
+                            s if s & 0x20 != 0 => '/',
+                            s if s & 0xf == 0xf => '#',
+                            s if s & 0xf == 1 => '=',
+                            s => char::from_digit((s & 0xf) as u32, 16).unwrap_or('?'),
+                        })
+                        .collect();
+                    println!("SOLID {ty:4} {row}");
+                }
+                println!("SOLID x from {} px {}", cx - 24, (cx - 24) * 16);
             }
         }
         if let Ok(v) = std::env::var("ET_CELL") {
@@ -2536,8 +2584,8 @@ fn load_world(data: &Path, map_path: &Path) -> Result<World, Box<dyn Error>> {
     sprites::set_level(groups, raw);
     sprites::set_clothes(script_lines(map_path).iter().any(|(k, v)| k.eq_ignore_ascii_case("HeroClothes") && !v.is_empty()));
     messages::set_level(map_path);
-    let bg = script_lines(map_path).iter().find(|(k, _)| k.eq_ignore_ascii_case("BackgroundProc")).and_then(|(_, v)| v.trim().parse().ok());
-    storm::set_background_proc(bg.unwrap_or(0));
+    let number = |key: &str| script_lines(map_path).iter().find(|(k, _)| k.eq_ignore_ascii_case(key)).and_then(|(_, v)| v.trim().parse().ok()).unwrap_or(0);
+    storm::set_background_proc(number("BackgroundProc"), number("ForegroundProc"));
     Ok(World::load(map_path, &data.join("TILES"))?)
 }
 

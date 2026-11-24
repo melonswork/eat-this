@@ -1,0 +1,13 @@
+# A big alien under the flamethrower, then burning dead (FUN_1070_7eb2's hits with mask 8): a big
+# alien is put at the right end of FALL's pit, the start moved left of it onto a weapon-1 pick-up.
+level MAPS/FALL.MAP
+start 545 1039
+cell 2 34 64 0xd04
+cell 2 37 64 0x31c
+mouse 310 115
+10
+1 right
+160 rmb
+10 right
+160 rmb
+60
