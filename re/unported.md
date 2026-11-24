@@ -77,15 +77,22 @@ episodes' explodable tiles is ported now.
   the platforms (FUN_1078_0aef); the port ran it after, so the platform a tile event's script starts moved a
   frame late and squeezed the granny under it a frame late. Both exact now.
 
-Left:
-1. Not recorded: the carrier's mid-air blast (FUN_1070_0b70 runs when its physics returns 1/2: squeezed into
-   a wall or on a trap tile, not arrangeable), burnt/frozen aliens (their deaths need a blow-apart kill; the
-   granny's are tested by BURN1/FREEZE1, same `deaths.rs`), the spiked ball pushed by shakes (amplitude > 7),
-   the hero on a big alien's shield, the long fire callback 1050:19f8 (ages only when 4f0c > 10), effects
-   36, 46, 58, 61, 71, 86 (ported, no scenario).
-2. Unreachable from the episode maps, not ported: path-platform modes 0x4000/0x680/0x8000, platform flags
-   8/0x10 (see above).
-(GRANNY's tilting building is drawn since the drawing branch, `tools/scenarios/draw/COLLAPSE2.txt`.)
+Gameplay leftovers (2026-11-24, branch claude/gameplay-leftovers): everything listed as left is recorded and
+exact (scenario table in AGENTS.md): FX16..FX21, BURN2/3, FREEZE2..4, SHIELD1, SPIKE2, RAIN1, CARRIER2,
+PATHDRIVE1..3, PATHBOB1, PATHSLOW1, SWINGDRIVE1/2, PLATFLAGS1. What they found:
+- Effect 60 (FUN_1040_5f98) had no port: CITY_I03's beams 0xb07 step on to 0xb08. `ET_SCAN`'s STEPFX line now
+  lists the effects of stepped tiles on the episode maps; with 60 ported none is missing.
+- The test 45bc - 1 == 45ba in statues, trees and spiked balls reads the shake live: `Env::shake_now`.
+- 4f0c is the rain, not frame slack (the port had constants for it).
+- The statues' scaled draw crashed the port (tint table out of range): the scaled blitter's mode 0x10 reads PalMix.
+- A big alien has no burnt death of its own (the flames raise its shield: BURN3).
+- Weapon 7's shells play 0x6d bouncing off the floor.
+- Path platforms: the modes' table 1170:0a68 (rows 0..32) indexed by the record's third byte; 0x8000 rows
+  26..31, 0x4000 rows 22/23, 0x80 rows 14..17, 0x200 row 18. Down's use pose: 1170:5124/511d.
+- 0x100-masked tiles (effect 71): only the hero starting or teleporting into one, and the tank's ram.
+
+Left: OBJECTS types 102 and 103 (platform kinds 2, sinking under his weight, and 3, coming and going): no map on
+the CD uses them, not ported (the factory warns). The mode 0x400 (no row of the table has it) is ported, unchecked.
 
 ## Sounds the new objects play (for the sound session)
 

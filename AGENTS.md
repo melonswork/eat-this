@@ -104,6 +104,14 @@ streams and EVERY CHECK, so the method is the original's own.
 | `CHUNKS1` | CITY01, weapon-3 pick-up at (1360,1231) | wall chunks (effect 43, FUN_1040_45db) from rockets | exact |
 | `SHOTLEVER1` | CITYHS, start right of the posts at (5..8,70) | shot levers (FUN_1088_14a3) on explodable posts: effect 90 (FUN_1040_3471) | exact |
 | `FX1`..`FX15` | CITY_I01, FOREST04, FOREST02, CITY02, GRANNY, CITYRAIN, CITYHS, CITY_I02, CITY_I06 (start moved, weapon-3 pick-ups copied) | tile effects of explodable tiles: 31/32 (FX1), 49 (FX2), 68 (FX4), 79 (FX5), 80 (FX6: a steam emitter made at once by EnemyFactory), 45 (FX7), 51 (FX9), 33 (FX10: the sinking block, drifting smoke mover 0x3acd, wind OBJECTS 0x2717), 35 (FX11), 40 (FX12/FX13: CITYHS's gate; its script starts an accelerating platform that squeezes a granny: FUN_10a0_023f runs before the platforms), 24/25 (FX14/FX15: the wrecks, burning wreck 0x1400 `burnwreck.rs`, spawn effect 26) | exact |
+| `FX16`..`FX21` | GRANNY, CITY01, CITY_I03, CITY03, FALL, CITY_I02 (start moved, icons/pick-ups copied) | tile effects 36, 46, 61 + 60 (FUN_1040_5f98, reached only by a stepped tile), 86, 58, 71 (mask 0x100: the start inside the block, LevelFirstFrame's end, or the tank's ram) | exact |
+| `BURN2` `BURN3` `FREEZE2`..`FREEZE4` | FALL, GRANNY, CITYHS, alien icons 0x31d / big alien 0x31c put by the start | burnt and frozen aliens and big aliens, statues shattered; statues, trees and spiked balls read the shakes EARLIER ACTORS made this frame (`Env::shake_now`) | exact |
+| `SHIELD1` | FALL | the hero stands, walks and jumps on a big alien's shield (FUN_1070_00b6) | exact |
+| `SPIKE2` | FOREST05 | the spiked ball pushed by shakes (amp > 7: weapon-7 shells); weapon 7's bounce sound 0x6d | exact |
+| `RAIN1` | CITYHS | 1170:4f0c is the RAIN (storm / 0x20, not frame slack): over 10 fires 18e6/19f8 age, a big alien's death thunders | exact |
+| `CARRIER2` | CITY_LIB, carrier icon + trap tiles 0x15c8 | the carrier's blast in the air (FUN_1070_0b70) | exact |
+| `PATHDRIVE1..3` `PATHBOB1` `PATHSLOW1` `SWINGDRIVE1/2` | CITY_I01 / STONES, platform record patched (`object`) | platform modes 0x80/0x200 (driven: Up/Down use pose, the side he stands on), 0x4000 (bobbing), 0x8000 (slowing), kind 1 in the same second half | exact |
+| `PLATFLAGS1` | CITYHS | script platform flags 8 (shakes) and 0x10 (dust) | exact |
 
 ## Tools (non-obvious usage)
 
@@ -136,7 +144,7 @@ streams and EVERY CHECK, so the method is the original's own.
   count in the sprite's extra block; box at record+8.
 - 465e "noise" = shake just started (camera vertical strength-1 == count) or hero fired (2);
   enemies hear it.
-- 4f0c = 0 and detail 16d9 = 3 during demos (lying smoke never ages; no flash).
+- 4f0c is the rain (storm 4eda / 0x20, set by the background procs 1, 2, 11, 15, 16: `Particles::rain`); detail 16d9 = 3 during demos.
 - Hero: slopes (gHeroPlatform 4e22 is the slope id, 511b flag), levers (5123/4e5a/4e3c),
   pushable blocks (record 0x4b0 copied from word 2), knock-back state 0x10 → knocked down flat.
   No turning while shooting. Health 0x2c6, invulnerability 0x52 frames.
@@ -240,8 +248,7 @@ update, so it never touches the simulation. Check with `--shot FRAME FILE.ppm` a
   records are parallax decor layers (depth < 0x100 behind the tiles, else over everything).
 - Background procs (`BackgroundProc=N` -> table 1170:189e, 17 entries; `ForegroundProc` -> 1170:18e2):
   script command 0x15 switches both until the hero changes sector (FUN_1088_1280 restores 4c2a..4c30;
-  `Level::procs`, only the renderer follows it: the procs' simulation parts, storm/collapse/rain, are not
-  switched). Used a lot: CITY01's start sector switches to 1 on frame 0 (that is why it shows the city),
+  `Level::procs`, the storm/rain follow it too (`Level::bg_proc`), the collapse doesn't). Used a lot: CITY01's start sector switches to 1 on frame 0 (that is why it shows the city),
   indoor areas to 0, 7, 9. 0 = 1090:075c (decor only: no backdrop), 1 = 0a8c and
   16 = 0ace (START: the city 0797, the bridge 0292 with its train when the sector's +0x1c >= 0 (OBJECTS
   0x2719), the rain 0418 while the storm 4eda runs, decor; 16 also the truck), 3 = 147b, 4 = 1629 (+ extra

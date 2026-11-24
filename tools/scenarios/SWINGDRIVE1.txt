@@ -1,0 +1,20 @@
+# A swinging platform driven by the side the hero stands on (FUN_1060_0819 kind 1, mode 0x201, table
+# row 18): STONES's platform record patched, its lever on.
+level MAPS/STONES.MAP
+start 720 110
+cell 1 52 20 0xf58
+object 101,0,1,528,4112 101,18,1,528,4112
+mouse 160 60
+100
+10 right
+60
+5 up
+150
+4 left
+40 up
+30
+40 down
+30
+4 right
+40 up
+60
