@@ -81,6 +81,12 @@ impl Camera {
         self.vertical.amount
     }
 
+    /// How hard the screen shakes now (extras: rumble); only read.
+    pub fn rumble(&self) -> i32 {
+        let a = |s: &Shake| if s.count > 0 { s.amplitude * s.count / s.strength.max(1) } else { 0 };
+        a(&self.vertical).max(a(&self.horizontal))
+    }
+
     /// 1170:45c0.
     pub fn shake_amplitude(&self) -> i32 {
         self.vertical.amplitude

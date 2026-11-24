@@ -33,6 +33,9 @@ demos never show are recorded with the original game itself (`tools/mkdemo.py`).
 **Controls:** arrows to move and jump, the mouse to aim and fire (Insert/Space fire too), Tab or
 1–0 to switch weapons, Esc for the menu.
 
+**Extras** (Options > Extras, all off by default): game controllers, upscaling and CRT shaders, glow, widescreen, save
+states (F8/F9, F10 for the slot), rewind (Backspace) and recordings. See [`docs/extras.md`](docs/extras.md).
+
 ## Build and run
 
 You need your own copy of the original CD as a BIN/CUE image. The game's data is not in this

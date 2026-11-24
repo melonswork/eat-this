@@ -149,6 +149,9 @@ impl Log {
             }
             let mouse = (r.i16()?, r.i16()?);
             let t = r.take(2)?;
+            if t[0] as i8 >= 12 {
+                return None;
+            }
             frames.extend(std::iter::repeat_n(Input { keys, mouse, weapon: t[0] as i8, wide: t[1] }, n));
         }
         let record = (rx != 0x7fff).then_some((rx as i32, ry as i32));

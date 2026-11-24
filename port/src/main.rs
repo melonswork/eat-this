@@ -26,14 +26,18 @@ mod drone;
 mod demo;
 mod draw;
 mod effects;
+mod extras;
 mod factory;
 mod frontend;
+mod gpu;
 mod granny;
 mod gunship;
 mod hero;
 mod level;
+mod light;
 mod messages;
 mod objects;
+mod pad;
 mod particles;
 mod palette;
 mod platobj;
@@ -41,6 +45,7 @@ mod picture;
 mod plant;
 mod render;
 mod rng;
+mod scale;
 mod sentry;
 mod session;
 mod smallbot;
@@ -1754,6 +1759,11 @@ impl Graphics {
         }
     }
 
+    /// Extras: a line of text over the finished frame.
+    fn notice(&self, fb: &mut [u8], text: &str, frame: u32) {
+        draw::text_at(&mut self.painter(fb, frame), text.as_bytes(), 0x7fff, 6, 0x24);
+    }
+
     /// The pointer and the status bar (FUN_1088_4b64), over everything.
     fn hud(&self, fb: &mut [u8], g: &Game, frame: u32) {
         if !self.show_hud {
@@ -2052,7 +2062,7 @@ fn run_window(
     mut map_path: PathBuf,
     load: impl Fn(&Path) -> Result<(Game, Graphics), Box<dyn Error>>,
 ) -> Result<(), Box<dyn Error>> {
-    use sdl2::{event::Event, keyboard::Scancode, pixels::PixelFormatEnum};
+    use sdl2::{event::Event, keyboard::Scancode};
     let sdl = sdl2::init()?;
     // The mixer runs in SDL's audio callback; the game hands it each frame's events.
     struct Out(sound::Mixer);
@@ -2079,16 +2089,10 @@ fn run_window(
         }
     };
     level_music(&map_path);
-    let window = sdl
-        .video()?
-        .window("Eat This", W as u32 * scale, H as u32 * scale)
-        .position_centered()
-        .resizable()
-        .build()?;
-    let mut canvas = window.into_canvas().present_vsync().build()?;
-    canvas.set_logical_size(W as u32, H as u32)?;
-    let tc = canvas.texture_creator();
-    let mut tex = tc.create_texture_streaming(PixelFormatEnum::RGB24, W as u32, H as u32)?;
+    let video = sdl.video()?;
+    let mut out = gpu::Output::new(&video, "Eat This", W as u32 * scale, H as u32 * scale, false)?;
+    let extras = extras::Extras::load();
+    let mut controller = pad::Pad::new(&sdl);
     let mut events = sdl.event_pump()?;
     let mut fb = vec![0u8; (W * H) as usize];
     let mut rgb = vec![0u8; (W * H * 3) as usize];
@@ -2111,6 +2115,7 @@ fn run_window(
     let mut next = Instant::now();
     'main: loop {
         for e in events.poll_iter() {
+            controller.event(&e);
             match e {
                 Event::Quit { .. }
                 | Event::KeyDown {
@@ -2133,6 +2138,7 @@ fn run_window(
                     ..
                 } if weapon_key(sc).is_some() => game.weapon_key = weapon_key(sc),
                 Event::MouseMotion { x, y, .. } => {
+                    let (x, y) = out.to_picture(x, y);
                     game.live_mouse = Some((x.clamp(0, W - 1) * 319 / W, y.clamp(0, H - 1) * 199 / H));
                 }
                 Event::MouseButtonDown { mouse_btn, .. } | Event::MouseButtonUp { mouse_btn, .. } => {
@@ -2149,8 +2155,14 @@ fn run_window(
         while Instant::now() >= next {
             let ks = events.keyboard_state();
             let mut keys = [0i8; 9];
+            let state = controller.state();
+            let pads = state.keys(&extras.pad);
             for (i, sc) in keymap.iter().enumerate() {
-                keys[i] = key_poll(&mut counters[i], ks.is_scancode_pressed(*sc));
+                keys[i] = key_poll(&mut counters[i], pads[i] || ks.is_scancode_pressed(*sc));
+            }
+            let hero = (game.hero.x - game.camera.x, game.hero.y - game.camera.y);
+            if let Some(m) = pad::aim(&state, extras.aim != 0, game.live_mouse.unwrap_or(hero), hero, 0, W - 1) {
+                game.live_mouse = Some(m);
             }
             // ReadGameInput: the mouse buttons (1 the frame they go down, then 2) fire when the
             // shoot keys are up.
@@ -2200,9 +2212,7 @@ fn run_window(
         }
         gfx.draw(&game, &mut fb);
         gfx.present(&game, &fb, &mut rgb);
-        tex.update(None, &rgb, W as usize * 3)?;
-        canvas.copy(&tex, None, None)?;
-        canvas.present();
+        out.present(&gpu::Pic { rgb: &rgb, w: W, h: H, size: (W, H), frame: (W, H) }, &extras.look())?;
         let title = match &game.demo {
             Some(d) => format!(
                 "Eat This - demo frame {}/{} - RandSeed {}/{} windows",
@@ -2213,7 +2223,7 @@ fn run_window(
                 game.hero.x, game.hero.y, game.hero.state
             ),
         };
-        canvas.window_mut().set_title(&title)?;
+        out.window_mut().set_title(&title)?;
     }
     Ok(())
 }
@@ -2239,12 +2249,20 @@ fn shot_frame(game: &Game, gfx: &Graphics, path: &Path) -> std::io::Result<()> {
     let (wide, w) = ((render::width() - W) / 2, render::width());
     render::set_view(game.view_left(wide), w);
     let mut fb = vec![0u8; (w * H) as usize];
+    // Debug: ET_GLOW="GLOW LIGHT" (percentages).
+    let lit: Vec<i32> = std::env::var("ET_GLOW").unwrap_or_default().split_whitespace().filter_map(|v| v.parse().ok()).collect();
+    render::GLOW.with(|g| *g.borrow_mut() = vec![0; if lit.len() == 2 { fb.len() } else { 0 }]);
     gfx.draw(game, &mut fb);
     if path.extension().is_some_and(|e| e == "bin") {
         return std::fs::write(path, &fb); // the raw indexed frame, for comparing with tools/dumpframe.py
     }
     let mut rgb = vec![0u8; (w * H * 3) as usize];
     gfx.present(game, &fb, &mut rgb);
+    if lit.len() == 2 {
+        let t = std::time::Instant::now();
+        render::GLOW.with(|g| light::apply(&mut rgb, w as usize, H as usize, &g.borrow(), lit[0], lit[1]));
+        eprintln!("glow and light: {:.2?}", t.elapsed());
+    }
     let mut out = format!("P6\n{w} {H}\n255\n").into_bytes();
     out.extend(&rgb);
     std::fs::write(path, out)
@@ -2278,6 +2296,9 @@ fn weapon_key(sc: sdl2::keyboard::Scancode) -> Option<usize> {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let o = options()?;
+    if let Ok(spec) = std::env::var("ET_GL_SHOT") {
+        return gpu::shot(&spec);
+    }
     if o.map.is_none() && o.demo.is_none() && !o.headless && o.shot.is_none() {
         // No map and no demo: the original's menus (frontend/).
         world::load_game_ds(&o.data.join("../ETLAUNCH.EXE"))?;

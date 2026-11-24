@@ -181,6 +181,13 @@ streams and EVERY CHECK, so the method is the original's own.
   to compare with ffmpeg (all 27 match). Help pages' texts (FUN_1008_1073): `HelpTexts` in video.rs,
   `helpfont.rs` made by tools/helpfont.py.
 
+## Extras (2026-11-24, docs/extras.md)
+
+Not the original's; all off by default and outside the simulation (the exception: `Game::wide_actors`, 0 in demos).
+Screen code must use `render::at/on/left/right/screen()` instead of 0..320 and `y * W + x` (the view may be wider), and
+sprites that give off light belong in `render::emission`. New state in `Game` must stay Clone and deterministic:
+`./target/release/eatthis --check-states --demo X.DMO` saves, loads and rewinds all along a demo.
+
 ## Sound (2026-11-20, re/sound.md)
 
 Effects are SOUNDS/*.WAV (ids = ETMAIN.SCR's `LoadWAV=` lines in order), played through DiamondWare

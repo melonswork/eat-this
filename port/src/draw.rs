@@ -1249,7 +1249,7 @@ pub fn messages(p: &mut Painter, mb: &crate::messages::MessageBox) {
 /// (01ce), mode 4 (01cc); `^|` goes down a line ('0''s height + 2), `^Cxx` tints (mode 0x2c,
 /// colour xx), `^O` stops it, `^Bxx` skips the codes after it every other xx ticks. Returns where
 /// the text ended (2444, 2446).
-fn text_at(p: &mut Painter, t: &[u8], limit: i32, x: i32, y: i32) -> (i32, i32) {
+pub fn text_at(p: &mut Painter, t: &[u8], limit: i32, x: i32, y: i32) -> (i32, i32) {
     let line = p.bank.size(0x2030).map_or(8, |s| s.1) + 2;
     let hex = |i: usize| -> u8 {
         let d = |c: u8| if c > b'9' { c.wrapping_sub(0x37) } else { c.wrapping_sub(b'0') };
