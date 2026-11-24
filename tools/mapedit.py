@@ -1,7 +1,7 @@
 """Patch a .MAP (Image Line archive) for oracle scenarios: move the hero's start, set cells.
 
     python3 tools/mapedit.py IN.MAP OUT.MAP [--start X Y] [--cell PLANE TX TY VALUE]...
-        [--object OLD NEW]...   (comma-separated words: the only place OBJECTS holds OLD gets NEW)
+        [--record W,W,...]... [--object OLD NEW]...   (comma-separated words: the only place OBJECTS holds OLD gets NEW)
 
 The changed entries are re-packed with a literal-only LZW stream (a clear code every 200 bytes,
 so the code width stays 9 bits) and appended to the file; their directory records are rewritten
@@ -45,6 +45,7 @@ def main():
     ap.add_argument("dst")
     ap.add_argument("--start", nargs=2, type=int)
     ap.add_argument("--cell", nargs=4, type=lambda s: int(s, 0), action="append", default=[])
+    ap.add_argument("--record", action="append", default=[], help="a new OBJECTS record at the end")
     ap.add_argument("--object", nargs=2, action="append", default=[])
     a = ap.parse_args()
     if "work/cd" in str(Path(a.dst).resolve()):
@@ -72,6 +73,16 @@ def main():
             raise SystemExit(f"--object {old}: found {len(at)} times (want 1), {len(o)} -> {len(n)} bytes")
         p[at[0] : at[0] + len(n)] = n
         changed["OBJECTS"] = p
+    for rec in a.record:
+        words = [int(v, 0) & 0xFFFF for v in rec.split(",")]
+        p = changed.get("OBJECTS") or get("OBJECTS")
+        # The records of the header's count, then the new one (bytes after them are dropped).
+        n, end = struct.unpack_from("<H", header, 10)[0], 0
+        for _ in range(n):
+            end += 1 + 2 * (p[end] + 1)
+        changed["OBJECTS"] = bytearray(p[:end]) + bytes([len(words) - 1]) + struct.pack(f"<{len(words)}H", *words)
+        struct.pack_into("<H", header, 10, n + 1)
+        changed["MAP HEADER"] = header
     dir_at = struct.unpack_from("<I", raw, 0x1F)[0]
     for i, e in enumerate(arc.entries):
         if e.name in changed:

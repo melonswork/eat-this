@@ -953,6 +953,10 @@ impl Particles {
     /// FUN_1050_29c8.
     fn remove(&mut self, i: usize) {
         self.list.remove(i);
+        // Those that ended after it in the list (the other group's) move down with the rest.
+        for e in self.ended.iter_mut().filter(|e| e.1 > i) {
+            e.1 -= 1;
+        }
     }
 }
 

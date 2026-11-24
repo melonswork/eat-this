@@ -99,6 +99,7 @@ impl Level {
     pub fn update_decals(&mut self, env: &mut Env, window: (i32, i32, i32, i32)) {
         let sector = self.sector.unwrap_or(0);
         self.walk(sector, list::L5A, env, window);
+        self.decals_drawn = self.lists[sector][list::L5A].iter().filter_map(|&id| self.objects[id].clone()).collect();
     }
 
     /// A blood drop (FUN_1068_06e9): falls; the hero landing on it squashes it.

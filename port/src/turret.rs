@@ -41,6 +41,9 @@ impl Level {
         }
         let now = self.particles.now;
         let mut draw_off = 0;
+        // The legs go by the state it came into the frame with.
+        let start = self.o(id).w(0x24);
+        let mut walking = 0x196e;
         let (x, y) = (self.o(id).w(0xe), self.o(id).w(0x10));
         self.o(id).set(0x22, y);
         let mut sprite = 0x1973 + ((now >> 4) & 1) as i32;
@@ -189,6 +192,7 @@ impl Level {
                 }
                 let cnt = self.o(id).w(0x28);
                 draw_off = (cnt as u16 / 10) as i32 & 1;
+                walking = 0x196e + ((cnt as u16 / 10) & 3) as i32;
                 if facing != self.o(id).w(0x20) {
                     let o = self.o(id);
                     o.set(0x24, 3);
@@ -238,8 +242,8 @@ impl Level {
         // For the draw pass: the legs (1170:196e.., mirrored by the facing) and the body.
         let o = self.o(id);
         let (x, y) = (o.w(0xe), o.w(0x10));
-        let legs = match o.w(0x24) {
-            0 => 0x196e + ((o.w(0x28) as u16 / 10) & 3) as i32,
+        let legs = match start {
+            0 => walking,
             2 if o.w(0x28) != 0 => 0x7fff,
             2 => 0x1972,
             _ => 0x196e,

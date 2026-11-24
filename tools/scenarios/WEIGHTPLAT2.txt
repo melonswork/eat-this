@@ -1,0 +1,16 @@
+# As WEIGHTPLAT1's first: he jumps off at once (it drops when left), stands on it as it rises.
+level MAPS/CITY_I01.MAP
+start 2700 1130
+record 102,0,1,40,2680,1134,0,0xfffc
+mouse 200 100
+10
+12 up
+60
+12 up
+5
+100
+12 up
+20 left
+60 right
+12 up
+150

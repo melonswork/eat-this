@@ -20,6 +20,7 @@ Script (one command per line, '#' starts a comment):
     name DEATH1            output folder/REC name (default: the script's file name)
     start 940 191          move the hero's start (MAP HEADER) in the demo's copy of the map
     cell 2 61 9 0x1234     set a cell (plane, tile x, tile y, value) in the copy (tools/mapedit.py)
+    record 102,0,1,10,2700,1150,0,3 add an OBJECTS record
     object 100,0,5 100,1,5 replace words in OBJECTS (OLD NEW, comma-separated, OLD found once)
     mouse 160 100          mouse position in game-screen pixels from the next frame on
     40 right fire          hold these keys for 40 frames (nothing listed = all released)
@@ -75,6 +76,8 @@ def parse(path):
             edits += ["--start", words[1], words[2]]
         elif cmd == "cell":
             edits += ["--cell", *words[1:5]]
+        elif cmd == "record":
+            edits += ["--record", f" {words[1]}"]
         elif cmd == "object":
             edits += ["--object", f" {words[1]}", f" {words[2]}"]
         elif cmd == "mouse":

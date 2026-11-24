@@ -1,5 +1,5 @@
 //! Platform objects (OBJECTS records 100..103, FUN_1060_0166 / FUN_1060_0819): platforms that
-//! follow a path (0), swing on an arc (1), fall (2) or sink (3). Only the swinging kind is ported.
+//! follow a path (0), swing on an arc (1), drop under the hero's weight (2) or come and go (3).
 //! They are updated from inside HeroUpdate (FUN_1060_145a), before the hero moves, and carry him.
 
 use crate::trig;
@@ -25,7 +25,10 @@ pub struct PlatObj {
     pub count: i32,      // +0x2d
     pub radius: i32,     // +0x2e
     /// +0x23: the first chain link drawn (1 when the pivot's tile function is 7000).
+    /// Kind 3: the stage of its coming and going (0: there).
     pub first_link: i32,
+    /// +0x1c: the top of the rope it hangs from (rows with a rope kind), or -1.
+    pub rope_top: i32,
     pub lever: (i32, i32), // +0x2c, +0x2a
     pub points: Vec<(i32, i32)>,
     pub bbox: (i32, i32, i32, i32),
@@ -75,6 +78,7 @@ impl PlatObj {
             count: 0,
             radius: 0,
             first_link: 0,
+            rope_top: -1,
             lever: (0, 0),
             points: Vec::new(),
             bbox: (0, 0, 0, 0),
@@ -84,12 +88,10 @@ impl PlatObj {
             age: 0,
             saved_mode: 0,
         };
-        let mut key = -1;
         if key_row != 0xff {
-            key = word(n - 1);
+            o.rope_top = word(n - 1);
             count -= 1;
         }
-        let _ = key;
         o.lever.0 = byte(7);
         if o.lever.0 != 0 {
             o.lever.1 = word(4);
@@ -115,7 +117,7 @@ impl PlatObj {
         let r = r * o.radius;
         let (cx, cy) = p0;
         // FUN_1060_14f4 adds the platform's width to the right edge, then 0x40 all round.
-        o.bbox = (cx - r - 0x40, cy - r - 0x40, cx + r + o.width() + 0x40, cy + r + 0x40);
+        o.bbox = o.around((cx - r, cy - r, cx + r, cy + r));
         o.prev_angle = o.angle;
         o.sector = sector_of(o.y, o.x);
         Some(o)
@@ -132,8 +134,10 @@ impl PlatObj {
         let word = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
         let row = byte(4) as usize;
         let mut count = n as i32;
+        let mut rope_top = -1;
         if ds_word(0x9d6 + row * 14) >> 8 & 0xff != 0xff {
-            count -= 1; // the last word is the key (+0x1c)
+            count -= 1; // the last word is the rope's top (+0x1c)
+            rope_top = word(n - 1);
         }
         let lever = byte(7);
         let skip = (lever != 0) as i32 + 4;
@@ -157,6 +161,7 @@ impl PlatObj {
             count: points.len() as i32,
             radius: start,
             first_link: 0,
+            rope_top,
             lever: (lever, if lever != 0 { word(4) } else { 0 }),
             points,
             bbox: (0, 0, 0, 0),
@@ -180,9 +185,86 @@ impl PlatObj {
             x2 = x2.max(px);
             y2 = y2.max(py);
         }
-        o.bbox = (x1 - 0x40, y1 - 0x40, x2 + o.width() + 0x40, y2 + 0x40);
+        o.bbox = o.around((x1, y1, x2, y2));
         o.sector = sector_of(o.y, o.x);
         o
+    }
+
+    /// FUN_1060_0166 for the platforms that drop under his weight (type 102) and those that come
+    /// and go (103). `rec` is the record with the words after it (the original reads past a short
+    /// one), `n` its length, `map_height` the map's in tiles.
+    pub fn weight_or_blink(rec: &[i16], n: usize, map_height: i32, sector_of: impl Fn(i32, i32) -> usize) -> PlatObj {
+        let word = |i: usize| rec.get(i).copied().unwrap_or(0) as i32;
+        let byte = |off: usize| (word(off / 2) as u16 as i32 >> (8 * (off & 1))) & 0xff;
+        let row = byte(4) as usize;
+        let mut count = n as i32;
+        let mut rope_top = -1;
+        if ds_word(0x9d6 + row * 14) >> 8 & 0xff != 0xff {
+            rope_top = word(n - 1);
+            count -= 1;
+        }
+        let kind = word(0) - 100;
+        let (x, y) = (word(4), word(5));
+        let mut o = PlatObj {
+            kind,
+            sector: sector_of(y, x),
+            x,
+            y,
+            prev_y: y,
+            flags: 0,
+            angle: 0,
+            prev_angle: 0,
+            row,
+            speed: byte(6) as i8 as i32,
+            mode: 0,
+            mode_alt: ds_word(0xa6a + byte(2) as usize * 4),
+            count: 0,
+            radius: 0,
+            first_link: 0,
+            rope_top,
+            lever: (0, 0),
+            points: Vec::new(),
+            bbox: (0, 0, 0, 0),
+            stops: (0, 0),
+            dir: 0,
+            speed_count: 0,
+            age: 0,
+            saved_mode: 0,
+        };
+        let mut bottom = y;
+        if kind == 2 {
+            // +0x2e: how many frames he may stand on it (+0x22, 10); then -1 dropping, -2 rising.
+            o.count = 1;
+            if o.speed == 0 {
+                o.speed = 10;
+            }
+            o.radius = o.speed;
+            o.points.push((x, y));
+            bottom = if count < 7 { (map_height + 4) * 0x10 } else { y + word(7) * 0x10 };
+        } else {
+            // +0x22 frames gone, +0x2e there; +0x2c its phase.
+            o.radius = byte(7);
+            if o.speed == 0 {
+                o.speed = 0x32;
+            }
+            if o.radius == 0 {
+                o.radius = 0x32;
+            }
+            if count == 6 {
+                o.lever.0 = byte(0xc);
+            }
+        }
+        o.bbox = o.around((x, y, x, bottom as i16 as i32));
+        o
+    }
+
+    /// FUN_1060_14f4 and the end of FUN_1060_0166: the platform's width on the right, up to the
+    /// rope's top, 0x40 all round.
+    fn around(&self, (x1, mut y1, x2, y2): (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+        if self.rope_top >= 0 && self.rope_top < y1 {
+            y1 = self.rope_top;
+        }
+        (x1 - 0x40, y1 - 0x40, x2 + self.width() + 0x40, y2 + 0x40)
     }
 
     /// EnemyFactory 0x14c8 (FUN_1060_14f4 after it): a lift between two stops.
@@ -218,6 +300,7 @@ impl PlatObj {
             count: 0,
             radius: 0,
             first_link: 0,
+            rope_top: -1,
             lever: (0, 0),
             points: Vec::new(),
             bbox: (0, 0, 0, 0),
@@ -268,7 +351,7 @@ fn ranges_overlap(a: i32, b: i32, c: i32, d: i32) -> bool {
     a1 <= c2 && c1 <= a2
 }
 
-/// FUN_1060_0819 for a swinging platform.
+/// FUN_1060_0819 for a swinging platform (type 101).
 pub fn update(p: &mut PlatObj, hero: &mut HeroSide, now: u32, world: &crate::world::World) {
     let old_x = p.x;
     p.prev_y = p.y;
@@ -311,6 +394,47 @@ pub fn update(p: &mut PlatObj, hero: &mut HeroSide, now: u32, world: &crate::wor
     finish(p, hero, Move { live, mode, start: p.angle, a: angle, x: nx, y: ny, old_x, ends: None });
 }
 
+/// FUN_1060_0819 for a platform that drops under his weight (type 102): +0x18 (`angle`) is how
+/// far below its place it is.
+pub fn update_weight(p: &mut PlatObj, hero: &mut HeroSide) {
+    let (old_x, start) = (p.x, p.angle);
+    p.prev_y = p.y;
+    let mut a = start;
+    let (x, y) = (p.points[0].0, (p.points[0].1 + a) as i16 as i32);
+    if p.radius == -1 {
+        if y < p.bbox.3 {
+            a += if a < 7 { a + 1 } else { 7 };
+        } else {
+            p.radius = -2;
+        }
+    } else if p.radius == -2 {
+        a -= 1;
+        if a < 1 {
+            p.radius = p.speed;
+        }
+    }
+    finish(p, hero, Move { live: 1, mode: 0, start, a, x, y, old_x, ends: None });
+}
+
+/// FUN_1060_0819 for a platform that comes and goes (type 103): +0x23 (`first_link`) is the stage
+/// its sprite shows, 0 when it can be stood on.
+pub fn update_blink(p: &mut PlatObj, hero: &mut HeroSide, now: u32) {
+    let (old_x, start) = (p.x, p.angle);
+    p.prev_y = p.y;
+    let ticks = ds_word(0x9d6 + p.row * 14) >> 8 & 0xff;
+    let period = p.speed + p.radius;
+    // (The original dies of a division by zero with a period of 0 or a row without ticks.)
+    if period != 0 && ticks != 0 {
+        let t = ((p.lever.0 as i64 + now as i64) % period as i64) as i32;
+        p.first_link = if p.speed < t {
+            ((t - p.speed) / ticks).min(p.height())
+        } else {
+            (p.height() - t / ticks).max(0)
+        } & 0xff;
+    }
+    finish(p, hero, Move { live: 1, mode: 0, start, a: start, x: old_x, y: p.prev_y, old_x, ends: None });
+}
+
 /// Mode 0x4000: the bobbing (3 pixels) of a platform nobody has set going.
 fn bob(now: u32) -> i32 {
     let t = (now as i64 * 6 * 0x10).rem_euclid(0x1680) as i32;
@@ -331,7 +455,7 @@ struct Move {
     ends: Option<((i32, i32), (i32, i32))>,
 }
 
-/// FUN_1060_0819's second half (kinds 0 and 1): the hero standing on it, what his weight or his
+/// FUN_1060_0819's second half: the hero standing on it, what his weight or his
 /// use of it starts, and the speed.
 fn finish(p: &mut PlatObj, hero: &mut HeroSide, m: Move) {
     let Move { mut live, mode, start, mut a, mut x, mut y, old_x, ends } = m;
@@ -343,7 +467,8 @@ fn finish(p: &mut PlatObj, hero: &mut HeroSide, m: Move) {
     if on {
         let climbing = hero.state < 0 && (-5..=-1).contains(&hero.state);
         on = !climbing
-            && (hero.state < 1 || hero.vy >= 0 || (hero.y <= p.prev_y - 1 && y - 1 < hero.y + hero.dy));
+            && (hero.state < 1 || hero.vy >= 0 || (hero.y <= p.prev_y - 1 && y - 1 < hero.y + hero.dy))
+            && (p.kind != 3 || p.first_link == 0);
     }
     if p.flags & 0x10 == 0 {
         p.prev_angle = p.angle;
@@ -360,10 +485,20 @@ fn finish(p: &mut PlatObj, hero: &mut HeroSide, m: Move) {
     }
     let b5 = mode & 3;
     if on {
+        if p.kind == 2 && hero.prev_ground != 9 {
+            // Standing on it counts down; a rising one drops again.
+            if p.radius >= 0 {
+                p.radius -= 1;
+            } else if p.radius == -2 {
+                p.radius = p.speed - 1;
+            }
+        }
         if live == 1 && mode & 3 != 0 && hero.prev_ground != 0x15 && mode & 0x80 == 0 {
             p.flags |= 0x10;
         }
-        hero.dy = (y - 1) - hero.y;
+        if p.kind != 2 || p.radius >= 0 {
+            hero.dy = (y - 1) - hero.y;
+        }
         if mode & 8 == 0 {
             hero.dx += x - old_x;
         }
@@ -381,6 +516,9 @@ fn finish(p: &mut PlatObj, hero: &mut HeroSide, m: Move) {
                     a -= p.speed;
                 }
             }
+        }
+        if p.kind == 2 && p.radius >= (p.speed - 1).min(0) && p.radius <= (p.speed - 1).max(0) {
+            p.radius = -1; // he stepped off it
         }
     } else {
         if mode & 0x680 == 0 {
@@ -701,7 +839,8 @@ pub fn lift_dust(
     if p.row == 8 && ((p.y + 7) as u16 >> 4) != ((p.prev_y + 7) as u16 >> 4) {
         crate::sound::play_at(0x44, p.y, p.x + 0xf);
     }
-    if !(matches!(p.row, 0 | 3) && p.age % 0x10 == 0xf) {
+    // (+0x18: a lift's frames moving, the others' distance or angle.)
+    if !(matches!(p.row, 0 | 3) && if p.kind == 4 { p.age } else { p.angle } % 0x10 == 0xf) {
         return;
     }
     let mut lx = p.x - 1;

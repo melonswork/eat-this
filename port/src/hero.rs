@@ -1467,6 +1467,10 @@ impl Hero {
                             self.released[DOWN] = released;
                         } else if p.kind == 0 {
                             crate::platobj::update_path(p, &mut side, ps.now, w);
+                        } else if p.kind == 2 {
+                            crate::platobj::update_weight(p, &mut side);
+                        } else if p.kind == 3 {
+                            crate::platobj::update_blink(p, &mut side, ps.now);
                         } else {
                             crate::platobj::update(p, &mut side, ps.now, w);
                         }

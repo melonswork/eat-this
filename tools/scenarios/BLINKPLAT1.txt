@@ -1,0 +1,25 @@
+# Platforms that come and go (OBJECTS type 103, FUN_1060_0819 kind 3) in CITY_I01's shaft: 40 frames
+# gone, 60 there; under it one with the default times and a 6-word record, whose phase is read past
+# its end. Rows 3 and 5: the rows that show a stage need a sprite group no CD level has.
+level MAPS/CITY_I01.MAP
+start 2700 1100
+record 103,0,3,0x3c28,2684,1104,0
+record 103,0,5,0x7f,2692,1140
+record 103,0,5,0,2640,1140
+record 103,0,0,0x3cfb,2650,1100,0
+mouse 200 100
+100
+12 up
+60
+12 up
+60
+20 left
+12 up left
+60
+12 up
+100
+20 right
+12 up right
+100
+12 up
+60

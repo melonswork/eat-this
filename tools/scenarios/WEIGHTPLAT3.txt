@@ -1,0 +1,9 @@
+# A weight platform hanging from a rope (OBJECTS type 102 with table row 2: its last word is the rope's
+# top, FUN_1060_1a25), in FOREST02 by WALLGUN1's trunk.
+level MAPS/FOREST02.MAP
+start 650 1300
+record 102,0,2,30,630,1304,0,4,1230
+mouse 200 100
+45
+12 up
+100

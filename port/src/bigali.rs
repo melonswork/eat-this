@@ -113,6 +113,7 @@ impl Level {
             }
         }
         let mut mirror = self.o(id).w(0x20) < 0;
+        self.o(id).drawn_flip = Some(mirror);
         let state = self.o(id).w(0x28);
         match state {
             -10 => {
@@ -130,6 +131,7 @@ impl Level {
                     o.set(0x2e, o.w(0x2e) - 1);
                     if o.w(0x2e) > 7 {
                         mirror = !mirror;
+                        o.drawn_flip = Some(mirror);
                     }
                     if o.w(0x2e) < 1 || o.w(0x14) + 1 == o.w(0x16) {
                         o.set(0x2c, 4);

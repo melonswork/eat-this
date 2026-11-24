@@ -208,7 +208,12 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
             sprite = if k < 5 { 0x1818 - ((m.uw(0x24) >> 3) & 1) as i32 } else { 0x1818 + (k / 3 & 7) };
         }
         0x2299 => sprite += (age / 4) % 2,
-        0x2459 | 0x2497 => sprite += (age >> 2) & 1,
+        0x2459 | 0x2497 => {
+            sprite += (age >> 2) & 1;
+            if m.uw(0x42) == 0x2497 && m.w(0x22) - 0x1e <= age {
+                p.mode = 0x10; // ash fades in its last 0x1e frames
+            }
+        }
         0x2946 => {
             // FUN_1050_2946: bobs two pixels every 30 frames.
             p.at(sprite + ((age >> 2) & 1), x, y + crate::trig::sin((age % 0x1e) * 0xc0) * 2 / 0x4000);
@@ -251,9 +256,10 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
         // ground; over its last 0x120 frames the steps grow by k * k >> 5 (2/3 of it across),
         // k = age - life + 0x120: it shrinks away.
         0x18e6 | 0x19f8 | 0x1b90 => {
-            // 1ad0 = the ground's screen row, unless it is below the screen or above the clip.
+            // 1ad0 = the ground's screen row, unless it is below the screen or above the clip
+            // (19f8 leaves it alone).
             let ground = y - p.cam.1;
-            if ground <= p.clip.3 && ground >= p.clip.1 {
+            if m.uw(0x42) != 0x19f8 && ground <= p.clip.3 && ground >= p.clip.1 {
                 p.clip.3 = ground;
             }
             match m.uw(0x42) {
@@ -304,6 +310,7 @@ fn particle(p: &mut Painter, part: &Particle, world: &crate::world::World, level
         }
         // FUN_1050_253f: mode 0x30 (PalMixLight) in its last frames.
         0x253f if age > 0x13 => p.mode = 0x30,
+        0x24f1 if (m.uw(0x22) >> 1) as i32 <= age => p.mode = 0x10,
         0x2148 => {
             if std::env::var_os("ET_PARTDRAW").is_some() { eprintln!("  steps {:#x} {:#x}", m.w(0x1e), m.w(0x1c)); }
             p.scaled_at(m.w(0x1e), m.w(0x1c), sprite, x, y);
@@ -370,9 +377,7 @@ fn tile_at(p: &mut Painter, world: &crate::world::World, cell: i32, x: i32, y: i
 
 /// The hero's sector's decals (list +0x5a, FUN_1070_fb30).
 pub fn decals(p: &mut Painter, level: &Level) {
-    let sector = level.sector.unwrap_or(0);
-    for &id in &level.lists[sector][list::L5A] {
-        let Some(o) = &level.objects[id] else { continue };
+    for o in &level.decals_drawn {
         match o.kind {
             crate::decals::DROP => {
                 p.hflip = o.w(0x22) != 0;
@@ -601,8 +606,9 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
             let s = o.w(0x32);
             let mut y = y;
             // Walking, it bobs a pixel each other 9 steps.
-            let mut lift = i32::from(o.w(0x2c) > 0 && o.w(0x24) == 0 && (o.uw(0x28) / 9) & 1 == 1);
-            if o.w(0x24) == 1 && o.w(0x2a) % 0x100 < 0x40 {
+            let state = o.looks.first().map_or(o.w(0x24), |l| l.colour);
+            let mut lift = o.looks.first().map_or(0, |l| l.y);
+            if state == 1 && o.w(0x2a) % 0x100 < 0x40 {
                 // Firing (+0x2a % 0x100 < 0x40): the muzzle light, scaled down over each
                 // 16-frame burst, and the gun's recoil lifts it a pixel late in the burst.
                 let k = (o.w(0x2a) % 0x100) % 0x10;
@@ -669,7 +675,7 @@ fn actor(p: &mut Painter, o: &Obj, world: &crate::world::World, sector: Option<u
         }
         // FUN_1070_7eb2: the big alien; its shield tints it yellow (tint table row 10).
         0x1432 => {
-            p.hflip = o.w(0x20) < 0;
+            p.hflip = o.drawn_flip.unwrap_or(o.w(0x20) < 0);
             if o.b(0x44) != 0 {
                 p.mix = Mix::Tint;
                 p.mode = 0x24;
@@ -951,6 +957,10 @@ pub fn platform_objects(p: &mut Painter, level: &Level) {
             _ => {
                 // FUN_1060_1a25 (and the turning ones, 1e88 / 2079): the chain
                 // of a swinging platform from its pivot, then the platform.
+                if proc_ == 0x1a25 && o.rope_top >= 0 {
+                    rope(p, 8, (at(8) >> 8 & 0xff) as usize, 0, o.rope_top - cy, o.y - 1 - cy, o.x - cx);
+                    p.reset();
+                }
                 if o.kind == 1 && link != 0x7fff {
                     if let Some(&(px, py)) = o.points.first() {
                         let a = o.angle.rem_euclid(0x1680);
@@ -976,7 +986,8 @@ pub fn platform_objects(p: &mut Painter, level: &Level) {
                 }
                 p.hflip = false;
                 p.vflip = false;
-                p.at(sprite, o.x, o.y);
+                // Kind 3 shows its stage (only 1a25 does).
+                p.at(sprite + if o.kind == 3 && proc_ == 0x1a25 { o.first_link } else { 0 }, o.x, o.y);
             }
         }
         p.reset();

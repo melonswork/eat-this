@@ -840,7 +840,15 @@ impl Level {
                         println!("PATHPLAT mode {:#x} alt {:#x} lever {:?} speed {} at ({}, {}) points {:?}", p.mode, p.mode_alt, p.lever, p.speed, p.x, p.y, p.points);
                     }
                 }
-                k if (100..=199).contains(&k) => {
+                102 | 103 => {
+                    let w = &*world;
+                    let p = crate::platobj::PlatObj::weight_or_blink(&padded[index], rec.len(), w.main().height, |y, x| w.sector_at(y, x));
+                    if std::env::var_os("ET_SCAN").is_some() {
+                        println!("PLAT kind {} row {} speed {} count {} phase {} at ({}, {}) box {:?}", p.kind, p.row, p.speed, p.radius, p.lever.0, p.x, p.y, p.bbox);
+                    }
+                    self.plat_objs.push(p);
+                }
+                k if (104..=199).contains(&k) => {
                     eprintln!("warning: OBJECTS type {k} (FUN_1060_0166) not ported")
                 }
                 0x2718 => {

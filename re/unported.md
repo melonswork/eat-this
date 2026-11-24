@@ -91,8 +91,13 @@ PATHDRIVE1..3, PATHBOB1, PATHSLOW1, SWINGDRIVE1/2, PLATFLAGS1. What they found:
   26..31, 0x4000 rows 22/23, 0x80 rows 14..17, 0x200 row 18. Down's use pose: 1170:5124/511d.
 - 0x100-masked tiles (effect 71): only the hero starting or teleporting into one, and the tank's ram.
 
-Left: OBJECTS types 102 and 103 (platform kinds 2, sinking under his weight, and 3, coming and going): no map on
-the CD uses them, not ported (the factory warns). The mode 0x400 (no row of the table has it) is ported, unchecked.
+OBJECTS types 102 (drops under his weight, `platobj::update_weight`) and 103 (comes and goes, `update_blink`), which no
+map on the CD uses, are ported (WEIGHTPLAT1..3, BLINKPLAT1), and so is the rope of table row 2. Left unchecked:
+- 103's stage sprites (FUN_1060_1a25 draws row sprite + stage, up to 9): no CD sprite group has them and the original
+  crashes on a missing one (BLINKPLAT1 uses rows that show none). A row without ticks (row 2) or a period of 0 makes
+  the original divide by zero; the port leaves such a platform as it is.
+- The mode 0x400 (no row of the table has it).
+FX20 frame 59 differs from its dump only: the hero's idle timer starts from the boot state (the trace agrees with the port).
 
 ## Sounds the new objects play (for the sound session)
 

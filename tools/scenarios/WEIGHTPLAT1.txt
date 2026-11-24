@@ -1,0 +1,25 @@
+# Platforms that drop under his weight (OBJECTS type 102, FUN_1060_0819 kind 2) in CITY_I01's shaft: one
+# holds him 60 frames, drops (0x40 past its 8 tiles) and rises again; the one under it has the
+# defaults (10 frames, down past the map's end) and row 0 (a light, dust). He steps off and back on.
+level MAPS/CITY_I01.MAP
+start 2700 916
+record 102,0,1,60,2680,920,0,8
+record 102,0,0,0,2684,1060
+record 102,0,3,20,2640,1140,0,1
+mouse 200 100
+20
+12 up
+20
+200
+8 left
+20 up
+60
+30 right
+20 up right
+60
+20 left
+8 up left
+120
+20 right
+8 up
+200

@@ -39,6 +39,9 @@ impl Level {
             return;
         }
         let state = self.o(id).w(0x24);
+        // Its draw (bob, muzzle light) goes by the state it came into the frame with; `y` is the
+        // walking bob ([BP-0xc]).
+        self.o(id).looks = vec![crate::objects::Look { colour: state, ..Default::default() }];
         match state {
             0 => {
                 let dir = self.o(id).w(0x20);
@@ -53,8 +56,13 @@ impl Level {
                     self.patrol_step(id, env, 0xe, dir);
                 }
                 let o = self.o(id);
+                o.looks[0].y = ((o.uw(0x28) / 9) & 1 == 1) as i32;
                 if o.w(10) == 0 {
                     let riding = self.bot_carries_hero(id, env, x_start);
+                    if riding {
+                        // FUN_1070_a18e: no bob under the hero.
+                        self.o(id).looks[0].y = 0;
+                    }
                     self.bot_spot(id, env, riding);
                 } else if o.b(0x34) == 0 {
                     let to_hero = if h.x - o.w(0xe) < 0 { -1 } else { 1 };
