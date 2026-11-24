@@ -20,9 +20,21 @@ pub struct Env<'a> {
     pub camera: (i32, i32),
     /// The hero itself, for the objects that hurt him on the spot (FUN_1088_3c32).
     pub hero_obj: &'a mut crate::hero::Hero,
-    /// A vertical screen shake started (1170:45bc - 1 == 45ba) and its amplitude (45c0).
-    pub shake_started: bool,
-    pub shake_amp: i32,
+    /// The vertical screen shake (1170:45ba..45c0) when the actors start.
+    pub shake: crate::camera::Shake,
+}
+
+impl Env<'_> {
+    /// Whether a vertical screen shake has just started (1170:45bc - 1 == 45ba) and its amplitude
+    /// (45c0), as they are now: the shakes earlier actors made this frame count (a restarted one
+    /// is at its full count and doesn't test as started until the next frame).
+    pub fn shake_now(&self) -> (bool, i32) {
+        let mut s = self.shake;
+        for &(a, b) in &self.fx.shakes {
+            s.start(a, b);
+        }
+        (s.strength - 1 == s.count, s.amplitude)
+    }
 }
 
 /// The hero globals the objects read.

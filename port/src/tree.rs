@@ -80,12 +80,13 @@ impl Level {
         let top = tip_y - self.o(id).w(0x1e);
         // For the draw pass: the trunk's tip and the crown's anchor.
         self.o(id).looks = vec![Obj::look(0, tip_x, tip_y), Obj::look(0, tip_x, top)];
-        if env.shake_started {
+        let (started, amp) = env.shake_now();
+        if started {
             let strength = if self.o(id).w(0x14) < 1 {
-                (env.shake_amp * 0x50) / 0x10
+                (amp * 0x50) / 0x10
             } else {
                 let r = env.rng.random(0x18);
-                (env.shake_amp * 0x78) / 0x10 - 0xc + r
+                (amp * 0x78) / 0x10 - 0xc + r
             };
             self.tree_sway(id, strength);
             if self.o(id).w(0x1c) == strength && env.rng.random(2) == 0 {

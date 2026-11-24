@@ -771,8 +771,7 @@ impl Game {
                 noise,
                 camera: cam,
                 hero_obj: &mut self.hero,
-                shake_started: self.camera.shake_started(),
-                shake_amp: self.camera.shake_amplitude(),
+                shake: self.camera.vertical,
             };
             self.level.update_decals(&mut env, window);
         }
@@ -818,8 +817,7 @@ impl Game {
             noise,
             camera: cam,
             hero_obj: &mut self.hero,
-            shake_started: self.camera.shake_started(),
-            shake_amp: self.camera.shake_amplitude(),
+            shake: self.camera.vertical,
         };
         self.level.update_actors(&mut env, window);
         // An actor hit or killed the hero (FUN_1088_3c32): what flies off him does so at once.

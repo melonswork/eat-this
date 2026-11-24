@@ -14,17 +14,17 @@ const REST: (i32, i32) = (0xa0, 0x7d);
 /// A shake (1170:45ba vertical, 45c2 horizontal): frames left, the starting count, the amount
 /// last applied, the amplitude.
 #[derive(Clone, Copy, Default)]
-struct Shake {
-    count: i32,
-    strength: i32,
+pub struct Shake {
+    pub count: i32,
+    pub strength: i32,
     amount: i32,
-    amplitude: i32,
+    pub amplitude: i32,
 }
 
 impl Shake {
     /// ScreenShake (1050:5c4a) / FUN_1050_5c7d: a new shake wins unless the running one is
     /// still bigger.
-    fn start(&mut self, strength: i32, amplitude: i32) {
+    pub fn start(&mut self, strength: i32, amplitude: i32) {
         if self.count < 1 || (self.amplitude * self.count) / self.strength <= amplitude {
             self.amplitude = amplitude;
             self.strength = strength;
@@ -42,7 +42,7 @@ pub struct Camera {
     step: (i32, i32),   // 1af4/1af6: this frame's move
     /// Mouse look (4e4c/4e4e): how far the mouse is past the screen edge.
     pub look: (i32, i32),
-    vertical: Shake,
+    pub vertical: Shake,
     horizontal: Shake,
     sin: Vec<i32>, // 1170:6bb8: round(sin(i / 16 deg) * 0x4000)
 }
@@ -80,10 +80,6 @@ impl Camera {
         self.vertical.amount
     }
 
-    /// 1170:45c0.
-    pub fn shake_amplitude(&self) -> i32 {
-        self.vertical.amplitude
-    }
 
     /// FUN_1050_5c7d.
     pub fn shake_sideways(&mut self, strength: i32, amplitude: i32) {

@@ -1,0 +1,13 @@
+# A burnt alien (FUN_1070_5fda -> 544e, mask 8): an alien is put at the right end of FALL's pit, the
+# start moved left of it, past the barrel, onto a weapon-1 pick-up.
+level MAPS/FALL.MAP
+start 545 1039
+cell 2 34 64 0xd04
+cell 2 37 64 0x31d
+mouse 310 115
+10
+1 right
+60 rmb
+10 right
+60 rmb
+60

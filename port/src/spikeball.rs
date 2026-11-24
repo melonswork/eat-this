@@ -75,9 +75,10 @@ impl Level {
             eprintln!("SPIKE {} on {} swing {} phase {} angle {angle:#x} ball ({bx},{by})", env.frame, o.b(0x20), o.w(0x1a), o.w(0x14));
         }
         if self.o(id).b(0x20) != 0 {
-            if env.shake_started && env.shake_amp > 7 {
+            let (started, amp) = env.shake_now();
+            if started && amp > 7 {
                 let r = env.rng.random(0x18);
-                let n = (env.shake_amp * 0x78) / 0x10 - 0xc + r;
+                let n = (amp * 0x78) / 0x10 - 0xc + r;
                 self.spikeball_push(id, n);
                 if self.o(id).w(0x1a) == n && env.rng.random(2) == 0 {
                     let o = self.o(id);
